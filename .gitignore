@@ -1,0 +1,40 @@
+# CMake/Ninja build directories (firmware and host tests)
+/build/
+**/build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+.ninja_deps
+.ninja_log
+build.ninja
+
+# Compiled firmware and intermediate files
+*.o
+*.obj
+*.a
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
+*.su
+*.d
+*.gcda
+*.gcno
+
+# CTest generated results
+/Testing/
+**/Testing/
+
+# IDE and operating-system temporary files
+.vscode/.browse.VC.db
+.vscode/ipch/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.user
+*.suo
+*.tmp
+*.bak
+*.orig

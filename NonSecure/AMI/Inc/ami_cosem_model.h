@@ -1,0 +1,109 @@
+#ifndef AMI_COSEM_MODEL_H
+#define AMI_COSEM_MODEL_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define AMI_COSEM_LOGICAL_NAME_LENGTH 6u
+#define AMI_COSEM_REGISTER_CLASS_ID 3u
+#define AMI_COSEM_CLOCK_CLASS_ID 8u
+
+#define AMI_COSEM_VALID_CLOCK (1u << 10)
+
+#define AMI_COSEM_VALID_VOLTAGE_A (1u << 0)
+#define AMI_COSEM_VALID_VOLTAGE_B (1u << 1)
+#define AMI_COSEM_VALID_VOLTAGE_C (1u << 2)
+#define AMI_COSEM_VALID_CURRENT_A (1u << 3)
+#define AMI_COSEM_VALID_CURRENT_B (1u << 4)
+#define AMI_COSEM_VALID_CURRENT_C (1u << 5)
+#define AMI_COSEM_VALID_ACTIVE_IMPORT (1u << 6)
+#define AMI_COSEM_VALID_ACTIVE_EXPORT (1u << 7)
+#define AMI_COSEM_VALID_REACTIVE_IMPORT (1u << 8)
+#define AMI_COSEM_VALID_REACTIVE_EXPORT (1u << 9)
+
+typedef struct {
+    uint8_t year[2];
+    uint8_t month;
+    uint8_t day;
+    uint8_t day_of_week;
+    uint8_t hour;
+    uint8_t minute;
+    uint8_t second;
+    uint8_t hundredths;
+    uint8_t deviation[2];
+    uint8_t status;
+} AmiCosemDateTime;
+
+/* Snapshot values are supplied by the metrology/board layer. This module does
+ * not synthesize measurements or access hardware. */
+typedef struct {
+    uint32_t phase_voltage_millivolts[3];
+    uint32_t phase_current_milliamps[3];
+    uint64_t active_import_wh;
+    uint64_t active_export_wh;
+    uint64_t reactive_import_varh;
+    uint64_t reactive_export_varh;
+    AmiCosemDateTime clock_date_time;
+    int16_t clock_time_zone_minutes;
+    uint8_t clock_status;
+    uint32_t valid_mask;
+} AmiCosemRegisterSnapshot;
+
+typedef enum {
+    AMI_COSEM_OK = 0,
+    AMI_COSEM_INVALID_ARGUMENT,
+    AMI_COSEM_OBJECT_NOT_FOUND,
+    AMI_COSEM_ATTRIBUTE_NOT_FOUND,
+    AMI_COSEM_VALUE_UNAVAILABLE
+} AmiCosemStatus;
+
+/* A-XDR/COSEM data type tags used by this register model. */
+typedef enum {
+    AMI_COSEM_TYPE_STRUCTURE = 2,
+    AMI_COSEM_TYPE_DOUBLE_LONG = 5,
+    AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED = 6,
+    AMI_COSEM_TYPE_OCTET_STRING = 9,
+    AMI_COSEM_TYPE_UNSIGNED = 17,
+    AMI_COSEM_TYPE_INTEGER = 15,
+    AMI_COSEM_TYPE_LONG64_UNSIGNED = 21
+} AmiCosemDataType;
+
+typedef struct {
+    int8_t scaler;
+    uint8_t unit;
+} AmiCosemScalerUnit;
+
+typedef struct {
+    AmiCosemDataType type;
+    size_t length;
+    union {
+        uint8_t logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH];
+        uint32_t double_long_unsigned;
+        uint64_t long64_unsigned;
+        AmiCosemScalerUnit scaler_unit;
+        int32_t double_long;
+        uint8_t unsigned_integer;
+        AmiCosemDateTime date_time;
+    } value;
+} AmiCosemData;
+
+/* Read-only Class-3 Register and Class-8 Clock objects. */
+AmiCosemStatus ami_cosem_register_read(
+    const AmiCosemRegisterSnapshot *snapshot,
+    uint16_t class_id,
+    const uint8_t logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH],
+    uint8_t attribute_id,
+    AmiCosemData *out);
+
+size_t ami_cosem_register_count(void);
+size_t ami_cosem_object_count(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
