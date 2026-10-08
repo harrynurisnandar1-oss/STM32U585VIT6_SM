@@ -38,3 +38,7 @@ Test host terpisah dari build firmware CubeMX. Build firmware tetap dijalankan d
 ## Batas cakupan protokol Sprint 1
 
 Implementasi saat ini mencakup AARQ/AARE no-auth minimal dan xDLMS Get-Request-Normal tanpa selective access. Belum mencakup framing/alamat HDLC, negosiasi InitiateRequest/InitiateResponse, autentikasi atau ciphering DLMS, invocation counter, maupun integrasi alur request ke task FreeRTOS/UART. Karena itu hasil test adalah verifikasi unit host, bukan klaim kesesuaian penuh IEC 62056 atau validasi perangkat akhir.
+
+## GitHub Actions
+
+Workflow `../.github/workflows/ci.yml` berjalan otomatis saat ada push atau pull request, dan dapat dijalankan manual melalui `workflow_dispatch`. Workflow menggunakan Ubuntu runner, membangun target test host, lalu menjalankan seluruh suite CTest. Workflow ini tidak membangun firmware ARM dan tidak memerlukan Docker.
