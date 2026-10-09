@@ -4,8 +4,16 @@
 #include <string.h>
 
 #define GET_REQUEST_TAG 0xC0u
+#define SET_REQUEST_TAG 0xC1u
 #define GET_RESPONSE_TAG 0xC4u
+#define SET_RESPONSE_TAG 0xC5u
+#define GLO_GET_REQUEST_TAG 0xC8u
+#define GLO_SET_REQUEST_TAG 0xC9u
+#define GLO_GET_RESPONSE_TAG 0xCCu
+#define GLO_SET_RESPONSE_TAG 0xCDu
 #define GET_NORMAL_CHOICE 0x01u
+#define SECURITY_HEADER_LENGTH 5u /* security-control + invocation-counter */
+#define GLO_HEADER_LENGTH 6u /* tag + security header */
 
 static int encode_data(const AmiCosemData *data, uint8_t *out,
                        size_t capacity, size_t *written)
@@ -102,14 +110,15 @@ static AmiDlmsApduStatus build_error(uint8_t invoke_id, uint8_t error,
     return AMI_DLMS_APDU_ACCESS_ERROR;
 }
 
-AmiDlmsApduStatus ami_dlms_process_get_request(
+static AmiDlmsApduStatus process_get_request_plain(
     const AmiDlmsAssociation *association,
     const AmiCosemRegisterSnapshot *snapshot,
     const uint8_t *request,
     size_t request_length,
     uint8_t *response,
     size_t response_capacity,
-    size_t *response_length)
+    size_t *response_length,
+    int decrypted_hls_apdu)
 {
     if (response_length != NULL) {
         *response_length = 0u;
@@ -120,6 +129,9 @@ AmiDlmsApduStatus ami_dlms_process_get_request(
     }
     if (association->state != AMI_DLMS_ASSOC_ASSOCIATED) {
         return AMI_DLMS_APDU_NOT_ASSOCIATED;
+    }
+    if (association->mechanism == AMI_DLMS_AUTH_HLS && !decrypted_hls_apdu) {
+        return AMI_DLMS_APDU_CIPHER_REQUIRED;
     }
     if (request_length < 3u || request[0] != GET_REQUEST_TAG ||
         request[1] != GET_NORMAL_CHOICE) {
@@ -158,4 +170,157 @@ AmiDlmsApduStatus ami_dlms_process_get_request(
     }
     *response_length = 4u + encoded_length;
     return AMI_DLMS_APDU_OK;
+}
+
+AmiDlmsApduStatus ami_dlms_process_get_request(
+    const AmiDlmsAssociation *association,
+    const AmiCosemRegisterSnapshot *snapshot,
+    const uint8_t *request, size_t request_length,
+    uint8_t *response, size_t response_capacity, size_t *response_length)
+{
+    return process_get_request_plain(association, snapshot, request, request_length,
+        response, response_capacity, response_length, 0);
+}
+
+static uint32_t read_u32_be(const uint8_t *bytes)
+{
+    return ((uint32_t)bytes[0] << 24) | ((uint32_t)bytes[1] << 16) |
+           ((uint32_t)bytes[2] << 8) | (uint32_t)bytes[3];
+}
+
+static void write_u32_be(uint8_t *bytes, uint32_t value)
+{
+    bytes[0] = (uint8_t)(value >> 24);
+    bytes[1] = (uint8_t)(value >> 16);
+    bytes[2] = (uint8_t)(value >> 8);
+    bytes[3] = (uint8_t)value;
+}
+
+static int ranges_overlap(const void *left, size_t left_length,
+                          const void *right, size_t right_length)
+{
+    uintptr_t left_start = (uintptr_t)left;
+    uintptr_t right_start = (uintptr_t)right;
+    if (left_length > UINTPTR_MAX - left_start ||
+        right_length > UINTPTR_MAX - right_start) return 1;
+    uintptr_t left_end = left_start + left_length;
+    uintptr_t right_end = right_start + right_length;
+    return left_start < right_end && right_start < left_end;
+}
+
+AmiDlmsApduStatus ami_dlms_process_ciphered_request(
+    const AmiDlmsAssociation *association,
+    const AmiCosemRegisterSnapshot *snapshot,
+    const AmiDlmsCipherBackend *cipher,
+    const uint8_t *request, size_t request_length,
+    uint8_t *workspace, size_t workspace_capacity,
+    uint8_t *response, size_t response_capacity, size_t *response_length)
+{
+    if (response_length != NULL) *response_length = 0u;
+    if (association == NULL || snapshot == NULL || cipher == NULL || request == NULL ||
+        workspace == NULL || response == NULL || response_length == NULL) {
+        return AMI_DLMS_APDU_INVALID_ARGUMENT;
+    }
+    if (ranges_overlap(request, request_length, workspace, workspace_capacity) ||
+        ranges_overlap(response, response_capacity, workspace, workspace_capacity)) {
+        return AMI_DLMS_APDU_INVALID_ARGUMENT;
+    }
+    if (association->state != AMI_DLMS_ASSOC_ASSOCIATED ||
+        association->mechanism != AMI_DLMS_AUTH_HLS) {
+        return AMI_DLMS_APDU_NOT_ASSOCIATED;
+    }
+    if (cipher->decrypt == NULL || cipher->encrypt == NULL ||
+        cipher->accept_rx_counter == NULL || cipher->next_tx_counter == NULL) {
+        return AMI_DLMS_APDU_INVALID_ARGUMENT;
+    }
+    if (request_length <= GLO_HEADER_LENGTH + AMI_DLMS_GCM_TAG_LENGTH ||
+        (request[0] != GLO_GET_REQUEST_TAG && request[0] != GLO_SET_REQUEST_TAG)) {
+        return AMI_DLMS_APDU_MALFORMED;
+    }
+    const uint8_t security_control = request[1];
+    if (security_control != cipher->expected_security_control ||
+        (security_control & 0x30u) != 0x30u) {
+        return AMI_DLMS_APDU_AUTHENTICATION_FAILURE;
+    }
+    const uint32_t rx_counter = read_u32_be(request + 2u);
+    const size_t ciphertext_length = request_length - GLO_HEADER_LENGTH - AMI_DLMS_GCM_TAG_LENGTH;
+    const uint8_t *ciphertext = request + GLO_HEADER_LENGTH;
+    const uint8_t *tag = ciphertext + ciphertext_length;
+    if (ciphertext_length > workspace_capacity) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+
+    size_t plaintext_length = 0u;
+    AmiSecStatus sec_status = cipher->decrypt(cipher->user, security_control, rx_counter,
+        ciphertext, ciphertext_length, tag, workspace, workspace_capacity, &plaintext_length);
+    if (sec_status != AMI_SEC_OK || plaintext_length == 0u ||
+        plaintext_length > workspace_capacity) {
+        memset(workspace, 0, workspace_capacity);
+        return sec_status == AMI_SEC_AUTHENTICATION_FAILURE
+            ? AMI_DLMS_APDU_AUTHENTICATION_FAILURE : AMI_DLMS_APDU_BACKEND_FAILURE;
+    }
+    /* Commit only after tag verification; callback must atomically reject replay. */
+    if (cipher->accept_rx_counter(cipher->user, rx_counter) != 1) {
+        memset(workspace, 0, plaintext_length);
+        return AMI_DLMS_APDU_COUNTER_REJECTED;
+    }
+
+    const uint8_t expected_plain_tag = request[0] == GLO_GET_REQUEST_TAG
+        ? GET_REQUEST_TAG : SET_REQUEST_TAG;
+    AmiDlmsApduStatus service_status;
+    size_t response_plain_length = 0u;
+    if (workspace[0] != expected_plain_tag) {
+        memset(workspace, 0, plaintext_length);
+        return AMI_DLMS_APDU_MALFORMED;
+    }
+    if (expected_plain_tag == GET_REQUEST_TAG) {
+        service_status = process_get_request_plain(association, snapshot, workspace,
+            plaintext_length, workspace, workspace_capacity,
+            &response_plain_length, 1);
+    } else {
+        /* Sprint 1 exposes read-only COSEM objects; SET is authenticated but denied. */
+        if (plaintext_length < 14u || workspace[1] != 0x01u || workspace[12] != 0u) {
+            memset(workspace, 0, plaintext_length);
+            return AMI_DLMS_APDU_MALFORMED;
+        }
+        if (workspace_capacity < 4u) {
+            memset(workspace, 0, plaintext_length);
+            return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+        }
+        workspace[0] = SET_RESPONSE_TAG;
+        workspace[1] = 0x01u;
+        /* workspace[2] already holds the invoke-id. */
+        workspace[3] = 3u; /* read-write-denied: meter is read-only */
+        response_plain_length = 4u;
+        service_status = AMI_DLMS_APDU_ACCESS_ERROR;
+    }
+    if (response_plain_length == 0u) {
+        memset(workspace, 0, plaintext_length);
+        return service_status;
+    }
+
+    if (response_capacity < GLO_HEADER_LENGTH + response_plain_length + AMI_DLMS_GCM_TAG_LENGTH) {
+        memset(workspace, 0, response_plain_length);
+        return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+    }
+    uint32_t tx_counter = 0u;
+    if (cipher->next_tx_counter(cipher->user, &tx_counter) != 1) {
+        memset(workspace, 0, response_plain_length);
+        return AMI_DLMS_APDU_BACKEND_FAILURE;
+    }
+    const uint8_t response_tag = expected_plain_tag == GET_REQUEST_TAG
+        ? GLO_GET_RESPONSE_TAG : GLO_SET_RESPONSE_TAG;
+    response[0] = response_tag;
+    response[1] = security_control;
+    write_u32_be(response + 2u, tx_counter);
+    size_t encrypted_length = 0u;
+    sec_status = cipher->encrypt(cipher->user, security_control, tx_counter,
+        workspace, response_plain_length, response + GLO_HEADER_LENGTH,
+        response_capacity - GLO_HEADER_LENGTH - AMI_DLMS_GCM_TAG_LENGTH,
+        &encrypted_length, response + GLO_HEADER_LENGTH + response_plain_length);
+    memset(workspace, 0, response_plain_length);
+    if (sec_status != AMI_SEC_OK || encrypted_length != response_plain_length) {
+        memset(response, 0, response_capacity);
+        return AMI_DLMS_APDU_BACKEND_FAILURE;
+    }
+    *response_length = GLO_HEADER_LENGTH + encrypted_length + AMI_DLMS_GCM_TAG_LENGTH;
+    return service_status;
 }
