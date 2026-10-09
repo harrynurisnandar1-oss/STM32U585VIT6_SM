@@ -1,13 +1,5 @@
 # Sprint 1 — DLMS/COSEM read-only path
 
-## Added 08/10/2026
-
-- A bounded BER-TLV AARQ parser and AARE builder for the logical-name application-context OID.
-- Association states (`IDLE`, `ASSOCIATED`, `ERROR`) for the unauthenticated, unciphered development profile. Authentication and ciphering fields are rejected.
-- A bounded xDLMS `GET-Request-Normal` parser (without selective access) and `GET-Response-Normal` encoder for supported COSEM values and access errors.
-- Read-only Class-8 Clock support at logical name `0.0.1.0.0.255`: attribute 2 (12-byte date-time), attribute 3 (time-zone minutes), and attribute 4 (status).
-- Host test targets for the existing security/model checks and the new association, APDU, and Clock checks. `tests/CMakeLists.txt` registers them with CTest.
-
 ## Scope and limitations
 
 This is a first implementation slice, not a complete DLMS/COSEM stack. It does not parse HDLC frames, validate client/server addresses, negotiate InitiateRequest/InitiateResponse user information, implement authentication or ciphering, process selective access, or manage invocation counters. Pass an APDU here only after an HDLC layer validates framing and addressing. This code is not ready for network exposure or product deployment.
@@ -29,3 +21,12 @@ ctest --test-dir tests/build --output-on-failure
 ```
 
 These checks validate host logic only; they do not validate FreeRTOS scheduling, STM32U585 TrustZone behavior, or UART/HDLC operation. Docker and CMock are not part of this configuration.
+## Added 08/10/2026
+
+- A bounded BER-TLV AARQ parser and AARE builder for the logical-name application-context OID.
+- Association states (`IDLE`, `ASSOCIATED`, `ERROR`) for the unauthenticated, unciphered development profile. Authentication and ciphering fields are rejected.
+- A bounded xDLMS `GET-Request-Normal` parser (without selective access) and `GET-Response-Normal` encoder for supported COSEM values and access errors.
+- Read-only Class-8 Clock support at logical name `0.0.1.0.0.255`: attribute 2 (12-byte date-time), attribute 3 (time-zone minutes), and attribute 4 (status).
+- Host test targets for the existing security/model checks and the new association, APDU, and Clock checks. `tests/CMakeLists.txt` registers them with CTest.
+
+
