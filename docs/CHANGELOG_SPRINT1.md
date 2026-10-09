@@ -28,5 +28,3 @@ These checks validate host logic only; they do not validate FreeRTOS scheduling,
 - A bounded xDLMS `GET-Request-Normal` parser (without selective access) and `GET-Response-Normal` encoder for supported COSEM values and access errors.
 - Read-only Class-8 Clock support at logical name `0.0.1.0.0.255`: attribute 2 (12-byte date-time), attribute 3 (time-zone minutes), and attribute 4 (status).
 - Host test targets for the existing security/model checks and the new association, APDU, and Clock checks. `tests/CMakeLists.txt` registers them with CTest.
-
-
