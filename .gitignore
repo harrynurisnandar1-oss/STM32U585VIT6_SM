@@ -30,6 +30,8 @@ build.ninja
 # IDE and operating-system temporary files
 .vscode/.browse.VC.db
 .vscode/ipch/
+.vscode/*
+!.vscode/settings.json
 .DS_Store
 Thumbs.db
 Desktop.ini

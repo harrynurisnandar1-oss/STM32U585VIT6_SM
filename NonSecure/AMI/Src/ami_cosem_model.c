@@ -62,6 +62,8 @@ static const uint8_t active_import_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
     {1, 0, 1, 8, 0, 255};
 static const uint8_t active_export_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
     {1, 0, 2, 8, 0, 255};
+static const uint8_t security_setup_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {0, 0, 43, 0, 0, 255};
 
 typedef struct {
     uint16_t class_id;
@@ -156,13 +158,25 @@ static int put_capture_array(AmiCosemData *out, size_t *offset,
 
 static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
                                    const uint8_t *logical_name,
-                                   uint8_t attribute_id, AmiCosemData *out)
+                                   uint8_t attribute_id,
+                                   const AmiCosemProfileSelection *selection,
+                                   AmiCosemData *out)
 {
     const int is_event = memcmp(logical_name, event_log_logical_name,
                                 AMI_COSEM_LOGICAL_NAME_LENGTH) == 0;
     const int is_billing = memcmp(logical_name, billing_profile_logical_name,
                                   AMI_COSEM_LOGICAL_NAME_LENGTH) == 0;
     if (!is_event && !is_billing) return AMI_COSEM_OBJECT_NOT_FOUND;
+    if (selection != NULL &&
+        selection->selector != AMI_COSEM_PROFILE_SELECTOR_ENTRY &&
+        selection->selector != AMI_COSEM_PROFILE_SELECTOR_RANGE) {
+        return AMI_COSEM_SCOPE_VIOLATED;
+    }
+    if (selection != NULL && selection->selector == AMI_COSEM_PROFILE_SELECTOR_RANGE &&
+        memcmp(&selection->from_date, &selection->to_date,
+               sizeof(selection->from_date)) > 0) {
+        return AMI_COSEM_SCOPE_VIOLATED;
+    }
 
     const size_t count = is_event ? snapshot->event_log_count : snapshot->billing_history_count;
     const uint32_t valid_bit = is_event ? AMI_COSEM_VALID_EVENT_LOG
@@ -176,23 +190,42 @@ static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
     memset(out, 0, sizeof(*out));
 
     if (attribute_id == 1u) {
+        if (selection != NULL) return AMI_COSEM_SCOPE_VIOLATED;
         out->type = AMI_COSEM_TYPE_OCTET_STRING;
         out->length = AMI_COSEM_LOGICAL_NAME_LENGTH;
         memcpy(out->value.logical_name, logical_name, AMI_COSEM_LOGICAL_NAME_LENGTH);
         return AMI_COSEM_OK;
     }
     if (count > capacity) return AMI_COSEM_INVALID_ARGUMENT;
+    if (selection != NULL && attribute_id != 2u) return AMI_COSEM_SCOPE_VIOLATED;
 
     switch (attribute_id) {
     case 2: /* buffer: ARRAY of row STRUCTURE values */
         if ((snapshot->valid_mask & valid_bit) == 0u) return AMI_COSEM_VALUE_UNAVAILABLE;
-        if (!put_byte(out, &offset, 1u) || !put_byte(out, &offset, (uint8_t)count)) break;
+        {
+        size_t selected_count = 0u;
+        size_t first_entry = 0u;
+        size_t last_entry = count;
+        if (selection != NULL && selection->selector == AMI_COSEM_PROFILE_SELECTOR_ENTRY) {
+            uint32_t to_entry = selection->to_entry == 0u
+                ? (uint32_t)count : selection->to_entry;
+            if (selection->from_entry == 0u || selection->from_entry > to_entry ||
+                to_entry > count) return AMI_COSEM_SCOPE_VIOLATED;
+            first_entry = (size_t)(selection->from_entry - 1u);
+            last_entry = (size_t)to_entry;
+        }
+        if (!put_byte(out, &offset, 1u) || !put_byte(out, &offset, 0u)) break;
         for (size_t i = 0; i < count; ++i) {
-            if (!put_byte(out, &offset, AMI_COSEM_TYPE_STRUCTURE) ||
-                !put_byte(out, &offset, is_event ? 2u : 3u)) break;
+            if (selection != NULL && selection->selector == AMI_COSEM_PROFILE_SELECTOR_ENTRY &&
+                (i < first_entry || i >= last_entry)) continue;
             const AmiCosemDateTime *timestamp = is_event
                 ? &snapshot->event_log[i].timestamp
                 : &snapshot->billing_history[i].billing_timestamp;
+            if (selection != NULL && selection->selector == AMI_COSEM_PROFILE_SELECTOR_RANGE &&
+                (memcmp(timestamp, &selection->from_date, sizeof(*timestamp)) < 0 ||
+                 memcmp(timestamp, &selection->to_date, sizeof(*timestamp)) > 0)) continue;
+            if (!put_byte(out, &offset, AMI_COSEM_TYPE_STRUCTURE) ||
+                !put_byte(out, &offset, is_event ? 2u : 3u)) break;
             if (!put_datetime(out, &offset, timestamp)) break;
             if (is_event) {
                 if (!put_byte(out, &offset, AMI_COSEM_TYPE_UNSIGNED) ||
@@ -203,9 +236,12 @@ static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
                     !put_byte(out, &offset, AMI_COSEM_TYPE_LONG64_UNSIGNED) ||
                     !put_u64(out, &offset, snapshot->billing_history[i].active_export_wh)) break;
             }
+            ++selected_count;
         }
-        if (offset == 0u) break;
+        if (offset == 0u || selected_count > UINT8_MAX) break;
+        out->value.encoded[1] = (uint8_t)selected_count;
         goto encoded;
+        }
     case 3:
         if (!put_capture_array(out, &offset, captures, capture_count)) break;
         goto encoded;
@@ -246,7 +282,7 @@ size_t ami_cosem_register_count(void)
 
 size_t ami_cosem_object_count(void)
 {
-    return ami_cosem_register_count() + 3u;
+    return ami_cosem_register_count() + 4u;
 }
 
 static const RegisterDefinition *find_register(
@@ -281,11 +317,12 @@ static uint64_t read_source(const AmiCosemRegisterSnapshot *snapshot,
     return 0;
 }
 
-AmiCosemStatus ami_cosem_register_read(
+AmiCosemStatus ami_cosem_register_read_selected(
     const AmiCosemRegisterSnapshot *snapshot,
     uint16_t class_id,
     const uint8_t logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH],
     uint8_t attribute_id,
+    const AmiCosemProfileSelection *selection,
     AmiCosemData *out)
 {
     if (snapshot == NULL || logical_name == NULL || out == NULL) {
@@ -293,12 +330,62 @@ AmiCosemStatus ami_cosem_register_read(
     }
     if (class_id != AMI_COSEM_REGISTER_CLASS_ID &&
         class_id != AMI_COSEM_PROFILE_GENERIC_CLASS_ID &&
-        class_id != AMI_COSEM_CLOCK_CLASS_ID) {
+        class_id != AMI_COSEM_CLOCK_CLASS_ID &&
+        class_id != AMI_COSEM_SECURITY_SETUP_CLASS_ID) {
         return AMI_COSEM_OBJECT_NOT_FOUND;
     }
 
+    if (selection != NULL && class_id != AMI_COSEM_PROFILE_GENERIC_CLASS_ID) {
+        return AMI_COSEM_SCOPE_VIOLATED;
+    }
+
     if (class_id == AMI_COSEM_PROFILE_GENERIC_CLASS_ID) {
-        return read_profile(snapshot, logical_name, attribute_id, out);
+        return read_profile(snapshot, logical_name, attribute_id, selection, out);
+    }
+
+    if (class_id == AMI_COSEM_SECURITY_SETUP_CLASS_ID) {
+        if (memcmp(logical_name, security_setup_logical_name,
+                   AMI_COSEM_LOGICAL_NAME_LENGTH) != 0) return AMI_COSEM_OBJECT_NOT_FOUND;
+        memset(out, 0, sizeof(*out));
+        switch (attribute_id) {
+        case 1:
+            out->type = AMI_COSEM_TYPE_OCTET_STRING;
+            out->length = AMI_COSEM_LOGICAL_NAME_LENGTH;
+            memcpy(out->value.logical_name, security_setup_logical_name,
+                   AMI_COSEM_LOGICAL_NAME_LENGTH);
+            return AMI_COSEM_OK;
+        case 2:
+            out->type = AMI_COSEM_TYPE_ENUM;
+            out->length = 1u;
+            out->value.unsigned_integer = snapshot->security_policy;
+            return AMI_COSEM_OK;
+        case 3:
+            out->type = AMI_COSEM_TYPE_ENUM;
+            out->length = 1u;
+            out->value.unsigned_integer = snapshot->security_suite;
+            return AMI_COSEM_OK;
+        case 4:
+            if ((snapshot->valid_mask & AMI_COSEM_VALID_SECURITY_CLIENT_TITLE) == 0u)
+                return AMI_COSEM_VALUE_UNAVAILABLE;
+            out->type = AMI_COSEM_TYPE_OCTET_STRING;
+            out->length = sizeof(snapshot->client_system_title);
+            memcpy(out->value.octets, snapshot->client_system_title, out->length);
+            return AMI_COSEM_OK;
+        case 5:
+            out->type = AMI_COSEM_TYPE_OCTET_STRING;
+            out->length = sizeof(snapshot->server_system_title);
+            memcpy(out->value.octets, snapshot->server_system_title, out->length);
+            return AMI_COSEM_OK;
+        case 6:
+            /* No certificate store is configured in this firmware slice. */
+            out->type = AMI_COSEM_TYPE_ENCODED;
+            out->length = 2u;
+            out->value.encoded[0] = 1u;
+            out->value.encoded[1] = 0u;
+            return AMI_COSEM_OK;
+        default:
+            return AMI_COSEM_ATTRIBUTE_NOT_FOUND;
+        }
     }
 
     if (class_id == AMI_COSEM_CLOCK_CLASS_ID) {
@@ -377,4 +464,15 @@ AmiCosemStatus ami_cosem_register_read(
     default:
         return AMI_COSEM_ATTRIBUTE_NOT_FOUND;
     }
+}
+
+AmiCosemStatus ami_cosem_register_read(
+    const AmiCosemRegisterSnapshot *snapshot,
+    uint16_t class_id,
+    const uint8_t logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH],
+    uint8_t attribute_id,
+    AmiCosemData *out)
+{
+    return ami_cosem_register_read_selected(snapshot, class_id, logical_name,
+        attribute_id, NULL, out);
 }

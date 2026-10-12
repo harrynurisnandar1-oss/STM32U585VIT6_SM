@@ -12,12 +12,16 @@ extern "C" {
 #define AMI_COSEM_REGISTER_CLASS_ID 3u
 #define AMI_COSEM_PROFILE_GENERIC_CLASS_ID 7u
 #define AMI_COSEM_CLOCK_CLASS_ID 8u
+#define AMI_COSEM_SECURITY_SETUP_CLASS_ID 64u
 
 #define AMI_COSEM_PROFILE_MAX_ENTRIES 8u
 #define AMI_COSEM_AXDR_ENCODED_MAX 512u
+#define AMI_COSEM_PROFILE_SELECTOR_RANGE 1u
+#define AMI_COSEM_PROFILE_SELECTOR_ENTRY 2u
 
 #define AMI_COSEM_VALID_EVENT_LOG (1u << 11)
 #define AMI_COSEM_VALID_BILLING_PROFILE (1u << 12)
+#define AMI_COSEM_VALID_SECURITY_CLIENT_TITLE (1u << 13)
 
 #define AMI_COSEM_VALID_CLOCK (1u << 10)
 
@@ -68,6 +72,10 @@ typedef struct {
     AmiCosemDateTime clock_date_time;
     int16_t clock_time_zone_minutes;
     uint8_t clock_status;
+    uint8_t security_policy;
+    uint8_t security_suite;
+    uint8_t client_system_title[8];
+    uint8_t server_system_title[8];
     uint32_t valid_mask;
     /* Bounded development/board-layer snapshots. Entries are oldest first;
      * the producer is responsible for ring-buffer rollover and timestamps. */
@@ -82,7 +90,8 @@ typedef enum {
     AMI_COSEM_INVALID_ARGUMENT,
     AMI_COSEM_OBJECT_NOT_FOUND,
     AMI_COSEM_ATTRIBUTE_NOT_FOUND,
-    AMI_COSEM_VALUE_UNAVAILABLE
+    AMI_COSEM_VALUE_UNAVAILABLE,
+    AMI_COSEM_SCOPE_VIOLATED
 } AmiCosemStatus;
 
 /* A-XDR/COSEM data type tags used by this register model. */
@@ -95,7 +104,8 @@ typedef enum {
     AMI_COSEM_TYPE_UNSIGNED = 17,
     AMI_COSEM_TYPE_INTEGER = 15,
     AMI_COSEM_TYPE_LONG_UNSIGNED = 18,
-    AMI_COSEM_TYPE_LONG64_UNSIGNED = 21
+    AMI_COSEM_TYPE_LONG64_UNSIGNED = 21,
+    AMI_COSEM_TYPE_ENUM = 22
 } AmiCosemDataType;
 
 typedef struct {
@@ -113,10 +123,19 @@ typedef struct {
         AmiCosemScalerUnit scaler_unit;
         int32_t double_long;
         uint8_t unsigned_integer;
+        uint8_t octets[12];
         AmiCosemDateTime date_time;
         uint8_t encoded[AMI_COSEM_AXDR_ENCODED_MAX];
     } value;
 } AmiCosemData;
+
+typedef struct {
+    uint8_t selector;
+    uint32_t from_entry;
+    uint32_t to_entry; /* 0 means through the newest entry for selector 2. */
+    AmiCosemDateTime from_date;
+    AmiCosemDateTime to_date;
+} AmiCosemProfileSelection;
 
 /* Read-only Class-3 Register, Class-7 Profile Generic, and Class-8 Clock. */
 AmiCosemStatus ami_cosem_register_read(
@@ -124,6 +143,16 @@ AmiCosemStatus ami_cosem_register_read(
     uint16_t class_id,
     const uint8_t logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH],
     uint8_t attribute_id,
+    AmiCosemData *out);
+
+/* Same as ami_cosem_register_read, with Profile Generic buffer selection.
+ * A NULL selection reads the complete buffer. */
+AmiCosemStatus ami_cosem_register_read_selected(
+    const AmiCosemRegisterSnapshot *snapshot,
+    uint16_t class_id,
+    const uint8_t logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH],
+    uint8_t attribute_id,
+    const AmiCosemProfileSelection *selection,
     AmiCosemData *out);
 
 size_t ami_cosem_register_count(void);

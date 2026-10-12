@@ -7,10 +7,14 @@
 #define SET_REQUEST_TAG 0xC1u
 #define GET_RESPONSE_TAG 0xC4u
 #define SET_RESPONSE_TAG 0xC5u
+#define ACTION_REQUEST_TAG 0xC3u
+#define ACTION_RESPONSE_TAG 0xC7u
 #define GLO_GET_REQUEST_TAG 0xC8u
 #define GLO_SET_REQUEST_TAG 0xC9u
+#define GLO_ACTION_REQUEST_TAG 0xCBu
 #define GLO_GET_RESPONSE_TAG 0xCCu
 #define GLO_SET_RESPONSE_TAG 0xCDu
+#define GLO_ACTION_RESPONSE_TAG 0xCEu
 #define GET_NORMAL_CHOICE 0x01u
 #define SECURITY_HEADER_LENGTH 5u /* security-control + invocation-counter */
 #define GLO_HEADER_LENGTH 6u /* tag + security header */
@@ -40,6 +44,8 @@ static int encode_data(const AmiCosemData *data, uint8_t *out,
         out[offset++] = (uint8_t)data->length;
         if (data->length == AMI_COSEM_LOGICAL_NAME_LENGTH) {
             memcpy(out + offset, data->value.logical_name, data->length);
+        } else if (data->length == 8u) {
+            memcpy(out + offset, data->value.octets, data->length);
         } else if (data->length == sizeof(AmiCosemDateTime)) {
             memcpy(out + offset, &data->value.date_time, data->length);
         } else {
@@ -71,8 +77,9 @@ static int encode_data(const AmiCosemData *data, uint8_t *out,
         out[offset++] = (uint8_t)data->value.double_long;
         break;
     case AMI_COSEM_TYPE_UNSIGNED:
+    case AMI_COSEM_TYPE_ENUM:
         if (capacity < 2u) return 0;
-        out[offset++] = (uint8_t)AMI_COSEM_TYPE_UNSIGNED;
+        out[offset++] = (uint8_t)data->type;
         out[offset++] = data->value.unsigned_integer;
         break;
     case AMI_COSEM_TYPE_STRUCTURE:
@@ -97,8 +104,177 @@ static uint8_t access_error(AmiCosemStatus status)
     case AMI_COSEM_OBJECT_NOT_FOUND: return 4u; /* object-undefined */
     case AMI_COSEM_ATTRIBUTE_NOT_FOUND: return 3u; /* read-write-denied */
     case AMI_COSEM_VALUE_UNAVAILABLE: return 2u; /* temporary-failure */
+    case AMI_COSEM_SCOPE_VIOLATED: return 11u; /* scope-of-access-violated */
     default: return 15u; /* other-reason */
     }
+}
+
+static int read_be_u16(const uint8_t *input, size_t length, size_t *offset,
+                       uint16_t *value)
+{
+    if (*offset > length || length - *offset < 2u) return 0;
+    *value = (uint16_t)(((uint16_t)input[*offset] << 8) | input[*offset + 1u]);
+    *offset += 2u;
+    return 1;
+}
+
+static int read_be_u32(const uint8_t *input, size_t length, size_t *offset,
+                       uint32_t *value)
+{
+    if (*offset > length || length - *offset < 4u) return 0;
+    *value = ((uint32_t)input[*offset] << 24) |
+             ((uint32_t)input[*offset + 1u] << 16) |
+             ((uint32_t)input[*offset + 2u] << 8) | input[*offset + 3u];
+    *offset += 4u;
+    return 1;
+}
+
+/* Supports selector 1 (Clock range) and selector 2 (entry range, all columns).
+ * Unknown descriptors are rejected rather than returning the whole buffer. */
+static int parse_profile_selection(const uint8_t *request, size_t request_length,
+                                   size_t offset, AmiCosemProfileSelection *selection)
+{
+    if (offset >= request_length || selection == NULL) return 0;
+    memset(selection, 0, sizeof(*selection));
+    selection->selector = request[offset++];
+    if (offset + 2u > request_length || request[offset++] != AMI_COSEM_TYPE_STRUCTURE ||
+        request[offset++] != 4u) return 0;
+
+    if (selection->selector == AMI_COSEM_PROFILE_SELECTOR_ENTRY) {
+        uint32_t from_entry, to_entry;
+        uint16_t from_column, to_column;
+        if (offset >= request_length || request[offset++] != AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED ||
+            !read_be_u32(request, request_length, &offset, &from_entry) ||
+            offset >= request_length || request[offset++] != AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED ||
+            !read_be_u32(request, request_length, &offset, &to_entry) ||
+            offset >= request_length || request[offset++] != AMI_COSEM_TYPE_LONG_UNSIGNED ||
+            !read_be_u16(request, request_length, &offset, &from_column) ||
+            offset >= request_length || request[offset++] != AMI_COSEM_TYPE_LONG_UNSIGNED ||
+            !read_be_u16(request, request_length, &offset, &to_column) ||
+            offset != request_length || from_column != 0u || to_column != 0u) return 0;
+        selection->from_entry = from_entry;
+        selection->to_entry = to_entry;
+        return 1;
+    }
+
+    if (selection->selector == AMI_COSEM_PROFILE_SELECTOR_RANGE) {
+        uint16_t restricting_class, data_index;
+        uint8_t restricting_ln[AMI_COSEM_LOGICAL_NAME_LENGTH];
+        int8_t restricting_attribute;
+        static const uint8_t clock_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 1, 0, 0, 255};
+        if (offset + 2u > request_length || request[offset++] != AMI_COSEM_TYPE_STRUCTURE ||
+            request[offset++] != 4u || offset >= request_length ||
+            request[offset++] != AMI_COSEM_TYPE_LONG_UNSIGNED ||
+            !read_be_u16(request, request_length, &offset, &restricting_class) ||
+            offset + 2u > request_length || request[offset++] != AMI_COSEM_TYPE_OCTET_STRING ||
+            request[offset++] != AMI_COSEM_LOGICAL_NAME_LENGTH ||
+            request_length - offset < AMI_COSEM_LOGICAL_NAME_LENGTH) return 0;
+        memcpy(restricting_ln, request + offset, sizeof(restricting_ln));
+        offset += sizeof(restricting_ln);
+        if (offset + 2u > request_length || request[offset++] != AMI_COSEM_TYPE_INTEGER) return 0;
+        restricting_attribute = (int8_t)request[offset++];
+        if (offset >= request_length || request[offset++] != AMI_COSEM_TYPE_LONG_UNSIGNED ||
+            !read_be_u16(request, request_length, &offset, &data_index) ||
+            restricting_class != AMI_COSEM_CLOCK_CLASS_ID ||
+            memcmp(restricting_ln, clock_ln, sizeof(clock_ln)) != 0 ||
+            restricting_attribute != 2 || data_index != 0u) return 0;
+
+        if (offset + 2u > request_length || request[offset++] != AMI_COSEM_TYPE_OCTET_STRING ||
+            request[offset++] != sizeof(AmiCosemDateTime) ||
+            request_length - offset < sizeof(AmiCosemDateTime)) return 0;
+        memcpy(&selection->from_date, request + offset, sizeof(selection->from_date));
+        offset += sizeof(selection->from_date);
+        if (offset + 2u > request_length || request[offset++] != AMI_COSEM_TYPE_OCTET_STRING ||
+            request[offset++] != sizeof(AmiCosemDateTime) ||
+            request_length - offset < sizeof(AmiCosemDateTime)) return 0;
+        memcpy(&selection->to_date, request + offset, sizeof(selection->to_date));
+        offset += sizeof(selection->to_date);
+        /* selected_values must be an empty array; column projection isn't supported. */
+        if (offset + 2u != request_length || request[offset++] != 1u || request[offset++] != 0u ||
+            memcmp(&selection->from_date, &selection->to_date,
+                   sizeof(selection->from_date)) > 0) return 0;
+        return 1;
+    }
+    return 0;
+}
+
+static size_t build_action_result(uint8_t invoke_id, uint8_t has_error,
+                                  uint8_t error, uint8_t *out, size_t capacity)
+{
+    const size_t length = has_error ? 5u : 5u;
+    if (capacity < length) return 0u;
+    out[0] = ACTION_RESPONSE_TAG;
+    out[1] = 0x01u;
+    out[2] = invoke_id;
+    out[3] = has_error ? 1u : 0u;
+    out[4] = has_error ? error : 0u; /* absent return-parameters on success */
+    return length;
+}
+
+static AmiDlmsApduStatus process_security_key_transfer(
+    const AmiDlmsAssociation *association, const AmiDlmsCipherBackend *cipher,
+    uint8_t *request, size_t request_length,
+    size_t workspace_capacity, size_t *response_plain_length)
+{
+    static const uint8_t security_setup_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+        {0, 0, 43, 0, 0, 255};
+    if (request_length < 15u || request[0] != ACTION_REQUEST_TAG || request[1] != 1u) {
+        return AMI_DLMS_APDU_MALFORMED;
+    }
+    const uint8_t invoke_id = request[2];
+    const uint16_t class_id = (uint16_t)(((uint16_t)request[3] << 8) | request[4]);
+    const uint8_t method_id = request[11];
+    if (class_id != AMI_COSEM_SECURITY_SETUP_CLASS_ID ||
+        memcmp(request + 5u, security_setup_ln, sizeof(security_setup_ln)) != 0 ||
+        method_id != 2u || request[12] != 1u || request[13] != 1u ||
+        request[14] == 0u || request[14] > 2u) {
+        *response_plain_length = build_action_result(invoke_id, 1u, 11u,
+            request, workspace_capacity);
+        return *response_plain_length != 0u
+            ? AMI_DLMS_APDU_ACCESS_ERROR : AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+    }
+    const size_t key_count = request[14];
+    size_t offset = 15u;
+    AmiDlmsWrappedKey keys[2] = {{0}};
+    uint8_t seen_key_types = 0u;
+    for (size_t i = 0; i < key_count; ++i) {
+        if (offset + 4u > request_length || request[offset++] != AMI_COSEM_TYPE_STRUCTURE ||
+            request[offset++] != 2u || request[offset++] != AMI_COSEM_TYPE_ENUM) goto malformed;
+        const uint8_t key_type = request[offset++];
+        if ((key_type != 0u && key_type != 2u) ||
+            (seen_key_types & (uint8_t)(1u << key_type)) != 0u ||
+            offset + 2u > request_length || request[offset++] != AMI_COSEM_TYPE_OCTET_STRING ||
+            request[offset++] != 24u || request_length - offset < 24u) goto malformed;
+        seen_key_types |= (uint8_t)(1u << key_type);
+        keys[i].key_type = key_type;
+        keys[i].wrapped_key = request + offset;
+        keys[i].wrapped_key_length = 24u; /* AES-128 RFC 3394 wrapped key */
+        offset += 24u;
+    }
+    if (offset != request_length) goto malformed;
+    if (association->state != AMI_DLMS_ASSOC_ASSOCIATED ||
+        association->mechanism != AMI_DLMS_AUTH_HLS || cipher->transfer_keys == NULL) {
+        *response_plain_length = build_action_result(invoke_id, 1u, 3u,
+            request, workspace_capacity);
+        return *response_plain_length != 0u
+            ? AMI_DLMS_APDU_ACCESS_ERROR : AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+    }
+    if (cipher->transfer_keys(cipher->user, keys, key_count) != AMI_SEC_OK) {
+        *response_plain_length = build_action_result(invoke_id, 1u, 15u,
+            request, workspace_capacity);
+        return *response_plain_length != 0u
+            ? AMI_DLMS_APDU_ACCESS_ERROR : AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+    }
+    *response_plain_length = build_action_result(invoke_id, 0u, 0u,
+        request, workspace_capacity);
+    return *response_plain_length != 0u
+        ? AMI_DLMS_APDU_OK : AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+
+malformed:
+    *response_plain_length = build_action_result(invoke_id, 1u, 11u,
+        request, workspace_capacity);
+    return *response_plain_length != 0u
+        ? AMI_DLMS_APDU_ACCESS_ERROR : AMI_DLMS_APDU_BUFFER_TOO_SMALL;
 }
 
 static AmiDlmsApduStatus build_error(uint8_t invoke_id, uint8_t error,
@@ -145,7 +321,7 @@ static AmiDlmsApduStatus process_get_request_plain(
         return build_error(request_length > 2u ? request[2] : 0u, 15u,
                            response, response_capacity, response_length);
     }
-    if (request_length != 13u || request[12] != 0u) {
+    if (request_length < 13u || request[12] > 1u) {
         return build_error(request[2], 15u, response,
                            response_capacity, response_length);
     }
@@ -154,9 +330,27 @@ static AmiDlmsApduStatus process_get_request_plain(
     uint16_t class_id = (uint16_t)(((uint16_t)request[3] << 8) | request[4]);
     memcpy(logical_name, request + 5u, sizeof(logical_name));
     uint8_t attribute_id = request[11];
+    AmiCosemProfileSelection selection;
+    const AmiCosemProfileSelection *selection_pointer = NULL;
+    if (request[12] == 0u) {
+        if (request_length != 13u) {
+            return build_error(request[2], 15u, response,
+                               response_capacity, response_length);
+        }
+    } else {
+        if (class_id != AMI_COSEM_PROFILE_GENERIC_CLASS_ID || attribute_id != 2u) {
+            return build_error(request[2], 11u, response,
+                               response_capacity, response_length);
+        }
+        if (!parse_profile_selection(request, request_length, 13u, &selection)) {
+            return build_error(request[2], 11u, response,
+                               response_capacity, response_length);
+        }
+        selection_pointer = &selection;
+    }
     AmiCosemData value;
-    AmiCosemStatus read_status = ami_cosem_register_read(
-        snapshot, class_id, logical_name, attribute_id, &value);
+    AmiCosemStatus read_status = ami_cosem_register_read_selected(
+        snapshot, class_id, logical_name, attribute_id, selection_pointer, &value);
     if (read_status != AMI_COSEM_OK) {
         return build_error(request[2], access_error(read_status), response,
                            response_capacity, response_length);
@@ -241,7 +435,8 @@ AmiDlmsApduStatus ami_dlms_process_ciphered_request(
         return AMI_DLMS_APDU_INVALID_ARGUMENT;
     }
     if (request_length <= GLO_HEADER_LENGTH + AMI_DLMS_GCM_TAG_LENGTH ||
-        (request[0] != GLO_GET_REQUEST_TAG && request[0] != GLO_SET_REQUEST_TAG)) {
+        (request[0] != GLO_GET_REQUEST_TAG && request[0] != GLO_SET_REQUEST_TAG &&
+         request[0] != GLO_ACTION_REQUEST_TAG)) {
         return AMI_DLMS_APDU_MALFORMED;
     }
     const uint8_t security_control = request[1];
@@ -271,7 +466,8 @@ AmiDlmsApduStatus ami_dlms_process_ciphered_request(
     }
 
     const uint8_t expected_plain_tag = request[0] == GLO_GET_REQUEST_TAG
-        ? GET_REQUEST_TAG : SET_REQUEST_TAG;
+        ? GET_REQUEST_TAG : (request[0] == GLO_SET_REQUEST_TAG
+            ? SET_REQUEST_TAG : ACTION_REQUEST_TAG);
     AmiDlmsApduStatus service_status;
     size_t response_plain_length = 0u;
     if (workspace[0] != expected_plain_tag) {
@@ -282,7 +478,7 @@ AmiDlmsApduStatus ami_dlms_process_ciphered_request(
         service_status = process_get_request_plain(association, snapshot, workspace,
             plaintext_length, workspace, workspace_capacity,
             &response_plain_length, 1);
-    } else {
+    } else if (expected_plain_tag == SET_REQUEST_TAG) {
         /* Sprint 1 exposes read-only COSEM objects; SET is authenticated but denied. */
         if (plaintext_length < 14u || workspace[1] != 0x01u || workspace[12] != 0u) {
             memset(workspace, 0, plaintext_length);
@@ -298,6 +494,9 @@ AmiDlmsApduStatus ami_dlms_process_ciphered_request(
         workspace[3] = 3u; /* read-write-denied: meter is read-only */
         response_plain_length = 4u;
         service_status = AMI_DLMS_APDU_ACCESS_ERROR;
+    } else {
+        service_status = process_security_key_transfer(association, cipher, workspace,
+            plaintext_length, workspace_capacity, &response_plain_length);
     }
     if (response_plain_length == 0u) {
         memset(workspace, 0, plaintext_length);
@@ -314,7 +513,8 @@ AmiDlmsApduStatus ami_dlms_process_ciphered_request(
         return AMI_DLMS_APDU_BACKEND_FAILURE;
     }
     const uint8_t response_tag = expected_plain_tag == GET_REQUEST_TAG
-        ? GLO_GET_RESPONSE_TAG : GLO_SET_RESPONSE_TAG;
+        ? GLO_GET_RESPONSE_TAG : (expected_plain_tag == SET_REQUEST_TAG
+            ? GLO_SET_RESPONSE_TAG : GLO_ACTION_RESPONSE_TAG);
     response[0] = response_tag;
     response[1] = security_control;
     write_u32_be(response + 2u, tx_counter);

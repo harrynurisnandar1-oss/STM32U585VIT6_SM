@@ -2,7 +2,7 @@
 
 ## Scope and limitations
 
-Sprint 1 is an initial protocol slice, not a complete DLMS/COSEM stack. It does not parse HDLC frames, validate client/server addresses, negotiate an InitiateRequest/InitiateResponse user-information payload, implement DLMS ciphering, process selective access, or manage invocation counters. Pass application APDUs here only after the HDLC layer validates framing and addressing. This code is not ready for network exposure or product deployment.
+Sprint 1 is an initial protocol slice, not a complete DLMS/COSEM stack. It does not parse HDLC frames, validate client/server addresses, negotiate an InitiateRequest/InitiateResponse user-information payload, implement selective column projection, or transfer large responses using block transfer. Ciphered APDUs and Class 7 selective access are present, but production security depends on the Secure-world SAL callbacks described below. Pass application APDUs here only after the HDLC layer validates framing and addressing. This code is not ready for network exposure or product deployment.
 
 The HLS mechanism OID and cryptographic proof function are configured by the product security profile. This project does not claim a particular HLS algorithm until that profile and its keys are integrated through the TrustZone Secure service.
 
@@ -74,3 +74,23 @@ These checks validate host logic only; they do not validate FreeRTOS scheduling,
 
 - This adds basic full-buffer reads only. Selective access by entry range or date range, profile capture/reset methods, persistent storage, and a FreeRTOS producer task are not implemented in this slice.
 - Class 7 A-XDR encoding and the configured billing OBIS must be reviewed against the controlled IEC 62056 and product/SPLN profile editions. This change alone does not establish DLMS conformance.
+
+## Added 13/10/2026
+
+### Security Setup Class 64 and wrapped key transfer
+
+- Added Security Setup metadata object `0.0.43.0.0.255`, Class 64 version 1, with read-only attributes for logical name, security policy, security suite, client/server system titles, and an empty certificates array when no certificate store is configured.
+- Corrected the requested class number: Class 15 is Association LN; Security Setup is Class 64. The Class 64 model does not expose plaintext keys as readable attributes.
+- Added ciphered Action Request support for Security Setup method 2 (`key_transfer`) after HLS. The accepted Suite 0 key-type values are 0 (global unicast encryption key) and 2 (authentication key). Incoming 16-byte keys are represented as 24-byte AES-128 key-wrap values under the KEK.
+- The Secure-world callback receives the wrapped batch and is responsible for RFC 3394 unwrap, KEK protection, integrity validation, atomic installation of all requested keys, and rejecting a failed/partial update. NonSecure code does not unwrap or retain plaintext keys. Host tests use a fake callback and do not verify key cryptography or hardware isolation.
+
+### Profile Generic selective access
+
+- Extended Get-Request-Normal parsing for Class 7 buffer attribute 2: selector 1 filters by Clock date-time range; selector 2 filters by entry range (one-based, inclusive; `to_entry = 0` means through the newest entry).
+- Range descriptors must identify Clock `0.0.1.0.0.255`, attribute 2, and use complete date-time values. Entry descriptors must select all columns (`from_selected_value` and `to_selected_value` both zero). Unsupported selectors, range objects, and column projections fail with `scope-of-access-violated`; the parser never silently returns the full log for an unsupported selection.
+- Selective access is applied before A-XDR encoding, so the response contains only matching rows. Large response block transfer and partial-column projection remain future work.
+
+### VS Code CMake Tools for host tests
+
+- Added a host-test CMake preset in `tests/CMakePresets.json` and workspace settings in `.vscode/settings.json` that point CMake Tools to `tests/`, separate from the CubeMX firmware CMake project at the repository root.
+- Updated `tests/README.md` with the reason the extension previously selected the ARM firmware project and the steps to configure/build/run host CTest from VS Code.

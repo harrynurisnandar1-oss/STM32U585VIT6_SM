@@ -10,6 +10,7 @@ static const uint8_t obis_active_import[6] = {1u, 0u, 1u, 8u, 0u, 255u};
 static const uint8_t obis_clock[6] = {0u, 0u, 1u, 0u, 0u, 255u};
 static const uint8_t obis_event_log[6] = {0u, 0u, 99u, 98u, 0u, 255u};
 static const uint8_t obis_billing_profile[6] = {1u, 0u, 98u, 1u, 0u, 255u};
+static const uint8_t obis_security_setup[6] = {0u, 0u, 43u, 0u, 0u, 255u};
 
 static void test_voltage_and_scaler(void)
 {
@@ -75,7 +76,7 @@ static void test_clock_attributes(void)
     assert(out.type == AMI_COSEM_TYPE_DOUBLE_LONG && out.value.double_long == 0);
     assert(ami_cosem_register_read(&snapshot, AMI_COSEM_CLOCK_CLASS_ID, obis_clock, 4u, &out) == AMI_COSEM_OK);
     assert(out.type == AMI_COSEM_TYPE_UNSIGNED && out.value.unsigned_integer == 0u);
-    assert(ami_cosem_object_count() == ami_cosem_register_count() + 3u);
+    assert(ami_cosem_object_count() == ami_cosem_register_count() + 4u);
 }
 
 static void test_profile_generic_buffers(void)
@@ -122,6 +123,32 @@ static void test_profile_generic_buffers(void)
         obis_event_log, 2u, &out) == AMI_COSEM_INVALID_ARGUMENT);
 }
 
+static void test_security_setup_class64_metadata(void)
+{
+    AmiCosemRegisterSnapshot snapshot = {
+        .security_policy = 3u,
+        .security_suite = 0u,
+        .client_system_title = {'C', 'L', 'I', 'E', 'N', 'T', '0', '1'},
+        .server_system_title = {'M', 'E', 'T', 'E', 'R', '0', '0', '1'},
+        .valid_mask = AMI_COSEM_VALID_SECURITY_CLIENT_TITLE
+    };
+    AmiCosemData out;
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_SECURITY_SETUP_CLASS_ID,
+        obis_security_setup, 2u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_ENUM && out.value.unsigned_integer == 3u);
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_SECURITY_SETUP_CLASS_ID,
+        obis_security_setup, 3u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_ENUM && out.value.unsigned_integer == 0u);
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_SECURITY_SETUP_CLASS_ID,
+        obis_security_setup, 4u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_OCTET_STRING && out.length == 8u);
+    assert(memcmp(out.value.octets, snapshot.client_system_title, 8u) == 0);
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_SECURITY_SETUP_CLASS_ID,
+        obis_security_setup, 6u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_ENCODED && out.length == 2u &&
+           out.value.encoded[0] == 1u && out.value.encoded[1] == 0u);
+}
+
 int main(void)
 {
     test_voltage_and_scaler();
@@ -129,6 +156,7 @@ int main(void)
     test_validity_and_invalid_reads();
     test_clock_attributes();
     test_profile_generic_buffers();
+    test_security_setup_class64_metadata();
     puts("COSEM model tests passed.");
     return 0;
 }

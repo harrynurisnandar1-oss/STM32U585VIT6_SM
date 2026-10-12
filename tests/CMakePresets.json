@@ -1,0 +1,34 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 20,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "host-tests",
+            "displayName": "AMI host unit tests",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/vscode-host",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "host-tests",
+            "configurePreset": "host-tests"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "host-tests",
+            "configurePreset": "host-tests",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ]
+}

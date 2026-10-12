@@ -6,10 +6,10 @@ Dokumen ini menjelaskan pengujian host-native untuk model DLMS/COSEM dan batas k
 
 | Suite CTest | File test | Yang diverifikasi |
 |---|---|---|
-| `AmiCosemTest` | `test_ami_cosem.c` | Pembacaan tegangan/arus/energi Class 3, OBIS, scaler dan unit, validity mask, error object/attribute, serta Clock Class 8. |
+| `AmiCosemTest` | `test_ami_cosem.c` | Pembacaan Class 3, Clock Class 8, Event Log dan Billing Profile Class 7, buffer/capture metadata, serta metadata Security Setup Class 64. |
 | `AmiSecurityTest` | `test_ami_security.c` | Validasi backend, RNG dan pembersihan buffer, batas nonce/tag AES-GCM, kegagalan backend, serta zeroization saat autentikasi gagal. |
 | `AmiDlmsAssociationTest` | `test_ami_dlms_association.c` | Penerimaan AARQ logical-name no-auth, pembentukan AARE, penolakan AARQ malformed/ber-auth, state transition, dan reset association. |
-| `AmiDlmsApduTest` | `test_ami_dlms_apdu.c` | Get-Request-Normal untuk tegangan OBIS `1.0.32.7.0.255`, encoding Get-Response-Normal dengan nilai `230000` mV, access error untuk OBIS tidak dikenal, penolakan plaintext setelah HLS, pemrosesan global-ciphered GET/SET, tag rusak, dan anti-replay. |
+| `AmiDlmsApduTest` | `test_ami_dlms_apdu.c` | GET response, Class 7 selective access berdasarkan entry/date-time, penolakan plaintext setelah HLS, global-ciphered GET/SET/Action, key-transfer SAL callback, tag rusak, dan anti-replay. |
 
 Test model dan protokol menggunakan data snapshot development yang diberikan langsung oleh test. Test tidak membuktikan perilaku metrologi hardware maupun komunikasi UART/HDLC.
 
@@ -37,7 +37,17 @@ Test host terpisah dari build firmware CubeMX. Build firmware tetap dijalankan d
 
 ## Batas cakupan protokol Sprint 1
 
-Implementasi saat ini mencakup AARQ/AARE no-auth, LLS, configurable HLS, dan xDLMS Get-Request-Normal tanpa selective access. Belum mencakup framing/alamat HDLC, negosiasi InitiateRequest/InitiateResponse, atau integrasi ke task FreeRTOS/UART. Ciphering APDU bergantung pada callback AES-GCM Secure-world dan kebijakan invocation counter yang harus disediakan oleh profil produk; test host memakai fake backend dan bukan validasi kriptografi produksi. Karena itu hasil test adalah verifikasi unit host, bukan klaim kesesuaian penuh IEC 62056 atau validasi perangkat akhir.
+Implementasi saat ini mencakup AARQ/AARE, LLS/HLS, GET, dan selective access Class 7 selector 1 (rentang Clock) serta selector 2 (rentang entry, semua kolom). Project belum mencakup framing/alamat HDLC, negosiasi InitiateRequest/InitiateResponse, selective column projection, block transfer untuk balasan panjang, atau integrasi task FreeRTOS/UART. Security Setup Class 64 mengekspos metadata dan menyediakan jalur ciphered Action untuk key transfer Suite 0; implementasi produk wajib menyuplai callback Secure-world yang unwrap RFC 3394 dengan KEK dan menyimpan batch key secara atomik. Host memakai fake callback, bukan validasi AES-GCM atau penyimpanan Secure.
+
+## Memakai CMake Tools di VS Code
+
+Root proyek memiliki `CMakeLists.txt` CubeMX untuk firmware STM32 dan toolchain ARM; host tests adalah proyek CMake terpisah di `tests/`. Karena itu, saat VS Code membuka root tanpa pengaturan source directory, CMake Tools memilih proyek firmware, bukan CTest host. Workspace settings mengarahkan extension ke `tests/`, sedangkan `tests/CMakePresets.json` memilih compiler host dan folder output terpisah.
+
+1. Buka folder `D:\STM32U585VIT6_SM` di VS Code dan pastikan extension **CMake Tools** aktif.
+2. Jalankan `CMake: Configure`, pilih preset **AMI host unit tests** bila diminta, lalu `CMake: Build`.
+3. Jalankan `CMake: Run Tests` atau pilih tes melalui Test Explorer.
+
+Jika preset tidak muncul, pastikan versi CMake dapat membaca Presets versi 3 (CMake 3.21+), extension CMake Tools sudah aktif, lalu jalankan `CMake: Delete Cache and Reconfigure`. `tests/CMakePresets.json` menggunakan Ninja; pasang Ninja atau ubah preset ke generator host yang tersedia. Untuk kembali membangun firmware CubeMX dari extension, ubah `cmake.sourceDirectory` ke `${workspaceFolder}` dan pilih preset firmware `Debug`.
 
 ## GitHub Actions
 
@@ -63,13 +73,13 @@ Fokus pada infrastruktur protokol pertukaran pesan yang kebal sadap (*ciphered*)
 #### **Week 2: Pemodelan Objek (OBIS & COSEM Model)**
 Menerjemahkan data fisis menjadi objek logis yang dikenali oleh protokol meteran pintar.
 *   ✅ **SELESAI** - **Standard OBIS Registers:** Implementasi objek dasar tegangan, arus, dan energi aktif/reaktif beserta formatnya (Class 3 & 4), serta objek *Clock* (Class 8).
-*   ❌ **BELUM** - **Profile Generic (Class 7):** Merancang arsitektur penyimpanan riwayat data secara *array* (seperti profil beban/kurva beban harian).
-*   ❌ **BELUM** - **Event Log & Billing Data:** Membuat model OBIS khusus untuk log *tampering* (pelanggaran/gangguan) dan register pencatatan tagihan periodik.
+*   ✅ **SELESAI (host model)** - **Profile Generic (Class 7):** Buffer bounded untuk data riwayat dan selective access melalui rentang entry/timestamp.
+*   ✅ **SELESAI (host model)** - **Event Log & Billing Data:** Profile Generic read-only untuk event dan billing dengan contoh row yang disuplai board layer.
 
 #### **Week 3 & 4: Security Management & Integrasi Lanjutan**
 *Walaupun jadwal aslinya memuat tugas tim E3 (Display & Console) pada minggu ini, dari kacamata E2+Security, minggu ini difokuskan pada penyempurnaan manajemen objek keamanan.*
-*   ❌ **BELUM** - **Security Setup Object (Class 15):** Menambahkan objek kelas 15 ke dalam `ami_cosem_model.c` untuk mengatur pertukaran atau pembaharuan *Global Unicast Key* dan *Authentication Key* secara standar.
-*   ❌ **BELUM** - **Selective Access:** Memperbarui parser APDU agar mendukung *Selective Access* (memfilter balasan data *Profile Generic* hanya pada rentang waktu atau baris data tertentu, bukan men-*download* seluruh log dari awal).
+*   ✅ **SELESAI (model + SAL hook)** - **Security Setup Object (Class 64):** Class 15 adalah Association LN; Security Setup merupakan Class 64. Metadata object dan ciphered key-transfer Action untuk GUEK/Auth key sudah ada; unwrap KEK dan secure storage harus diimplementasikan di backend Secure-world.
+*   ✅ **SELESAI (subset)** - **Selective Access:** Selector 1 untuk rentang Clock dan selector 2 untuk rentang entry (semua kolom); column projection dan block transfer belum termasuk.
 
 #### **Week 5: CI & Testing Assurance**
 *   ✅ **SELESAI** - **Host-Side Tests Green:** Pengujian *unit-test* lokal untuk logika E2+Security tanpa menggunakan *hardware* fisik (`test_ami_dlms_association.c` & `test_ami_dlms_apdu.c` sudah hijau/sukses berjalan).
@@ -86,9 +96,4 @@ Fase ini dilakukan setelah pembuatan kode selesai dan kita menunggu PCB fisik (S
 ---
 
 ### Apa Langkah Anda Selanjutnya?
-Melihat rincian di atas, tugas E2 + Security di **Week 1** sudah rampung seluruhnya. 
-Fokus Anda berikutnya harus tertuju pada sisa tugas **Week 2 & 3**, yaitu:
-1.  Merancang **Profile Generic (Class 7)** untuk *Event Log* dan *Billing Registers*.
-2.  Mengimplementasikan **Security Setup Object (Class 15)**.
-
-Bagian mana yang ingin Anda kerjakan terlebih dahulu?
+Tugas model host untuk Profile Generic, Security Setup, dan selective access kini tersedia. Langkah lanjutan adalah mengintegrasikan penyimpanan profil serta key transfer ke driver/FreeRTOS dan Secure-world backend, menambahkan HDLC/UART serta block transfer, lalu menguji terhadap DLMS client dan hardware.

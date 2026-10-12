@@ -27,6 +27,12 @@ typedef enum {
 
 #define AMI_DLMS_GCM_TAG_LENGTH 16u
 
+typedef struct {
+    uint8_t key_type; /* DLMS enum: 0 = global unicast, 2 = authentication. */
+    const uint8_t *wrapped_key;
+    size_t wrapped_key_length;
+} AmiDlmsWrappedKey;
+
 /* Secure-world SAL callbacks. They must use AES-GCM with the negotiated
  * DLMS profile, construct nonce/AAD from the peer/local system titles and
  * security header, and keep keys in Secure storage. Counter callbacks must
@@ -44,9 +50,15 @@ typedef struct {
         uint8_t tag[AMI_DLMS_GCM_TAG_LENGTH]);
     int (*accept_rx_counter)(void *user, uint32_t invocation_counter);
     int (*next_tx_counter)(void *user, uint32_t *invocation_counter);
+    /* Suite-0 SAL must unwrap 24-byte AES-128-wrapped values using its secure
+     * KEK and atomically persist the batch; plaintext keys must never leave it. */
+    AmiSecStatus (*transfer_keys)(void *user,
+        const AmiDlmsWrappedKey *keys, size_t key_count);
 } AmiDlmsCipherBackend;
 
-/* Processes a single GET-Request-Normal (C0 01), no selective access. */
+/* Processes GET-Request-Normal (C0 01). Class-7 buffer selective access
+ * supports selector 1 (Clock date-time range) and selector 2 (entry range,
+ * full rows only). Unsupported descriptors fail with scope-of-access-violated. */
 AmiDlmsApduStatus ami_dlms_process_get_request(
     const AmiDlmsAssociation *association,
     const AmiCosemRegisterSnapshot *snapshot,
