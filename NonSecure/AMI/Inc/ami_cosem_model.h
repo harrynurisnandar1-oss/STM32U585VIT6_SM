@@ -10,7 +10,14 @@ extern "C" {
 
 #define AMI_COSEM_LOGICAL_NAME_LENGTH 6u
 #define AMI_COSEM_REGISTER_CLASS_ID 3u
+#define AMI_COSEM_PROFILE_GENERIC_CLASS_ID 7u
 #define AMI_COSEM_CLOCK_CLASS_ID 8u
+
+#define AMI_COSEM_PROFILE_MAX_ENTRIES 8u
+#define AMI_COSEM_AXDR_ENCODED_MAX 512u
+
+#define AMI_COSEM_VALID_EVENT_LOG (1u << 11)
+#define AMI_COSEM_VALID_BILLING_PROFILE (1u << 12)
 
 #define AMI_COSEM_VALID_CLOCK (1u << 10)
 
@@ -38,6 +45,17 @@ typedef struct {
     uint8_t status;
 } AmiCosemDateTime;
 
+typedef struct {
+    AmiCosemDateTime timestamp;
+    uint8_t event_code;
+} AmiCosemEventLogEntry;
+
+typedef struct {
+    AmiCosemDateTime billing_timestamp;
+    uint64_t active_import_wh;
+    uint64_t active_export_wh;
+} AmiCosemBillingEntry;
+
 /* Snapshot values are supplied by the metrology/board layer. This module does
  * not synthesize measurements or access hardware. */
 typedef struct {
@@ -51,6 +69,12 @@ typedef struct {
     int16_t clock_time_zone_minutes;
     uint8_t clock_status;
     uint32_t valid_mask;
+    /* Bounded development/board-layer snapshots. Entries are oldest first;
+     * the producer is responsible for ring-buffer rollover and timestamps. */
+    AmiCosemEventLogEntry event_log[AMI_COSEM_PROFILE_MAX_ENTRIES];
+    size_t event_log_count;
+    AmiCosemBillingEntry billing_history[AMI_COSEM_PROFILE_MAX_ENTRIES];
+    size_t billing_history_count;
 } AmiCosemRegisterSnapshot;
 
 typedef enum {
@@ -63,12 +87,14 @@ typedef enum {
 
 /* A-XDR/COSEM data type tags used by this register model. */
 typedef enum {
+    AMI_COSEM_TYPE_ENCODED = 0, /* Internal: value already contains A-XDR. */
     AMI_COSEM_TYPE_STRUCTURE = 2,
     AMI_COSEM_TYPE_DOUBLE_LONG = 5,
     AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED = 6,
     AMI_COSEM_TYPE_OCTET_STRING = 9,
     AMI_COSEM_TYPE_UNSIGNED = 17,
     AMI_COSEM_TYPE_INTEGER = 15,
+    AMI_COSEM_TYPE_LONG_UNSIGNED = 18,
     AMI_COSEM_TYPE_LONG64_UNSIGNED = 21
 } AmiCosemDataType;
 
@@ -88,10 +114,11 @@ typedef struct {
         int32_t double_long;
         uint8_t unsigned_integer;
         AmiCosemDateTime date_time;
+        uint8_t encoded[AMI_COSEM_AXDR_ENCODED_MAX];
     } value;
 } AmiCosemData;
 
-/* Read-only Class-3 Register and Class-8 Clock objects. */
+/* Read-only Class-3 Register, Class-7 Profile Generic, and Class-8 Clock. */
 AmiCosemStatus ami_cosem_register_read(
     const AmiCosemRegisterSnapshot *snapshot,
     uint16_t class_id,

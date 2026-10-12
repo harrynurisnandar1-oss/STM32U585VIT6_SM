@@ -50,6 +50,194 @@ static const RegisterDefinition registers[] = {
 
 static const uint8_t clock_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
     {0, 0, 1, 0, 0, 255};
+/* Standard event-log instance. Billing profile instance is a common profile
+ * choice; confirm it against the utility/product OBIS profile before release. */
+static const uint8_t event_log_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {0, 0, 99, 98, 0, 255};
+static const uint8_t billing_profile_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {1, 0, 98, 1, 0, 255};
+static const uint8_t event_code_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {0, 0, 96, 11, 0, 255};
+static const uint8_t active_import_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {1, 0, 1, 8, 0, 255};
+static const uint8_t active_export_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {1, 0, 2, 8, 0, 255};
+
+typedef struct {
+    uint16_t class_id;
+    const uint8_t *logical_name;
+    int8_t attribute_id;
+    uint16_t data_index;
+} CaptureObject;
+
+static const CaptureObject event_capture_objects[] = {
+    {AMI_COSEM_CLOCK_CLASS_ID, clock_logical_name, 2, 0},
+    {1u, event_code_logical_name, 2, 0}
+};
+static const CaptureObject billing_capture_objects[] = {
+    {AMI_COSEM_CLOCK_CLASS_ID, clock_logical_name, 2, 0},
+    {AMI_COSEM_REGISTER_CLASS_ID, active_import_logical_name, 2, 0},
+    {AMI_COSEM_REGISTER_CLASS_ID, active_export_logical_name, 2, 0}
+};
+
+static int put_byte(AmiCosemData *out, size_t *offset, uint8_t value)
+{
+    if (*offset >= sizeof(out->value.encoded)) return 0;
+    out->value.encoded[(*offset)++] = value;
+    return 1;
+}
+
+static int put_bytes(AmiCosemData *out, size_t *offset,
+                     const uint8_t *bytes, size_t length)
+{
+    if (length > sizeof(out->value.encoded) - *offset) return 0;
+    memcpy(out->value.encoded + *offset, bytes, length);
+    *offset += length;
+    return 1;
+}
+
+static int put_u16(AmiCosemData *out, size_t *offset, uint16_t value)
+{
+    return put_byte(out, offset, (uint8_t)(value >> 8)) &&
+           put_byte(out, offset, (uint8_t)value);
+}
+
+static int put_u32(AmiCosemData *out, size_t *offset, uint32_t value)
+{
+    return put_byte(out, offset, (uint8_t)(value >> 24)) &&
+           put_byte(out, offset, (uint8_t)(value >> 16)) &&
+           put_byte(out, offset, (uint8_t)(value >> 8)) &&
+           put_byte(out, offset, (uint8_t)value);
+}
+
+static int put_u64(AmiCosemData *out, size_t *offset, uint64_t value)
+{
+    for (int shift = 56; shift >= 0; shift -= 8) {
+        if (!put_byte(out, offset, (uint8_t)(value >> shift))) return 0;
+    }
+    return 1;
+}
+
+static int put_datetime(AmiCosemData *out, size_t *offset,
+                        const AmiCosemDateTime *date_time)
+{
+    const uint8_t *bytes = (const uint8_t *)date_time;
+    return put_byte(out, offset, AMI_COSEM_TYPE_OCTET_STRING) &&
+           put_byte(out, offset, (uint8_t)sizeof(*date_time)) &&
+           put_bytes(out, offset, bytes, sizeof(*date_time));
+}
+
+static int put_capture_object(AmiCosemData *out, size_t *offset,
+                              const CaptureObject *object)
+{
+    if (!put_byte(out, offset, AMI_COSEM_TYPE_STRUCTURE) ||
+        !put_byte(out, offset, 4u) ||
+        !put_byte(out, offset, AMI_COSEM_TYPE_LONG_UNSIGNED) ||
+        !put_u16(out, offset, object->class_id) ||
+        !put_byte(out, offset, AMI_COSEM_TYPE_OCTET_STRING) ||
+        !put_byte(out, offset, AMI_COSEM_LOGICAL_NAME_LENGTH) ||
+        !put_bytes(out, offset, object->logical_name, AMI_COSEM_LOGICAL_NAME_LENGTH) ||
+        !put_byte(out, offset, AMI_COSEM_TYPE_INTEGER) ||
+        !put_byte(out, offset, (uint8_t)object->attribute_id) ||
+        !put_byte(out, offset, AMI_COSEM_TYPE_LONG_UNSIGNED) ||
+        !put_u16(out, offset, object->data_index)) return 0;
+    return 1;
+}
+
+static int put_capture_array(AmiCosemData *out, size_t *offset,
+                             const CaptureObject *objects, size_t count)
+{
+    if (!put_byte(out, offset, 1u) || !put_byte(out, offset, (uint8_t)count)) return 0;
+    for (size_t i = 0; i < count; ++i) {
+        if (!put_capture_object(out, offset, &objects[i])) return 0;
+    }
+    return 1;
+}
+
+static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
+                                   const uint8_t *logical_name,
+                                   uint8_t attribute_id, AmiCosemData *out)
+{
+    const int is_event = memcmp(logical_name, event_log_logical_name,
+                                AMI_COSEM_LOGICAL_NAME_LENGTH) == 0;
+    const int is_billing = memcmp(logical_name, billing_profile_logical_name,
+                                  AMI_COSEM_LOGICAL_NAME_LENGTH) == 0;
+    if (!is_event && !is_billing) return AMI_COSEM_OBJECT_NOT_FOUND;
+
+    const size_t count = is_event ? snapshot->event_log_count : snapshot->billing_history_count;
+    const uint32_t valid_bit = is_event ? AMI_COSEM_VALID_EVENT_LOG
+                                        : AMI_COSEM_VALID_BILLING_PROFILE;
+    const size_t capacity = AMI_COSEM_PROFILE_MAX_ENTRIES;
+    const CaptureObject *captures = is_event ? event_capture_objects : billing_capture_objects;
+    const size_t capture_count = is_event
+        ? sizeof(event_capture_objects) / sizeof(event_capture_objects[0])
+        : sizeof(billing_capture_objects) / sizeof(billing_capture_objects[0]);
+    size_t offset = 0u;
+    memset(out, 0, sizeof(*out));
+
+    if (attribute_id == 1u) {
+        out->type = AMI_COSEM_TYPE_OCTET_STRING;
+        out->length = AMI_COSEM_LOGICAL_NAME_LENGTH;
+        memcpy(out->value.logical_name, logical_name, AMI_COSEM_LOGICAL_NAME_LENGTH);
+        return AMI_COSEM_OK;
+    }
+    if (count > capacity) return AMI_COSEM_INVALID_ARGUMENT;
+
+    switch (attribute_id) {
+    case 2: /* buffer: ARRAY of row STRUCTURE values */
+        if ((snapshot->valid_mask & valid_bit) == 0u) return AMI_COSEM_VALUE_UNAVAILABLE;
+        if (!put_byte(out, &offset, 1u) || !put_byte(out, &offset, (uint8_t)count)) break;
+        for (size_t i = 0; i < count; ++i) {
+            if (!put_byte(out, &offset, AMI_COSEM_TYPE_STRUCTURE) ||
+                !put_byte(out, &offset, is_event ? 2u : 3u)) break;
+            const AmiCosemDateTime *timestamp = is_event
+                ? &snapshot->event_log[i].timestamp
+                : &snapshot->billing_history[i].billing_timestamp;
+            if (!put_datetime(out, &offset, timestamp)) break;
+            if (is_event) {
+                if (!put_byte(out, &offset, AMI_COSEM_TYPE_UNSIGNED) ||
+                    !put_byte(out, &offset, snapshot->event_log[i].event_code)) break;
+            } else {
+                if (!put_byte(out, &offset, AMI_COSEM_TYPE_LONG64_UNSIGNED) ||
+                    !put_u64(out, &offset, snapshot->billing_history[i].active_import_wh) ||
+                    !put_byte(out, &offset, AMI_COSEM_TYPE_LONG64_UNSIGNED) ||
+                    !put_u64(out, &offset, snapshot->billing_history[i].active_export_wh)) break;
+            }
+        }
+        if (offset == 0u) break;
+        goto encoded;
+    case 3:
+        if (!put_capture_array(out, &offset, captures, capture_count)) break;
+        goto encoded;
+    case 4: /* event/billing captures are trigger-based */
+        if (!put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
+            !put_u32(out, &offset, 0u)) break;
+        goto encoded;
+    case 5: /* FIFO */
+        if (!put_byte(out, &offset, 22u) || !put_byte(out, &offset, 1u)) break;
+        goto encoded;
+    case 6: /* sort_object: timestamp capture object */
+        if (!put_capture_object(out, &offset, &captures[0])) break;
+        goto encoded;
+    case 7:
+        if ((snapshot->valid_mask & valid_bit) == 0u) return AMI_COSEM_VALUE_UNAVAILABLE;
+        if (!put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
+            !put_u32(out, &offset, (uint32_t)count)) break;
+        goto encoded;
+    case 8:
+        if (!put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
+            !put_u32(out, &offset, (uint32_t)capacity)) break;
+        goto encoded;
+    default:
+        return AMI_COSEM_ATTRIBUTE_NOT_FOUND;
+    }
+    return AMI_COSEM_INVALID_ARGUMENT;
+
+encoded:
+    out->type = AMI_COSEM_TYPE_ENCODED;
+    out->length = offset;
+    return AMI_COSEM_OK;
+}
 
 size_t ami_cosem_register_count(void)
 {
@@ -58,7 +246,7 @@ size_t ami_cosem_register_count(void)
 
 size_t ami_cosem_object_count(void)
 {
-    return ami_cosem_register_count() + 1u;
+    return ami_cosem_register_count() + 3u;
 }
 
 static const RegisterDefinition *find_register(
@@ -104,8 +292,13 @@ AmiCosemStatus ami_cosem_register_read(
         return AMI_COSEM_INVALID_ARGUMENT;
     }
     if (class_id != AMI_COSEM_REGISTER_CLASS_ID &&
+        class_id != AMI_COSEM_PROFILE_GENERIC_CLASS_ID &&
         class_id != AMI_COSEM_CLOCK_CLASS_ID) {
         return AMI_COSEM_OBJECT_NOT_FOUND;
+    }
+
+    if (class_id == AMI_COSEM_PROFILE_GENERIC_CLASS_ID) {
+        return read_profile(snapshot, logical_name, attribute_id, out);
     }
 
     if (class_id == AMI_COSEM_CLOCK_CLASS_ID) {

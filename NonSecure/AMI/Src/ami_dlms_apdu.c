@@ -24,6 +24,13 @@ static int encode_data(const AmiCosemData *data, uint8_t *out,
     }
 
     switch (data->type) {
+    case AMI_COSEM_TYPE_ENCODED:
+        if (data->length > capacity || data->length > sizeof(data->value.encoded)) {
+            return 0;
+        }
+        memcpy(out, data->value.encoded, data->length);
+        offset = data->length;
+        break;
     case AMI_COSEM_TYPE_OCTET_STRING:
         if (data->length > UINT8_MAX || data->length > capacity ||
             capacity - data->length < 2u) {
