@@ -242,8 +242,9 @@ AmiDlmsAssociationStatus ami_dlms_process_aarq_with_security(
         }
     }
     const int hls_started = accepted && mechanism == AMI_DLMS_AUTH_HLS;
-    if (!build_aare(aare, aare_capacity, aare_length, accepted ? 0u : 1u,
-                    accepted ? 0u : 2u,
+    const uint8_t result = (uint8_t)(accepted ? 0u : 1u);
+    const uint8_t diagnostic = (uint8_t)(accepted ? 0u : 2u);
+    if (!build_aare(aare, aare_capacity, aare_length, result, diagnostic,
                     hls_started ? association->hls_mechanism_oid : NULL,
                     hls_started ? association->hls_mechanism_oid_length : 0u,
                     hls_started ? association->server_challenge : NULL,
