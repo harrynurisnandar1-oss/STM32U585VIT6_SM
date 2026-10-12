@@ -75,6 +75,20 @@ These checks validate host logic only; they do not validate FreeRTOS scheduling,
 - This adds basic full-buffer reads only. Selective access by entry range or date range, profile capture/reset methods, persistent storage, and a FreeRTOS producer task are not implemented in this slice.
 - Class 7 A-XDR encoding and the configured billing OBIS must be reviewed against the controlled IEC 62056 and product/SPLN profile editions. This change alone does not establish DLMS conformance.
 
+## Added 12/10/2026
+
+### SPLN D3.002:2021 OBIS review and date-range ordering
+
+- Reviewed the provided `obis.md` inventory as the authoritative SPLN D3.002:2021 reference. Repeated logical names in the source table are recorded as source-profile entries and were not “corrected” based on neighboring OBIS patterns.
+- Fixed Class 7 time-range ordering to compare calendar/time fields only (year through hundredths). Day-of-week, deviation, and clock status no longer affect range validation or row inclusion.
+- The firmware COSEM model still implements only its explicitly listed register, Clock, Security Setup, and Profile Generic objects. The remaining SPLN OBIS objects require corresponding snapshot data, access semantics, and product mapping before they can be exposed; this review does not claim full SPLN object coverage.
+
+### Three-phase measurement OBIS catalog
+
+- Added the read-only Class-3 measurement OBIS entries from SPLN D3.002:2021 for neutral values, frequency, phase/total power factor, active/reactive/apparent power, and per-phase active/reactive/apparent energy.
+- Added a bounded snapshot sample bank keyed by logical name. The COSEM model supplies the catalog-defined data type, scaler, and unit; metrology/board code supplies raw values and validity, so missing measurements return value-unavailable instead of a valid zero.
+- The OBIS row for Q2 phase-S energy repeats `1.0.45.8.0.255` from Q1 phase-S in the supplied table. It is intentionally omitted from the additional catalog pending clarification against the controlled standard; no substitute OBIS is guessed.
+- Demand registers, tariffs, power-quality metrics, event profiles, and control/configuration objects remain outside this measurement-register slice.
 ## Added 13/10/2026
 
 ### Security Setup Class 64 and wrapped key transfer

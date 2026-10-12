@@ -129,6 +129,20 @@ static int read_be_u32(const uint8_t *input, size_t length, size_t *offset,
     return 1;
 }
 
+static int compare_profile_datetime(const AmiCosemDateTime *left,
+                                    const AmiCosemDateTime *right)
+{
+    const uint8_t left_fields[] = {
+        left->year[0], left->year[1], left->month, left->day,
+        left->hour, left->minute, left->second, left->hundredths
+    };
+    const uint8_t right_fields[] = {
+        right->year[0], right->year[1], right->month, right->day,
+        right->hour, right->minute, right->second, right->hundredths
+    };
+    /* Ignore day-of-week, deviation, and status when ordering a date-time range. */
+    return memcmp(left_fields, right_fields, sizeof(left_fields));
+}
 /* Supports selector 1 (Clock range) and selector 2 (entry range, all columns).
  * Unknown descriptors are rejected rather than returning the whole buffer. */
 static int parse_profile_selection(const uint8_t *request, size_t request_length,
@@ -191,8 +205,7 @@ static int parse_profile_selection(const uint8_t *request, size_t request_length
         offset += sizeof(selection->to_date);
         /* selected_values must be an empty array; column projection isn't supported. */
         if (offset + 2u != request_length || request[offset++] != 1u || request[offset++] != 0u ||
-            memcmp(&selection->from_date, &selection->to_date,
-                   sizeof(selection->from_date)) > 0) return 0;
+            compare_profile_datetime(&selection->from_date, &selection->to_date) > 0) return 0;
         return 1;
     }
     return 0;

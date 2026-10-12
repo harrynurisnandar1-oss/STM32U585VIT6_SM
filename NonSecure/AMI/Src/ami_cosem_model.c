@@ -31,6 +31,13 @@ typedef struct {
     uint32_t valid_mask;
 } RegisterDefinition;
 
+typedef struct {
+    uint8_t logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH];
+    AmiCosemDataType value_type;
+    int8_t scaler;
+    uint8_t unit;
+} ExtendedRegisterDefinition;
+
 #define OBIS(a, b, c, d, e, f) {a, b, c, d, e, f}
 
 static const RegisterDefinition registers[] = {
@@ -46,6 +53,80 @@ static const RegisterDefinition registers[] = {
     {OBIS(1, 0, 4, 8, 0, 255), VALUE_REACTIVE_EXPORT, 0, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH, AMI_COSEM_VALID_REACTIVE_EXPORT}
 };
 
+enum {
+    COSEM_UNIT_WATT = 27,
+    COSEM_UNIT_VOLT_AMPERE = 28,
+    COSEM_UNIT_VAR = 29,
+    COSEM_UNIT_VOLT_AMPERE_HOUR = 31,
+    COSEM_UNIT_HERTZ = 44,
+    COSEM_UNIT_DIMENSIONLESS = 255
+};
+
+#define EXT(a, b, c, d, e, f, type, scale, unit_value) \
+    {OBIS(a, b, c, d, e, f), type, scale, unit_value}
+static const ExtendedRegisterDefinition extended_registers[] = {
+    EXT(1,0,14,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, -3, COSEM_UNIT_HERTZ),
+    EXT(1,0,91,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, -3, COSEM_UNIT_CURRENT_AMPERE),
+    EXT(1,0,92,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, -3, COSEM_UNIT_VOLT),
+    EXT(1,0,13,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG, -3, COSEM_UNIT_DIMENSIONLESS),
+    EXT(1,0,33,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG, -3, COSEM_UNIT_DIMENSIONLESS),
+    EXT(1,0,53,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG, -3, COSEM_UNIT_DIMENSIONLESS),
+    EXT(1,0,73,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG, -3, COSEM_UNIT_DIMENSIONLESS),
+    EXT(1,0,1,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_WATT),
+    EXT(1,0,2,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_WATT),
+    EXT(1,0,3,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_VAR),
+    EXT(1,0,4,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_VAR),
+    EXT(1,0,9,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_VOLT_AMPERE),
+    EXT(1,0,10,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_VOLT_AMPERE),
+    EXT(1,0,21,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_WATT),
+    EXT(1,0,41,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_WATT),
+    EXT(1,0,61,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_WATT),
+    EXT(1,0,22,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_WATT),
+    EXT(1,0,42,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_WATT),
+    EXT(1,0,62,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_WATT),
+    EXT(1,0,23,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_VAR),
+    EXT(1,0,43,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_VAR),
+    EXT(1,0,63,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_VAR),
+    EXT(1,0,24,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_VAR),
+    EXT(1,0,44,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_VAR),
+    EXT(1,0,64,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_VAR),
+    EXT(1,0,29,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_VOLT_AMPERE),
+    EXT(1,0,49,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_VOLT_AMPERE),
+    EXT(1,0,69,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_VOLT_AMPERE),
+    EXT(1,0,30,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_VOLT_AMPERE),
+    EXT(1,0,50,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_VOLT_AMPERE),
+    EXT(1,0,70,7,0,255, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED, 0, COSEM_UNIT_VOLT_AMPERE),
+    EXT(1,0,21,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_ACTIVE_ENERGY_WH),
+    EXT(1,0,41,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_ACTIVE_ENERGY_WH),
+    EXT(1,0,61,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_ACTIVE_ENERGY_WH),
+    EXT(1,0,22,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_ACTIVE_ENERGY_WH),
+    EXT(1,0,42,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_ACTIVE_ENERGY_WH),
+    EXT(1,0,62,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_ACTIVE_ENERGY_WH),
+    EXT(1,0,23,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,43,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,63,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,24,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,44,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,64,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,29,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_VOLT_AMPERE_HOUR),
+    EXT(1,0,49,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_VOLT_AMPERE_HOUR),
+    EXT(1,0,69,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_VOLT_AMPERE_HOUR),
+    EXT(1,0,30,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_VOLT_AMPERE_HOUR),
+    EXT(1,0,50,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_VOLT_AMPERE_HOUR),
+    EXT(1,0,70,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_VOLT_AMPERE_HOUR),
+    EXT(1,0,25,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,45,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,65,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,26,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,66,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,27,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,47,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,67,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,28,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,48,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,68,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH)
+};
+#undef EXT
 #undef OBIS
 
 static const uint8_t clock_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
@@ -156,6 +237,20 @@ static int put_capture_array(AmiCosemData *out, size_t *offset,
     return 1;
 }
 
+static int compare_profile_datetime(const AmiCosemDateTime *left,
+                                    const AmiCosemDateTime *right)
+{
+    const uint8_t left_fields[] = {
+        left->year[0], left->year[1], left->month, left->day,
+        left->hour, left->minute, left->second, left->hundredths
+    };
+    const uint8_t right_fields[] = {
+        right->year[0], right->year[1], right->month, right->day,
+        right->hour, right->minute, right->second, right->hundredths
+    };
+    /* Day-of-week, deviation, and status are metadata, not sort keys. */
+    return memcmp(left_fields, right_fields, sizeof(left_fields));
+}
 static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
                                    const uint8_t *logical_name,
                                    uint8_t attribute_id,
@@ -173,8 +268,7 @@ static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
         return AMI_COSEM_SCOPE_VIOLATED;
     }
     if (selection != NULL && selection->selector == AMI_COSEM_PROFILE_SELECTOR_RANGE &&
-        memcmp(&selection->from_date, &selection->to_date,
-               sizeof(selection->from_date)) > 0) {
+        compare_profile_datetime(&selection->from_date, &selection->to_date) > 0) {
         return AMI_COSEM_SCOPE_VIOLATED;
     }
 
@@ -222,8 +316,8 @@ static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
                 ? &snapshot->event_log[i].timestamp
                 : &snapshot->billing_history[i].billing_timestamp;
             if (selection != NULL && selection->selector == AMI_COSEM_PROFILE_SELECTOR_RANGE &&
-                (memcmp(timestamp, &selection->from_date, sizeof(*timestamp)) < 0 ||
-                 memcmp(timestamp, &selection->to_date, sizeof(*timestamp)) > 0)) continue;
+                (compare_profile_datetime(timestamp, &selection->from_date) < 0 ||
+                 compare_profile_datetime(timestamp, &selection->to_date) > 0)) continue;
             if (!put_byte(out, &offset, AMI_COSEM_TYPE_STRUCTURE) ||
                 !put_byte(out, &offset, is_event ? 2u : 3u)) break;
             if (!put_datetime(out, &offset, timestamp)) break;
@@ -277,7 +371,8 @@ encoded:
 
 size_t ami_cosem_register_count(void)
 {
-    return sizeof(registers) / sizeof(registers[0]);
+    return (sizeof(registers) / sizeof(registers[0])) +
+           (sizeof(extended_registers) / sizeof(extended_registers[0]));
 }
 
 size_t ami_cosem_object_count(void)
@@ -285,10 +380,71 @@ size_t ami_cosem_object_count(void)
     return ami_cosem_register_count() + 4u;
 }
 
+static const ExtendedRegisterDefinition *find_extended_register(
+    const uint8_t logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH])
+{
+    for (size_t i = 0; i < sizeof(extended_registers) / sizeof(extended_registers[0]); ++i) {
+        if (memcmp(extended_registers[i].logical_name, logical_name,
+                   AMI_COSEM_LOGICAL_NAME_LENGTH) == 0) return &extended_registers[i];
+    }
+    return NULL;
+}
+
+static const AmiCosemRegisterSample *find_register_sample(
+    const AmiCosemRegisterSnapshot *snapshot,
+    const uint8_t logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH])
+{
+    if (snapshot->measurement_sample_count > AMI_COSEM_REGISTER_SAMPLE_MAX) return NULL;
+    for (size_t i = 0; i < snapshot->measurement_sample_count; ++i) {
+        if (memcmp(snapshot->measurement_samples[i].logical_name, logical_name,
+                   AMI_COSEM_LOGICAL_NAME_LENGTH) == 0) return &snapshot->measurement_samples[i];
+    }
+    return NULL;
+}
+
+static AmiCosemStatus read_extended_register(
+    const AmiCosemRegisterSnapshot *snapshot,
+    const ExtendedRegisterDefinition *definition,
+    uint8_t attribute_id, AmiCosemData *out)
+{
+    memset(out, 0, sizeof(*out));
+    if (attribute_id == 1u) {
+        out->type = AMI_COSEM_TYPE_OCTET_STRING;
+        out->length = AMI_COSEM_LOGICAL_NAME_LENGTH;
+        memcpy(out->value.logical_name, definition->logical_name, out->length);
+        return AMI_COSEM_OK;
+    }
+    if (attribute_id == 3u) {
+        out->type = AMI_COSEM_TYPE_STRUCTURE;
+        out->length = 2u;
+        out->value.scaler_unit.scaler = definition->scaler;
+        out->value.scaler_unit.unit = definition->unit;
+        return AMI_COSEM_OK;
+    }
+    if (attribute_id != 2u) return AMI_COSEM_ATTRIBUTE_NOT_FOUND;
+    if (snapshot->measurement_sample_count > AMI_COSEM_REGISTER_SAMPLE_MAX)
+        return AMI_COSEM_INVALID_ARGUMENT;
+    const AmiCosemRegisterSample *sample = find_register_sample(snapshot, definition->logical_name);
+    if (sample == NULL || !sample->valid) return AMI_COSEM_VALUE_UNAVAILABLE;
+    out->type = definition->value_type;
+    if (definition->value_type == AMI_COSEM_TYPE_LONG64_UNSIGNED) {
+        out->length = sizeof(uint64_t);
+        out->value.long64_unsigned = sample->raw_value;
+    } else if (definition->value_type == AMI_COSEM_TYPE_DOUBLE_LONG) {
+        out->length = sizeof(int32_t);
+        out->value.double_long = sample->signed_value;
+    } else {
+        if (sample->raw_value > UINT32_MAX) return AMI_COSEM_INVALID_ARGUMENT;
+        out->length = sizeof(uint32_t);
+        out->value.double_long_unsigned = (uint32_t)sample->raw_value;
+    }
+    return AMI_COSEM_OK;
+}
+
 static const RegisterDefinition *find_register(
     const uint8_t logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH])
 {
-    for (size_t i = 0; i < ami_cosem_register_count(); ++i) {
+    for (size_t i = 0; i < sizeof(registers) / sizeof(registers[0]); ++i) {
         if (memcmp(registers[i].logical_name, logical_name,
                    AMI_COSEM_LOGICAL_NAME_LENGTH) == 0) {
             return &registers[i];
@@ -428,7 +584,9 @@ AmiCosemStatus ami_cosem_register_read_selected(
 
     const RegisterDefinition *definition = find_register(logical_name);
     if (definition == NULL) {
-        return AMI_COSEM_OBJECT_NOT_FOUND;
+        const ExtendedRegisterDefinition *extended = find_extended_register(logical_name);
+        return extended == NULL ? AMI_COSEM_OBJECT_NOT_FOUND
+                                : read_extended_register(snapshot, extended, attribute_id, out);
     }
 
     memset(out, 0, sizeof(*out));

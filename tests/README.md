@@ -89,7 +89,9 @@ Menerjemahkan data fisis menjadi objek logis yang dikenali oleh protokol meteran
 ### Phase 2: Board Bring-Up & Uji Fisik (Weeks 6–10)
 Fase ini dilakukan setelah pembuatan kode selesai dan kita menunggu PCB fisik (Spin 1) tiba.
 
-*   ⏳ **BELUM** - **Week 6–7 (Maturation):** Menyempurnakan dan menambal *bug* logika DLMS dan struktur OBIS melalui simulasi mendalam di *host* PC.
+*   🔄 SEBAGIAN BESAR SELESAI (~80%) - Week 6–7 (Maturation):
+    *  Logika inti DLMS (HLS, APDU Ciphering, Class 64, Selective Access Class 7) sudah selesai dan lulus simulasi host.
+    * ⏳ Sisa item pematangan: Pembungkus HDLC framing dan Block transfer untuk paket serial.
 *   ⏳ **BELUM** - **Week 8–9 (Hardware Integration):** Mem-porting kode *protocol stack* ini ke papan STM32U585 sungguhan. Tugas tambahan E2 di sini adalah menyambungkan *parser APDU* dengan *Data Link Layer* (biasanya HDLC via UART fisik).
 *   ⏳ **BELUM** - **Week 10 (End-to-End Validation):** Aplikasi eksternal seperti DLMS Client (mis. Gurux/DLMSDirector) terkoneksi sukses ke *meter* kita untuk pertama kalinya dan membaca log serta register secara terenkripsi.
 

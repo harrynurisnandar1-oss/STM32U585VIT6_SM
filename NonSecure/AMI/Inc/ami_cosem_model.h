@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "ami_obis_catalog.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -13,6 +14,7 @@ extern "C" {
 #define AMI_COSEM_PROFILE_GENERIC_CLASS_ID 7u
 #define AMI_COSEM_CLOCK_CLASS_ID 8u
 #define AMI_COSEM_SECURITY_SETUP_CLASS_ID 64u
+#define AMI_COSEM_REGISTER_SAMPLE_MAX 64u
 
 #define AMI_COSEM_PROFILE_MAX_ENTRIES 8u
 #define AMI_COSEM_AXDR_ENCODED_MAX 512u
@@ -60,6 +62,15 @@ typedef struct {
     uint64_t active_export_wh;
 } AmiCosemBillingEntry;
 
+/* Raw register values supplied by metrology. The model only accepts logical
+ * names present in its SPLN measurement catalog and supplies type/scaler/unit. */
+typedef struct {
+    uint8_t logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH];
+    uint64_t raw_value;
+    int32_t signed_value;
+    uint8_t valid;
+} AmiCosemRegisterSample;
+
 /* Snapshot values are supplied by the metrology/board layer. This module does
  * not synthesize measurements or access hardware. */
 typedef struct {
@@ -83,6 +94,8 @@ typedef struct {
     size_t event_log_count;
     AmiCosemBillingEntry billing_history[AMI_COSEM_PROFILE_MAX_ENTRIES];
     size_t billing_history_count;
+    AmiCosemRegisterSample measurement_samples[AMI_COSEM_REGISTER_SAMPLE_MAX];
+    size_t measurement_sample_count;
 } AmiCosemRegisterSnapshot;
 
 typedef enum {
