@@ -22,7 +22,7 @@ ctest --test-dir tests/build --output-on-failure
 
 These checks validate host logic only; they do not validate FreeRTOS scheduling, STM32U585 TrustZone behavior, or UART/HDLC operation. Docker and CMock are not part of this configuration.
 
-## Added 08/10/2026
+## Added 08/10/2026 [v0.0.0](https://github.com/harrynurisnandar1-oss/STM32U585VIT6_SM/releases/tag/v0.0.0)
 
 - Added bounded BER-TLV parsing for AARQ and building of AARE using logical-name application context OID `2.16.756.5.8.1.1`.
 - Added initial unauthenticated development association flow and association state tracking.
@@ -30,7 +30,7 @@ These checks validate host logic only; they do not validate FreeRTOS scheduling,
 - Added read-only Class-8 Clock support at logical name `0.0.1.0.0.255`: attribute 2 (12-byte date-time), attribute 3 (time-zone minutes), and attribute 4 (clock status).
 - Added CTest host suites for COSEM model, security facade, DLMS association, and DLMS APDU logic.
 
-## Added 09/10/2026
+## Added 09/10/2026 [v1.0.0]((https://github.com/harrynurisnandar1-oss/STM32U585VIT6_SM/releases/tag/v1.0.0)
 
 ### LLS and HLS association authentication
 
@@ -45,7 +45,7 @@ These checks validate host logic only; they do not validate FreeRTOS scheduling,
 - LLS sends its password in the AARQ without cryptographic protection. Use LLS only on a physically trusted/protected link; use the product-approved HLS profile where stronger peer authentication is required.
 - The legacy `ami_dlms_process_aarq()` function remains as a no-auth development entry point. Production code should call `ami_dlms_process_aarq_with_security()` and explicitly configure permitted authentication mechanisms.
 
-## Added 10/10/2026
+## Added 10/10/2026 [v1.1.0](https://github.com/harrynurisnandar1-oss/STM32U585VIT6_SM/releases/tag/v1.1.0)
 
 ### Global-ciphered APDU after HLS
 
