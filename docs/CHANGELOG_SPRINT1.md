@@ -22,7 +22,7 @@ ctest --test-dir tests/build --output-on-failure
 
 These checks validate host logic only; they do not validate FreeRTOS scheduling, STM32U585 TrustZone behavior, or UART/HDLC operation. Docker and CMock are not part of this configuration.
 
-## [v0.0.0](https://github.com/harrynurisnandar1-oss/STM32U585VIT6_SM/releases/tag/v0.0.0) Added 08/10/2026 
+## Added 08/10/2026 
 
 - Added bounded BER-TLV parsing for AARQ and building of AARE using logical-name application context OID `2.16.756.5.8.1.1`.
 - Added initial unauthenticated development association flow and association state tracking.
@@ -30,7 +30,7 @@ These checks validate host logic only; they do not validate FreeRTOS scheduling,
 - Added read-only Class-8 Clock support at logical name `0.0.1.0.0.255`: attribute 2 (12-byte date-time), attribute 3 (time-zone minutes), and attribute 4 (clock status).
 - Added CTest host suites for COSEM model, security facade, DLMS association, and DLMS APDU logic.
 
-## [v1.0.0](https://github.com/harrynurisnandar1-oss/STM32U585VIT6_SM/releases/tag/v1.0.0) Added 09/10/2026 
+## Added 09/10/2026 
 
 ### LLS and HLS association authentication
 
@@ -45,7 +45,7 @@ These checks validate host logic only; they do not validate FreeRTOS scheduling,
 - LLS sends its password in the AARQ without cryptographic protection. Use LLS only on a physically trusted/protected link; use the product-approved HLS profile where stronger peer authentication is required.
 - The legacy `ami_dlms_process_aarq()` function remains as a no-auth development entry point. Production code should call `ami_dlms_process_aarq_with_security()` and explicitly configure permitted authentication mechanisms.
 
-## [v1.1.0](https://github.com/harrynurisnandar1-oss/STM32U585VIT6_SM/releases/tag/v1.1.0) Added 10/10/2026 
+## Added 10/10/2026 
 
 ### Global-ciphered APDU after HLS
 
@@ -89,6 +89,7 @@ These checks validate host logic only; they do not validate FreeRTOS scheduling,
 - Added a bounded snapshot sample bank keyed by logical name. The COSEM model supplies the catalog-defined data type, scaler, and unit; metrology/board code supplies raw values and validity, so missing measurements return value-unavailable instead of a valid zero.
 - The OBIS row for Q2 phase-S energy repeats `1.0.45.8.0.255` from Q1 phase-S in the supplied table. It is intentionally omitted from the additional catalog pending clarification against the controlled standard; no substitute OBIS is guessed.
 - Demand registers, tariffs, power-quality metrics, event profiles, and control/configuration objects remain outside this measurement-register slice.
+
 ## Added 13/10/2026
 
 ### Security Setup Class 64 and wrapped key transfer
@@ -132,8 +133,17 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 - **CWE-226: Sensitive Residual Key Material in RAM (`ami_dlms_apdu.c`)**:
   - *Vulnerability*: Post-execution of Security Setup Class 64 `key_transfer` Actions, `memset` only wiped `response_plain_length` (5 bytes), leaving raw 24-byte wrapped AES keys lingering in `workspace` memory.
   - *Fix*: Enforced full-capacity zeroization across the entire caller-owned `workspace` buffer on every path after decryption, ensuring all ephemeral keys and plaintext APDUs are thoroughly scrubbed.
-- A stray AARQ received while an association is active is rejected without changing the current session state or clearing its HLS challenge data.
-- An early HDLC flag now terminates and rejects the malformed frame immediately, allowing the next frame to be parsed instead of treating the flag as data until the length buffer fills.
-- SNRM/DISC UA responses reset the HDLC transmit and receive sequence counters after successful frame construction.
-- Profile Generic row encoding now fails the complete read if any row cannot be encoded; it no longer emits a successful partial A-XDR array. Current fixed-size profile limits make 512-byte saturation unreachable, but the failure handling is explicit and fail-closed.
-- Added regression assertions for workspace zeroization, active-session preservation, early-flag resynchronization, and HDLC sequence reset.
+- **CWE-20 / CWE-703: HDLC Stream Desynchronization & Flag Lockup (`ami_dlms_hdlc.c`)**:
+  - *Vulnerability*: Injected headers with inflated length fields followed by premature `0x7E` delimiters caused the parser to interpret flags as payload data, locking up stream synchronization until buffer saturation.
+  - *Fix*: Enforced strict delimiter synchronization: an incoming `0x7E` on frames shorter than expected immediately aborts the invalid frame and resynchronizes to the next delimiter.
+- **CWE-384: Session Desynchronization on Reconnection (`ami_dlms_hdlc.c`)**:
+  - *Vulnerability*: Subsequent `SNRM` or `DISC` frames generated `UA` acknowledgments without resetting sequence counters, causing subsequent `I`-frame sequence number mismatches with newly connected test clients.
+  - *Fix*: Added atomic reset of sequence counters (`tx_sequence = 0u`, `rx_sequence = 0u`) inside `ami_dlms_hdlc_build_frame()` upon generating `UA` responses for `SNRM`/`DISC`.
+- **CWE-284: Active Session Teardown DoS (`ami_dlms_association.c`)**:
+  - *Vulnerability*: Stray or unauthenticated AARQ bytes received while a valid HLS session was active forced the state machine directly into `AMI_DLMS_ASSOC_ERROR`, severing active HES communications.
+  - *Fix*: Protected active sessions by cleanly rejecting stray AARQ requests without corrupting active association state or invalidating active challenge/session keys.
+- **CWE-703: Fail-Closed Transactional A-XDR Serialization (`ami_cosem_model.c`)**:
+  - *Vulnerability*: Buffer exhaustion during Profile Generic (Class 7) multi-row encoding broke loop execution but still proceeded to finalize partial headers, emitting corrupted A-XDR streams to clients.
+  - *Fix*: Made Profile Generic encoding transactional: any partial row encoding failure immediately aborts the response and returns `AMI_COSEM_INVALID_ARGUMENT`.
+- **Regression Verification**:
+  - Added strict assertion coverage across host unit tests confirming zeroization, session preservation under malformed inputs, framing recovery, and clean sequence rollover.

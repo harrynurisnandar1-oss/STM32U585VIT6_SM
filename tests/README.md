@@ -89,16 +89,41 @@ Menerjemahkan data fisis menjadi objek logis yang dikenali oleh protokol meteran
 ### Phase 2: Board Bring-Up & Uji Fisik (Weeks 6–10)
 Fase ini dilakukan setelah pembuatan kode selesai dan kita menunggu PCB fisik (Spin 1) tiba.
 
-*   🔄 SEBAGIAN BESAR SELESAI (~80%) - Week 6–7 (Maturation):
-    *  Logika inti DLMS (HLS, APDU Ciphering, Class 64, Selective Access Class 7) sudah selesai dan lulus simulasi host.
-    * ⏳ Sisa item pematangan: Pembungkus HDLC framing dan Block transfer untuk paket serial.
+*   ✅ **SELESAI (~95%)** - **Week 6–7 (Maturation):**
+    *  ✅ Logika inti DLMS (HLS GMAC, APDU Ciphering Suite 0, Class 64 Security Setup, Selective Access Class 7) sudah selesai dan lulus simulasi host.
+    *  ✅ Pembungkus **HDLC Framing Engine** (`ami_dlms_hdlc.c/.h`) sudah selesai, lulus pengujian CTest, dan dimitigasi dari celah keamanan framing/DoS.
+    *  ⏳ *Opsional/Lanjutan*: Block Transfer (`GET-Request-Next`) jika payload Profil Melebihi PDU 512-byte (saat ini kapasitas baris dibatasi aman di dalam PDU).
 *   ⏳ **BELUM** - **Week 8–9 (Hardware Integration):** Mem-porting kode *protocol stack* ini ke papan STM32U585 sungguhan. Tugas tambahan E2 di sini adalah menyambungkan *parser APDU* dengan *Data Link Layer* (biasanya HDLC via UART fisik).
 *   ⏳ **BELUM** - **Week 10 (End-to-End Validation):** Aplikasi eksternal seperti DLMS Client (mis. Gurux/DLMSDirector) terkoneksi sukses ke *meter* kita untuk pertama kalinya dan membaca log serta register secara terenkripsi.
 
 ---
 
+### Spin 2: Full Mains Prototype & Compliance (Weeks 11–26) — Khusus Lajur E2 (Protocol & Security)
+
+Pada Spin 2, prototipe berpindah ke papan tegangan penuh (*mains board* 230/400V) dengan fitur lengkap sesuai mandat SPLN D3.006:2021 dan SPLN D5.002:
+
+*   ⏳ **Week 11–12 (Spin 1 to Spin 2 Porting & Consolidation):**
+    *   Porting stack DLMS/COSEM yang stabil dari Spin 1 ke board prototipe Spin 2.
+    *   Pengujian integrasi FreeRTOS Queue/Task antara lapisan UART/HDLC, APDU Dispatcher, dan buffer metrologi.
+*   ⏳ **Week 13–14 (DLMS Read Set Freeze & Tamper Event Integration):**
+    *   *Freeze* seluruh daftar OBIS pembacaan tiga fasa (Voltase, Arus, Daya Aktif/Reaktif/Semu, Power Factor, THD).
+    *   Menghubungkan *Tamper Event Manager* dengan register deteksi tamper chip AFE 9000 (reverse energy, hilang tegangan/netral, magnet) ke dalam Event Log Class 7 (Tabel 18 SPLN D3.006:2021).
+*   ⏳ **Week 15–16 (Block Transfer & Extended Coverage):**
+    *   Implementasi xDLMS Block Transfer (`GET-Request-For-Next` dan `GET-Response-With-Datablock`) untuk kapasitas Event Log penuh (minimal 30 rekaman per SPLN) dan Load Profile 23 kanal.
+    *   Peningkatan coverage unit test dan penutupan defect register Spin 1.
+*   ⏳ **Week 17–20 (TrustZone Secure Integration):**
+    *   Menghubungkan *Secure-world SAL callbacks* dengan hardware crypto accelerator STM32U585 (SAES / PKA) dan Secure Storage TrustZone untuk proteksi KEK/Master Key.
+    *   Durable invocation counter storage di non-volatile memory (FRAM) untuk pencegahan *replay attack* permanen pasca power-cycle (*last gasp*).
+*   ⏳ **Week 21–24 (End-to-End Validation pada Mains 3-Phase):**
+    *   Uji baca jarak jauh *end-to-end* via HES / DLMS Client pihak ketiga (Gurux DLMSDirector) melalui optical probe dan RS-485 pada beban aktif 3 fasa.
+    *   Verifikasi pembacaan Event Log, Load Profile, dan eksekusi Key Transfer Class 64.
+*   ⏳ **Week 25–26 (Soak Test & Handoff):**
+    *   *Feature freeze*, soak test stabilitas komunikasi non-stop, dokumentasi final protokol, dan persiapan uji sertifikasi PLN Pusertif.
+
+---
+
 ### Apa Langkah Anda Selanjutnya?
-Tugas model host untuk Profile Generic, Security Setup, dan selective access kini tersedia. Langkah lanjutan adalah mengintegrasikan penyimpanan profil serta key transfer ke driver/FreeRTOS dan Secure-world backend, menambahkan HDLC/UART serta block transfer, lalu menguji terhadap DLMS client dan hardware.
+Tugas model host untuk Profile Generic, Security Setup, selective access, dan HDLC framing kini tersedia. Langkah lanjutan adalah mengintegrasikan penyimpanan profil serta key transfer ke driver/FreeRTOS dan Secure-world backend, menambahkan UART driver fisik, lalu menguji terhadap DLMS client dan hardware.
 
 ### HDLC host tests
 
