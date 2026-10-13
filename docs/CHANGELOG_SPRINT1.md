@@ -22,7 +22,7 @@ ctest --test-dir tests/build --output-on-failure
 
 These checks validate host logic only; they do not validate FreeRTOS scheduling, STM32U585 TrustZone behavior, or UART/HDLC operation. Docker and CMock are not part of this configuration.
 
-## Added 08/10/2026 
+## [v1.0.0] Added 08/10/2026 
 
 - Added bounded BER-TLV parsing for AARQ and building of AARE using logical-name application context OID `2.16.756.5.8.1.1`.
 - Added initial unauthenticated development association flow and association state tracking.
@@ -30,7 +30,7 @@ These checks validate host logic only; they do not validate FreeRTOS scheduling,
 - Added read-only Class-8 Clock support at logical name `0.0.1.0.0.255`: attribute 2 (12-byte date-time), attribute 3 (time-zone minutes), and attribute 4 (clock status).
 - Added CTest host suites for COSEM model, security facade, DLMS association, and DLMS APDU logic.
 
-## Added 09/10/2026 
+## [v1.1.0] Added 09/10/2026 
 
 ### LLS and HLS association authentication
 
@@ -45,7 +45,7 @@ These checks validate host logic only; they do not validate FreeRTOS scheduling,
 - LLS sends its password in the AARQ without cryptographic protection. Use LLS only on a physically trusted/protected link; use the product-approved HLS profile where stronger peer authentication is required.
 - The legacy `ami_dlms_process_aarq()` function remains as a no-auth development entry point. Production code should call `ami_dlms_process_aarq_with_security()` and explicitly configure permitted authentication mechanisms.
 
-## Added 10/10/2026 
+## [v1.2.0] Added 10/10/2026 
 
 ### Global-ciphered APDU after HLS
 
@@ -60,7 +60,7 @@ These checks validate host logic only; they do not validate FreeRTOS scheduling,
 - The Secure backend must implement the product-selected DLMS security suite, key selection, system-title handling, nonce/AAD construction, and 128-bit tag policy. The receive-counter callback must reject replay/rollback and commit only authenticated counters; the transmit callback must persist a fresh counter before use.
 - No concrete STM32U585 TrustZone AES-GCM backend or provisioned keys are included here. Until that SAL callback is implemented and validated against approved DLMS test vectors, do not use the test backend or treat this feature as production-ready.
 
-## Added 12/10/2026
+## [v1.3.0] Added 12/10/2026
 
 ### Profile Generic Class 7 for event and billing history
 
@@ -75,7 +75,7 @@ These checks validate host logic only; they do not validate FreeRTOS scheduling,
 - This adds basic full-buffer reads only. Selective access by entry range or date range, profile capture/reset methods, persistent storage, and a FreeRTOS producer task are not implemented in this slice.
 - Class 7 A-XDR encoding and the configured billing OBIS must be reviewed against the controlled IEC 62056 and product/SPLN profile editions. This change alone does not establish DLMS conformance.
 
-## Added 12/10/2026
+## [v1.4.0] Added 12/10/2026
 
 ### SPLN D3.002:2021 OBIS review and date-range ordering
 
@@ -90,7 +90,7 @@ These checks validate host logic only; they do not validate FreeRTOS scheduling,
 - The OBIS row for Q2 phase-S energy repeats `1.0.45.8.0.255` from Q1 phase-S in the supplied table. It is intentionally omitted from the additional catalog pending clarification against the controlled standard; no substitute OBIS is guessed.
 - Demand registers, tariffs, power-quality metrics, event profiles, and control/configuration objects remain outside this measurement-register slice.
 
-## Added 13/10/2026
+## [v1.4.1] Added 13/10/2026
 
 ### Security Setup Class 64 and wrapped key transfer
 
@@ -147,3 +147,30 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
   - *Fix*: Made Profile Generic encoding transactional: any partial row encoding failure immediately aborts the response and returns `AMI_COSEM_INVALID_ARGUMENT`.
 - **Regression Verification**:
   - Added strict assertion coverage across host unit tests confirming zeroization, session preservation under malformed inputs, framing recovery, and clean sequence rollover.
+
+## [v2.0.0] - 2026-10-13
+
+### Added
+- **LLC Sublayer Auto-Wrapping & Stripping (`ami_dlms_hdlc.c`)**:
+  - Menambahkan deteksi dan pelepasan 3-byte LLC header (`0xE6 0xE6 0x00` / `0xE6 0xE7 0x00`) pada stream I-frame masuk (RX).
+  - Menambahkan penyisipan otomatis header LLC respons (`0xE6 0xE7 0x00`) pada pembuatan frame balasan (TX).
+  - *Rasional*: Memenuhi kepatuhan IEC 62056-46 agar paket APDU yang dikirim meter dikenali secara valid oleh software DLMS pihak ketiga (seperti Gurux DLMSDirector) tanpa dianggap sebagai frame tidak dikenal (*unsupported format*).
+- **HDLC Parameter Negotiation pada Handshake SNRM (`ami_dlms_hdlc.c`)**:
+  - Menambahkan fungsi `make_ua_parameters` untuk mengekstrak usulan parameter buffer client dari payload SNRM dan mengembalikan format parameter balasan (`0x81 0x80 ...`) pada frame UA. Ukuran TX/RX dinegosiasikan saling terbalik sesuai arah aliran data dan dibatasi aman (maksimal 512 byte, window size = 1).
+  - *Rasional*: Mencegah timeout koneksi pada client resmi yang mewajibkan konfirmasi parameter batas ukuran frame sebelum membuka sesi data.
+- **Standalone Interactive TCP Host Simulator (`tests/gurux_simulator.c`)**:
+  - Menambahkan executable simulator socket TCP WinSock2/POSIX pada port `4059` yang menghubungkan parser stream HDLC dengan mesin dispatching APDU/COSEM.
+  - *Rasional*: Memungkinkan pengujian *black-box* interaktif secara menyeluruh (*end-to-end*) menggunakan GUI GXDLMSDirector di PC host sebelum perangkat keras board fisik tersedia.
+
+### Changed
+- **Peningkatan Diagnostik Live Logger Simulator (`tests/gurux_simulator.c`)**:
+  - Mengubah output logging terminal simulator untuk mencetak jenis frame, kontrol byte, SAP pengirim/tujuan, ukuran payload, dan deteksi byte pertama secara real-time.
+  - *Rasional*: Mempercepat identifikasi kesalahan format pengalamatan (Addressing/SAP mismatch) atau ketidaksesuaian protokol transport (WRAPPER vs HDLC) saat client mencoba terhubung.
+
+### Fixed
+- **Penghitungan Panjang Frame Format 3 Sesuai Gurux (`ami_dlms_hdlc.c`)**:
+  - Mengoreksi field panjang 11-bit pada Frame Format Type 3 agar mencakup seluruh oktet dari awal frame format hingga byte akhir FCS.
+  - *Rasional*: Memperbaiki kegagalan validasi frame pada Gurux yang menolak frame jika penghitungan panjang hanya mencakup payload internal.
+- **Cakupan HCS/FCS CRC-16 HDLC (`ami_dlms_hdlc.c`)**:
+  - Menyelaraskan rentang byte yang dihitung oleh CRC HCS dan FCS agar mencakup Frame Format dan panjang oktet, serta menambahkan vektor uji SNRM riil Gurux (`7E A0 08 02 03 2D 93 26 CE 7E`) ke dalam suite pengujian.
+  - *Rasional*: Menjamin interoperabilitas penuh perhitungan checksum CRC terhadap implementasi referensi resmi Gurux.

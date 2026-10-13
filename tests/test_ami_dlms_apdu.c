@@ -144,6 +144,39 @@ static void test_unknown_obis_returns_access_error(void)
            response[2] == 0xC2u && response[3] == 1u && response[4] == 4u);
 }
 
+static void test_association_ln_object_list(void)
+{
+    AmiDlmsAssociation association = {.state = AMI_DLMS_ASSOC_ASSOCIATED};
+    const AmiCosemRegisterSnapshot snapshot = {0};
+    const uint8_t request[] = {
+        0xC0u, 0x01u, 0xC1u, 0x00u, 0x0Fu,
+        0x00u, 0x00u, 0x28u, 0x00u, 0x00u, 0xFFu,
+        0x02u, 0x00u
+    };
+    uint8_t response[512u];
+    size_t response_length = 0u;
+    assert(ami_dlms_process_get_request(&association, &snapshot, request,
+        sizeof(request), response, sizeof(response), &response_length) == AMI_DLMS_APDU_OK);
+    assert(response_length > 6u && response[0] == 0xC4u &&
+           response[1] == 0x01u && response[2] == 0xC1u &&
+           response[3] == 0u && response[4] == 1u);
+    assert(response[5] == 12u); /* Association, clock, 3-phase + profiles. */
+
+    /* Association object followed by voltage L1; each advertises attr 2 RO. */
+    const uint8_t association_ln[] = {9u, 6u, 0u, 0u, 40u, 0u, 0u, 255u};
+    const uint8_t voltage_l1_ln[] = {9u, 6u, 1u, 0u, 32u, 7u, 0u, 255u};
+    int found_association = 0;
+    int found_voltage_l1 = 0;
+    for (size_t i = 0u; i + sizeof(association_ln) <= response_length; ++i) {
+        if (memcmp(response + i, association_ln, sizeof(association_ln)) == 0)
+            found_association = 1;
+        if (i + sizeof(voltage_l1_ln) <= response_length &&
+            memcmp(response + i, voltage_l1_ln, sizeof(voltage_l1_ln)) == 0)
+            found_voltage_l1 = 1;
+    }
+    assert(found_association && found_voltage_l1);
+}
+
 static void test_profile_entry_selective_access(void)
 {
     AmiDlmsAssociation association = {.state = AMI_DLMS_ASSOC_ASSOCIATED};
@@ -342,6 +375,7 @@ int main(void)
 {
     test_voltage_get_request_response();
     test_unknown_obis_returns_access_error();
+    test_association_ln_object_list();
     test_profile_entry_selective_access();
     test_profile_clock_range_selective_access();
     test_hls_requires_ciphered_apdu_and_returns_ciphered_response();

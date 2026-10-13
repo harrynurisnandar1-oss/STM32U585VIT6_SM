@@ -55,20 +55,27 @@ static int mock_hls_proof(void *user, const uint8_t *oid, size_t oid_length,
 static void test_valid_aarq_is_accepted(void)
 {
     AmiDlmsAssociation association = {AMI_DLMS_ASSOC_IDLE};
-    uint8_t aare[32];
+    uint8_t aare[64];
     size_t aare_length = 0u;
     assert(ami_dlms_process_aarq(&association, aarq_ln_no_auth,
              sizeof(aarq_ln_no_auth), aare, sizeof(aare), &aare_length) ==
            AMI_DLMS_ASSOC_OK);
     assert(association.state == AMI_DLMS_ASSOC_ASSOCIATED);
-    assert(aare_length == 25u && aare[0] == 0x61u && aare[1] == 23u);
+    assert(aare_length == 43u && aare[0] == 0x61u && aare[1] == 41u);
     assert(aare[17] == 0x00u); /* associate-result: accepted */
+    const uint8_t initiate_response[] = {
+        0xBEu, 0x10u, 0x04u, 0x0Eu, 0x08u, 0x00u, 0x06u,
+        0x5Fu, 0x1Fu, 0x04u, 0x00u, 0x00u, 0x50u, 0x1Fu,
+        0x01u, 0xF4u, 0x00u, 0x07u
+    };
+    assert(memcmp(aare + aare_length - sizeof(initiate_response),
+                  initiate_response, sizeof(initiate_response)) == 0);
 }
 
 static void test_malformed_and_authenticated_aarq_are_rejected(void)
 {
     AmiDlmsAssociation association = {AMI_DLMS_ASSOC_IDLE};
-    uint8_t aare[32];
+    uint8_t aare[64];
     size_t aare_length = 0u;
     const uint8_t malformed[] = {0x60u, 0x82u, 0x01u};
     assert(ami_dlms_process_aarq(&association, malformed, sizeof(malformed),
@@ -95,7 +102,7 @@ static void test_malformed_and_authenticated_aarq_are_rejected(void)
 static void test_state_transition_and_reset(void)
 {
     AmiDlmsAssociation association = {AMI_DLMS_ASSOC_IDLE};
-    uint8_t aare[32];
+    uint8_t aare[64];
     size_t aare_length = 0u;
     assert(ami_dlms_process_aarq(&association, aarq_ln_no_auth,
              sizeof(aarq_ln_no_auth), aare, sizeof(aare), &aare_length) ==

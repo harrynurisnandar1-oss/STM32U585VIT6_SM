@@ -1,5 +1,18 @@
 # Unit Testing AMI Smart Meter
 
+## Gurux raw HDLC host harness
+
+Build and run the development TCP server:
+
+```powershell
+cmake --build build --target gurux_simulator
+.\build\host-tools\gurux_simulator.exe
+```
+
+The server listens only on `127.0.0.1:4059`. It supports no-auth AARQ and read-only GETs using sample three-phase values. The HDLC decoder removes incoming LLC (`E6 E6 00` / `E6 E7 00`); outgoing I-frames include server LLC (`E6 E7 00`). SNRM negotiation is answered with UA parameters capped to 512-byte information fields and window size 1.
+
+This harness is raw HDLC over TCP, not the DLMS Wrapper protocol commonly used by Gurux TCP/IP connections. It is for host development and does not enable HLS or ciphered APDUs.
+
 Dokumen ini menjelaskan pengujian host-native untuk model DLMS/COSEM dan batas keamanan pada proyek STM32U585. Test dikompilasi untuk PC host melalui CMake, lalu dijalankan dengan CTest. Test ini tidak membutuhkan board, FreeRTOS runtime, Docker, atau CMock.
 
 ## Cakupan test
@@ -128,3 +141,46 @@ Tugas model host untuk Profile Generic, Security Setup, selective access, dan HD
 ### HDLC host tests
 
 AmiDlmsHdlcTest exercises fixed-buffer byte-stream parsing, a CRC reference vector, SAP address boundaries, HCS/FCS errors, truncated frames, and SNRM/UA/DISC plus I-frame building. The codec has no UART or MCU-register dependency. These host tests do not validate serial timing, FreeRTOS integration, or external DLMS client interoperability.
+
+---
+
+## Gurux DLMSDirector TCP Host Simulator
+
+Simulator host lokal untuk memvalidasi *stack* DLMS/COSEM dan framing HDLC tanpa board fisik menggunakan aplikasi client standar industri (Gurux DLMSDirector / GXDLMSDirector). Simulator mendengarkan transmisi HDLC-over-TCP pada port standar DLMS `4059`.
+
+### Fitur Simulator
+- **HDLC-over-TCP Server**: Melayani request connection-oriented (`SNRM` / `DISC` / `I-Frame`) dari software eksternal secara real-time.
+- **LLC Sublayer Auto-handling**: Menerima request ber-header LLC (`0xE6 0xE6 0x00`) dan otomatis menyisipkan LLC response (`0xE6 0xE7 0x00`) pada balasan I-Frame.
+- **SNRM Parameter Negotiation**: Menegosiasikan ukuran informasi frame (Max Info Length TX/RX = 128 byte, Window Size = 1).
+- **End-to-End COSEM Reading**: Melayani pembacaan instan tegangan 3-fasa (Class 3), Clock (Class 8), serta Profile Generic (Class 7).
+
+### Build dan Menjalankan Simulator
+
+1. **Kompilasi executable simulator via CMake:**
+   ```powershell
+   cmake -S tests -B tests/build -G Ninja
+   cmake --build tests/build --target gurux_simulator
+   ```
+
+2. **Jalankan simulator:**
+   ```powershell
+   .\tests\build\host-tools\gurux_simulator.exe
+   ```
+   *Terminal akan menampilkan:* `Listening for raw HDLC-over-TCP on 127.0.0.1:4059...`
+
+### Panduan Koneksi Gurux DLMSDirector
+
+Buka aplikasi **GXDLMSDirector**, buat koneksi device baru dengan konfigurasi berikut:
+
+| Parameter | Nilai Konfigurasi | Keterangan |
+|---|---|---|
+| **Media** | `Network` | Menggunakan koneksi TCP socket lokal |
+| **Host Name / IP** | `127.0.0.1` | Loopback adapter |
+| **Port** | `4059` | Port standar IEC 62056-47 / DLMS |
+| **Interface Type** | `HDLC` | Wajib HDLC (bukan WRAPPER) |
+| **Client Address** | `16` (`0x10`) | Management / Operator Client SAP |
+| **Physical Server** | `1` | Alamat fisik meter (MAC Destination) |
+| **Logical Server** | `1` | Alamat logis COSEM Management Device |
+| **Authentication** | `None` | Profil development no-auth |
+
+Klik **Connect**. Setelah status terkoneksi (**Green / Connected**), pilih menu **Read Objects** untuk membaca data metrologi dan event log.

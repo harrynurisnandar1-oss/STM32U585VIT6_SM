@@ -136,11 +136,19 @@ static int build_aare(uint8_t *out, size_t capacity, size_t *out_length,
     };
     const uint8_t result_field[] = {0xA2u, 0x03u, 0x02u, 0x01u, result};
     const uint8_t diagnostic_field[] = {0xA3u, 0x05u, 0xA1u, 0x03u, 0x02u, 0x01u, diagnostic};
+    /* xDLMS InitiateResponse: version 6, read/GET/selective-access
+     * conformance subset, 500-byte server PDU, logical-name referencing. */
+    static const uint8_t initiate_response_field[] = {
+        0xBEu, 0x10u, 0x04u, 0x0Eu,
+        0x08u, 0x00u, 0x06u, 0x5Fu, 0x1Fu, 0x04u, 0x00u,
+        0x00u, 0x50u, 0x1Fu, 0x01u, 0xF4u, 0x00u, 0x07u
+    };
     const size_t auth_extra = challenge_length == 0u ? 0u : 4u + challenge_length;
     const size_t mechanism_extra = challenge_length == 0u ? 0u : 2u + mechanism_oid_length;
     const size_t acse_extra = challenge_length == 0u ? 0u : 4u;
+    const size_t user_info_extra = result == 0u ? sizeof(initiate_response_field) : 0u;
     const size_t body_length = sizeof(context_field) + sizeof(result_field) +
-        sizeof(diagnostic_field) + auth_extra + mechanism_extra + acse_extra;
+        sizeof(diagnostic_field) + auth_extra + mechanism_extra + acse_extra + user_info_extra;
     if (out == NULL || out_length == NULL || body_length > 127u ||
         capacity < body_length + 2u ||
         (challenge_length != 0u && (server_challenge == NULL || mechanism_oid == NULL ||
@@ -158,6 +166,10 @@ static int build_aare(uint8_t *out, size_t capacity, size_t *out_length,
         out[n++] = (uint8_t)(challenge_length + 2u);
         out[n++] = 0x80u; out[n++] = (uint8_t)challenge_length;
         memcpy(out + n, server_challenge, challenge_length); n += challenge_length;
+    }
+    if (result == 0u) {
+        memcpy(out + n, initiate_response_field, sizeof(initiate_response_field));
+        n += sizeof(initiate_response_field);
     }
     *out_length = n;
     return 1;

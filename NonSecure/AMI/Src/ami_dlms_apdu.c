@@ -313,6 +313,95 @@ static AmiDlmsApduStatus build_error(uint8_t invoke_id, uint8_t error,
     return AMI_DLMS_APDU_ACCESS_ERROR;
 }
 
+typedef struct {
+    uint16_t class_id;
+    uint8_t version;
+    uint8_t logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH];
+} AssociationViewObject;
+
+/* Host/firmware association view: the objects this read-only meter actually
+ * serves. Keep it bounded so it fits one negotiated HDLC information block. */
+static const AssociationViewObject association_view[] = {
+    {15u, 0u, {0, 0, 40, 0, 0, 255}}, /* Association LN */
+    {8u,  0u, {0, 0, 1, 0, 0, 255}},  /* Clock */
+    {3u,  0u, {1, 0, 32, 7, 0, 255}}, /* L1 voltage */
+    {3u,  0u, {1, 0, 52, 7, 0, 255}}, /* L2 voltage */
+    {3u,  0u, {1, 0, 72, 7, 0, 255}}, /* L3 voltage */
+    {3u,  0u, {1, 0, 31, 7, 0, 255}}, /* L1 current */
+    {3u,  0u, {1, 0, 51, 7, 0, 255}}, /* L2 current */
+    {3u,  0u, {1, 0, 71, 7, 0, 255}}, /* L3 current */
+    {3u,  0u, {1, 0, 1, 8, 0, 255}},  /* Active import */
+    {3u,  0u, {1, 0, 2, 8, 0, 255}},  /* Active export */
+    {7u,  0u, {0, 0, 99, 98, 0, 255}},/* Event log */
+    {7u,  0u, {1, 0, 98, 1, 0, 255}} /* Billing profile */
+};
+
+static int view_put(uint8_t *out, size_t capacity, size_t *offset,
+                    uint8_t value)
+{
+    if (*offset >= capacity) return 0;
+    out[(*offset)++] = value;
+    return 1;
+}
+
+static int view_put_bytes(uint8_t *out, size_t capacity, size_t *offset,
+                          const uint8_t *bytes, size_t length)
+{
+    if (length > capacity - *offset) return 0;
+    memcpy(out + *offset, bytes, length);
+    *offset += length;
+    return 1;
+}
+
+static AmiDlmsApduStatus build_association_object_list(
+    uint8_t invoke_id, uint8_t *response, size_t capacity, size_t *length)
+{
+    size_t offset = 0u;
+    const size_t object_count = sizeof(association_view) / sizeof(association_view[0]);
+    if (capacity < 6u) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+    response[offset++] = GET_RESPONSE_TAG;
+    response[offset++] = GET_NORMAL_CHOICE;
+    response[offset++] = invoke_id;
+    response[offset++] = 0u; /* data choice */
+    response[offset++] = 1u; /* array */
+    response[offset++] = (uint8_t)object_count;
+    for (size_t i = 0u; i < object_count; ++i) {
+        const AssociationViewObject *object = &association_view[i];
+        if (!view_put(response, capacity, &offset, 2u) || /* structure */
+            !view_put(response, capacity, &offset, 4u) ||
+            !view_put(response, capacity, &offset, 18u) || /* long-unsigned */
+            !view_put(response, capacity, &offset, (uint8_t)(object->class_id >> 8)) ||
+            !view_put(response, capacity, &offset, (uint8_t)object->class_id) ||
+            !view_put(response, capacity, &offset, 17u) || /* unsigned */
+            !view_put(response, capacity, &offset, object->version) ||
+            !view_put(response, capacity, &offset, 9u) || /* octet-string LN */
+            !view_put(response, capacity, &offset, AMI_COSEM_LOGICAL_NAME_LENGTH) ||
+            !view_put_bytes(response, capacity, &offset, object->logical_name,
+                            AMI_COSEM_LOGICAL_NAME_LENGTH) ||
+            !view_put(response, capacity, &offset, 2u) || /* access_rights */
+            !view_put(response, capacity, &offset, 2u) ||
+            !view_put(response, capacity, &offset, 1u) || /* attributes array */
+            !view_put(response, capacity, &offset, 1u))
+            return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+        /* Advertise the read path used by this meter (attribute 2) only. */
+        if (!view_put(response, capacity, &offset, 2u) ||
+            !view_put(response, capacity, &offset, 3u) ||
+            !view_put(response, capacity, &offset, 15u) ||
+            !view_put(response, capacity, &offset, 2u) ||
+            !view_put(response, capacity, &offset, 22u) ||
+            !view_put(response, capacity, &offset, 1u) ||
+            !view_put(response, capacity, &offset, 1u) ||
+            !view_put(response, capacity, &offset, 0u))
+            return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+        /* No methods are exposed by this read-only association view. */
+        if (!view_put(response, capacity, &offset, 1u) ||
+            !view_put(response, capacity, &offset, 0u))
+            return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+    }
+    *length = offset;
+    return AMI_DLMS_APDU_OK;
+}
+
 static AmiDlmsApduStatus process_get_request_plain(
     const AmiDlmsAssociation *association,
     const AmiCosemRegisterSnapshot *snapshot,
@@ -350,6 +439,14 @@ static AmiDlmsApduStatus process_get_request_plain(
     uint16_t class_id = (uint16_t)(((uint16_t)request[3] << 8) | request[4]);
     memcpy(logical_name, request + 5u, sizeof(logical_name));
     uint8_t attribute_id = request[11];
+    static const uint8_t association_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+        {0u, 0u, 40u, 0u, 0u, 255u};
+    if (class_id == 15u && memcmp(logical_name, association_ln,
+                                  sizeof(association_ln)) == 0 &&
+        attribute_id == 2u && request[12] == 0u && request_length == 13u) {
+        return build_association_object_list(request[2], response,
+                                             response_capacity, response_length);
+    }
     AmiCosemProfileSelection selection;
     const AmiCosemProfileSelection *selection_pointer = NULL;
     if (request[12] == 0u) {

@@ -37,3 +37,16 @@ add_executable(test_ami_dlms_hdlc
     "${AMI_SRC}/ami_dlms_hdlc.c")
 target_include_directories(test_ami_dlms_hdlc PRIVATE "${AMI_INC}")
 add_test(NAME AmiDlmsHdlcTest COMMAND test_ami_dlms_hdlc)
+
+add_executable(gurux_simulator
+    gurux_simulator.c
+    "${AMI_SRC}/ami_dlms_hdlc.c"
+    "${AMI_SRC}/ami_dlms_association.c"
+    "${AMI_SRC}/ami_dlms_apdu.c"
+    "${AMI_SRC}/ami_cosem_model.c")
+target_include_directories(gurux_simulator PRIVATE "${AMI_INC}")
+set_target_properties(gurux_simulator PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/host-tools")
+if(WIN32)
+    target_link_libraries(gurux_simulator PRIVATE ws2_32)
+endif()
