@@ -203,8 +203,7 @@ AmiDlmsAssociationStatus ami_dlms_process_aarq_with_security(
         return AMI_DLMS_ASSOC_INVALID_ARGUMENT;
     *aare_length = 0u;
     if (association->state != AMI_DLMS_ASSOC_IDLE) {
-        association->state = AMI_DLMS_ASSOC_ERROR;
-        clear_challenges(association);
+        /* An unsolicited AARQ must not tear down an authenticated session. */
         return AMI_DLMS_ASSOC_REJECTED;
     }
     ParsedAarq parsed;

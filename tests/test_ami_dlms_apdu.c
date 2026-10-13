@@ -329,6 +329,7 @@ static void test_secure_setup_key_transfer_action(void)
     assert(state.key_transfer_calls == 1u && state.transferred_key_count == 1u);
     assert(encrypted_response[0] == 0xCEu && response_length == 6u + 5u + AMI_DLMS_GCM_TAG_LENGTH);
     assert((encrypted_response[6] ^ 0xAAu) == 0xC7u);
+    for (size_t i = 0u; i < sizeof(workspace); ++i) assert(workspace[i] == 0u);
     assert((encrypted_response[9] ^ 0xAAu) == 0u); /* action-result success */
 
     /* A plain key-transfer Action APDU is never accepted after HLS. */

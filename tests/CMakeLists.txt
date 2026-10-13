@@ -31,3 +31,9 @@ add_executable(test_ami_dlms_apdu
     "${AMI_SRC}/ami_cosem_model.c")
 target_include_directories(test_ami_dlms_apdu PRIVATE "${AMI_INC}")
 add_test(NAME AmiDlmsApduTest COMMAND test_ami_dlms_apdu)
+
+add_executable(test_ami_dlms_hdlc
+    test_ami_dlms_hdlc.c
+    "${AMI_SRC}/ami_dlms_hdlc.c")
+target_include_directories(test_ami_dlms_hdlc PRIVATE "${AMI_INC}")
+add_test(NAME AmiDlmsHdlcTest COMMAND test_ami_dlms_hdlc)

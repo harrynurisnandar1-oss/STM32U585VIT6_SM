@@ -108,3 +108,32 @@ These checks validate host logic only; they do not validate FreeRTOS scheduling,
 
 - Added a host-test CMake preset in `tests/CMakePresets.json` and workspace settings in `.vscode/settings.json` that point CMake Tools to `tests/`, separate from the CubeMX firmware CMake project at the repository root.
 - Updated `tests/README.md` with the reason the extension previously selected the ARM firmware project and the steps to configure/build/run host CTest from VS Code.
+
+### HDLC stream framing engine (ISO/IEC 13239 & IEC 62056-46)
+
+- **Frame Format 3 Architecture (`ami_dlms_hdlc.h`, `ami_dlms_hdlc.c`)**:
+  - Implemented compliant byte-stream framing based on the DLMS HDLC profile (Frame Format Type 3, `0xA0` prefix with 11-bit length encoding).
+  - Built a zero-heap streaming state machine (`ami_dlms_hdlc_parse_byte`) with deterministic O(1) buffer bounds (`AMI_HDLC_MAX_FRAME_BYTES = 544u`), completely eliminating dynamic memory allocation and buffer overflow vectors.
+  - Implemented variable multi-octet HDLC addressing (1 to 4 bytes per SAP) conforming to DLMS server/client logical device conventions (supporting up to 28-bit addresses with LSB extension-bit handling).
+  - Implemented dual-stage CCITT CRC-16 (X.25 polynomial `0x8408` inverted) verification:
+    - **HCS (Header Check Sequence)**: Validates destination, source, and control fields before payload processing.
+    - **FCS (Frame Check Sequence)**: Validates complete frame integrity over all transmitted octets.
+- **Control & Information Frame Dispatch (`ami_dlms_hdlc_build_frame`)**:
+  - Added native response generator for Supervisory/Unnumbered frames: auto-responds to connection requests (`SNRM`, `0x93`) and disconnections (`DISC`, `0x53`) with Unnumbered Acknowledge (`UA`, `0x73`) while properly reversing source and destination SAPs.
+  - Built bidirectional Information (`I`) frame transmission with 3-bit send/receive sequence counter rotation (`N(S)` and `N(R)`).
+- **Target Integration & Testing**:
+  - Registered `ami_dlms_hdlc.c` into the `NonSecure` ARM Cortex-M33 firmware build.
+  - Added comprehensive CTest test suite `AmiDlmsHdlcTest` (`test_ami_dlms_hdlc.c`) validating standard CCITT CRC test vectors (`"123456789"` -> `0x906E`), variable address encoding/decoding boundaries, invalid address rejection, truncated inputs, HCS/FCS tampering detection, and I-frame APDU roundtrips.
+
+### Threat-hunting hardening & memory safety
+
+Conducted an in-depth security threat hunting audit across input parsers, cryptographic boundaries, and state machines, resolving the following vulnerabilities:
+
+- **CWE-226: Sensitive Residual Key Material in RAM (`ami_dlms_apdu.c`)**:
+  - *Vulnerability*: Post-execution of Security Setup Class 64 `key_transfer` Actions, `memset` only wiped `response_plain_length` (5 bytes), leaving raw 24-byte wrapped AES keys lingering in `workspace` memory.
+  - *Fix*: Enforced full-capacity zeroization across the entire caller-owned `workspace` buffer on every path after decryption, ensuring all ephemeral keys and plaintext APDUs are thoroughly scrubbed.
+- A stray AARQ received while an association is active is rejected without changing the current session state or clearing its HLS challenge data.
+- An early HDLC flag now terminates and rejects the malformed frame immediately, allowing the next frame to be parsed instead of treating the flag as data until the length buffer fills.
+- SNRM/DISC UA responses reset the HDLC transmit and receive sequence counters after successful frame construction.
+- Profile Generic row encoding now fails the complete read if any row cannot be encoded; it no longer emits a successful partial A-XDR array. Current fixed-size profile limits make 512-byte saturation unreachable, but the failure handling is explicit and fail-closed.
+- Added regression assertions for workspace zeroization, active-session preservation, early-flag resynchronization, and HDLC sequence reset.

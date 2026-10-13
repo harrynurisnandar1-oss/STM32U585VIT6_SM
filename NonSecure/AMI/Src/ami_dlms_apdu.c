@@ -3,6 +3,13 @@
 #include <limits.h>
 #include <string.h>
 
+/* Volatile stores prevent the compiler from removing sensitive-data wipes. */
+static void secure_zeroize(void *memory, size_t length)
+{
+    volatile uint8_t *bytes = (volatile uint8_t *)memory;
+    while (length-- != 0u) *bytes++ = 0u;
+}
+
 #define GET_REQUEST_TAG 0xC0u
 #define SET_REQUEST_TAG 0xC1u
 #define GET_RESPONSE_TAG 0xC4u
@@ -468,13 +475,13 @@ AmiDlmsApduStatus ami_dlms_process_ciphered_request(
         ciphertext, ciphertext_length, tag, workspace, workspace_capacity, &plaintext_length);
     if (sec_status != AMI_SEC_OK || plaintext_length == 0u ||
         plaintext_length > workspace_capacity) {
-        memset(workspace, 0, workspace_capacity);
+        secure_zeroize(workspace, workspace_capacity);
         return sec_status == AMI_SEC_AUTHENTICATION_FAILURE
             ? AMI_DLMS_APDU_AUTHENTICATION_FAILURE : AMI_DLMS_APDU_BACKEND_FAILURE;
     }
     /* Commit only after tag verification; callback must atomically reject replay. */
     if (cipher->accept_rx_counter(cipher->user, rx_counter) != 1) {
-        memset(workspace, 0, plaintext_length);
+        secure_zeroize(workspace, workspace_capacity);
         return AMI_DLMS_APDU_COUNTER_REJECTED;
     }
 
@@ -484,7 +491,7 @@ AmiDlmsApduStatus ami_dlms_process_ciphered_request(
     AmiDlmsApduStatus service_status;
     size_t response_plain_length = 0u;
     if (workspace[0] != expected_plain_tag) {
-        memset(workspace, 0, plaintext_length);
+        secure_zeroize(workspace, workspace_capacity);
         return AMI_DLMS_APDU_MALFORMED;
     }
     if (expected_plain_tag == GET_REQUEST_TAG) {
@@ -494,11 +501,11 @@ AmiDlmsApduStatus ami_dlms_process_ciphered_request(
     } else if (expected_plain_tag == SET_REQUEST_TAG) {
         /* Sprint 1 exposes read-only COSEM objects; SET is authenticated but denied. */
         if (plaintext_length < 14u || workspace[1] != 0x01u || workspace[12] != 0u) {
-            memset(workspace, 0, plaintext_length);
+            secure_zeroize(workspace, workspace_capacity);
             return AMI_DLMS_APDU_MALFORMED;
         }
         if (workspace_capacity < 4u) {
-            memset(workspace, 0, plaintext_length);
+            secure_zeroize(workspace, workspace_capacity);
             return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
         }
         workspace[0] = SET_RESPONSE_TAG;
@@ -512,17 +519,17 @@ AmiDlmsApduStatus ami_dlms_process_ciphered_request(
             plaintext_length, workspace_capacity, &response_plain_length);
     }
     if (response_plain_length == 0u) {
-        memset(workspace, 0, plaintext_length);
+        secure_zeroize(workspace, workspace_capacity);
         return service_status;
     }
 
     if (response_capacity < GLO_HEADER_LENGTH + response_plain_length + AMI_DLMS_GCM_TAG_LENGTH) {
-        memset(workspace, 0, response_plain_length);
+        secure_zeroize(workspace, workspace_capacity);
         return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
     }
     uint32_t tx_counter = 0u;
     if (cipher->next_tx_counter(cipher->user, &tx_counter) != 1) {
-        memset(workspace, 0, response_plain_length);
+        secure_zeroize(workspace, workspace_capacity);
         return AMI_DLMS_APDU_BACKEND_FAILURE;
     }
     const uint8_t response_tag = expected_plain_tag == GET_REQUEST_TAG
@@ -536,7 +543,7 @@ AmiDlmsApduStatus ami_dlms_process_ciphered_request(
         workspace, response_plain_length, response + GLO_HEADER_LENGTH,
         response_capacity - GLO_HEADER_LENGTH - AMI_DLMS_GCM_TAG_LENGTH,
         &encrypted_length, response + GLO_HEADER_LENGTH + response_plain_length);
-    memset(workspace, 0, response_plain_length);
+    secure_zeroize(workspace, workspace_capacity);
     if (sec_status != AMI_SEC_OK || encrypted_length != response_plain_length) {
         memset(response, 0, response_capacity);
         return AMI_DLMS_APDU_BACKEND_FAILURE;

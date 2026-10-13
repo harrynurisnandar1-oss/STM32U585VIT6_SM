@@ -103,7 +103,7 @@ static void test_state_transition_and_reset(void)
     assert(ami_dlms_process_aarq(&association, aarq_ln_no_auth,
              sizeof(aarq_ln_no_auth), aare, sizeof(aare), &aare_length) ==
            AMI_DLMS_ASSOC_REJECTED);
-    assert(association.state == AMI_DLMS_ASSOC_ERROR);
+    assert(association.state == AMI_DLMS_ASSOC_ASSOCIATED);
     ami_dlms_association_reset(&association);
     assert(association.state == AMI_DLMS_ASSOC_IDLE);
 }
@@ -127,6 +127,21 @@ static void test_lls_password_accepted_and_rejected(void)
     assert(ami_dlms_process_aarq_with_security(&association, &security, bad_password_aarq,
         sizeof(bad_password_aarq), aare, sizeof(aare), &aare_length) == AMI_DLMS_ASSOC_REJECTED);
     assert(association.state == AMI_DLMS_ASSOC_ERROR);
+}
+
+static void test_unsolicited_aarq_does_not_tear_down_session(void)
+{
+    AmiDlmsAssociationSecurity security = {.verify_lls = mock_verify_lls};
+    AmiDlmsAssociation association = {0};
+    uint8_t aare[64];
+    size_t aare_length = 0u;
+    const uint8_t stray[] = {0x60u};
+    assert(ami_dlms_process_aarq_with_security(&association, &security, aarq_lls,
+        sizeof(aarq_lls), aare, sizeof(aare), &aare_length) == AMI_DLMS_ASSOC_OK);
+    assert(ami_dlms_process_aarq_with_security(&association, &security, stray,
+        sizeof(stray), aare, sizeof(aare), &aare_length) == AMI_DLMS_ASSOC_REJECTED);
+    assert(association.state == AMI_DLMS_ASSOC_ASSOCIATED);
+    assert(association.mechanism == AMI_DLMS_AUTH_LLS);
 }
 
 static void test_hls_challenge_exchange(void)
@@ -163,6 +178,7 @@ int main(void)
     test_malformed_and_authenticated_aarq_are_rejected();
     test_state_transition_and_reset();
     test_lls_password_accepted_and_rejected();
+    test_unsolicited_aarq_does_not_tear_down_session();
     test_hls_challenge_exchange();
     puts("DLMS association tests passed.");
     return 0;

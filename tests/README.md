@@ -99,3 +99,7 @@ Fase ini dilakukan setelah pembuatan kode selesai dan kita menunggu PCB fisik (S
 
 ### Apa Langkah Anda Selanjutnya?
 Tugas model host untuk Profile Generic, Security Setup, dan selective access kini tersedia. Langkah lanjutan adalah mengintegrasikan penyimpanan profil serta key transfer ke driver/FreeRTOS dan Secure-world backend, menambahkan HDLC/UART serta block transfer, lalu menguji terhadap DLMS client dan hardware.
+
+### HDLC host tests
+
+AmiDlmsHdlcTest exercises fixed-buffer byte-stream parsing, a CRC reference vector, SAP address boundaries, HCS/FCS errors, truncated frames, and SNRM/UA/DISC plus I-frame building. The codec has no UART or MCU-register dependency. These host tests do not validate serial timing, FreeRTOS integration, or external DLMS client interoperability.

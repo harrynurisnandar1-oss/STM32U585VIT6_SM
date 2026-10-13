@@ -308,7 +308,9 @@ static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
             first_entry = (size_t)(selection->from_entry - 1u);
             last_entry = (size_t)to_entry;
         }
-        if (!put_byte(out, &offset, 1u) || !put_byte(out, &offset, 0u)) break;
+        if (!put_byte(out, &offset, 1u) || !put_byte(out, &offset, 0u))
+            return AMI_COSEM_INVALID_ARGUMENT;
+        int encode_failed = 0;
         for (size_t i = 0; i < count; ++i) {
             if (selection != NULL && selection->selector == AMI_COSEM_PROFILE_SELECTOR_ENTRY &&
                 (i < first_entry || i >= last_entry)) continue;
@@ -319,20 +321,33 @@ static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
                 (compare_profile_datetime(timestamp, &selection->from_date) < 0 ||
                  compare_profile_datetime(timestamp, &selection->to_date) > 0)) continue;
             if (!put_byte(out, &offset, AMI_COSEM_TYPE_STRUCTURE) ||
-                !put_byte(out, &offset, is_event ? 2u : 3u)) break;
-            if (!put_datetime(out, &offset, timestamp)) break;
+                !put_byte(out, &offset, is_event ? 2u : 3u)) {
+                encode_failed = 1;
+                break;
+            }
+            if (!put_datetime(out, &offset, timestamp)) {
+                encode_failed = 1;
+                break;
+            }
             if (is_event) {
                 if (!put_byte(out, &offset, AMI_COSEM_TYPE_UNSIGNED) ||
-                    !put_byte(out, &offset, snapshot->event_log[i].event_code)) break;
+                    !put_byte(out, &offset, snapshot->event_log[i].event_code)) {
+                    encode_failed = 1;
+                    break;
+                }
             } else {
                 if (!put_byte(out, &offset, AMI_COSEM_TYPE_LONG64_UNSIGNED) ||
                     !put_u64(out, &offset, snapshot->billing_history[i].active_import_wh) ||
                     !put_byte(out, &offset, AMI_COSEM_TYPE_LONG64_UNSIGNED) ||
-                    !put_u64(out, &offset, snapshot->billing_history[i].active_export_wh)) break;
+                    !put_u64(out, &offset, snapshot->billing_history[i].active_export_wh)) {
+                    encode_failed = 1;
+                    break;
+                }
             }
             ++selected_count;
         }
-        if (offset == 0u || selected_count > UINT8_MAX) break;
+        if (encode_failed || offset == 0u || selected_count > UINT8_MAX)
+            return AMI_COSEM_INVALID_ARGUMENT;
         out->value.encoded[1] = (uint8_t)selected_count;
         goto encoded;
         }
