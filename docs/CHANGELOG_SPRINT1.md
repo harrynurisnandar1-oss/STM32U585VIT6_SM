@@ -178,7 +178,7 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 ## [v2.1.0] - 2026-10-14
 
 ### Added
-- **Dynamic DLMS Conformance Negotiation (IEC 62056-5-3)**:
+- **Dynamic DLMS Conformance Negotiation (IEC 62056-5-3 )**:
   - Menambahkan ekstraksi bitmask `proposed_conformance` dari payload xDLMS `InitiateRequest` pada `parse_aarq` (`ami_dlms_association.c`).
   - Mengimplementasikan kalkulasi negosiasi conformance secara dinamis menggunakan operasi bitwise AND antara proposal client dan layanan yang diimplementasikan server (`Get` `0x10` dan `SelectiveAccess` `0x04`).
   - Menolak asosiasi (`result = 1, diagnostic = 2`) apabila hasil negosiasi conformance menghasilkan irisan kosong (tidak ada kesamaan layanan antara client dan meter).
@@ -222,4 +222,21 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 - **Penyempurnaan Aturan `.gitignore`**:
   - Mengabaikan direktori `.vscode/` secara penuh dan menghapus pelacakan file konfigurasi lokal (`.vscode/settings.json`) dari index git.
   - Menambahkan aturan ignore untuk artefak kompilasi host executable (`*.exe`, `*.dll`, `*.lib`, `*.so`), binary flash firmware (`*.axf`, `*.srec`, `*.s19`), direktori IDE (`Debug/`, `Release/`), dump/log files (`*.log`, `*.dmp`), dan temporary editor swap files (`*.swp`, `*~`).
+
+## [v2.1.2] - 2026-10-14
+
+### Added
+- **Otomatisasi Modern CMake Workflow (`tests/CMakePresets.json`)**:
+  - Memperbarui skema `CMakePresets.json` ke versi 6 (`cmakeMinimumRequired` 3.25.0) dengan penambahan `workflowPresets` (`host-tests`).
+  - Mengintegrasikan rantai tahapan Configure (`Ninja`), Build (`Debug`), dan CTest otomatis dalam satu perintah (`cmake --workflow --preset host-tests`).
+- **Integrasi DevTools & Debugger VS Code (`.vscode/`)**:
+  - **`launch.json`**: Menambahkan konfigurasi native GDB (`cppdbg`) untuk debugging interaktif satu-klik pada binary `gurux_simulator.exe` serta unit test individual (`test_ami_dlms_association`, `test_ami_dlms_apdu`, `test_ami_dlms_hdlc`).
+  - **`tasks.json`**: Menambahkan automated tasks `CMake: Build Host Tests`, `CMake: Configure Host Tests`, `CTest: Run All Tests`, dan `CMake: Run Full Workflow`.
+  - **`settings.json`**: Menetapkan direktori sumber host tests dan mengaktifkan preset secara deterministik untuk integrasi CMake Tools extension di VS Code.
+
+### Fixed
+- **Validasi CMakePresets Version Compatibility**:
+  - Mengatasi error validasi `should NOT have additional properties: workflowPresets` pada CMake Tools VS Code dengan meningkatkan versi format preset ke versi 6 dan menghapus deklarasi preset legacy yang tidak digunakan.
+- **Sinkronisasi Direktori Output Build (`binaryDir`)**:
+  - Menyelaraskan `binaryDir` pada `CMakePresets.json` ke `${sourceDir}/build` agar seragam dengan target path pada `tasks.json` dan `launch.json`.
 

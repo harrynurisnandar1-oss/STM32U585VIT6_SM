@@ -1,8 +1,8 @@
 {
-    "version": 3,
+    "version": 6,
     "cmakeMinimumRequired": {
         "major": 3,
-        "minor": 20,
+        "minor": 25,
         "patch": 0
     },
     "configurePresets": [
@@ -10,7 +10,7 @@
             "name": "host-tests",
             "displayName": "AMI host unit tests",
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/vscode-host",
+            "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug"
             }
@@ -29,6 +29,27 @@
             "output": {
                 "outputOnFailure": true
             }
+        }
+    ],
+    "workflowPresets": [
+        {
+            "name": "host-tests",
+            "displayName": "Run Full Host CI Workflow",
+            "description": "Configure, Build, and Run CTest in one command",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "host-tests"
+                },
+                {
+                    "type": "build",
+                    "name": "host-tests"
+                },
+                {
+                    "type": "test",
+                    "name": "host-tests"
+                }
+            ]
         }
     ]
 }
