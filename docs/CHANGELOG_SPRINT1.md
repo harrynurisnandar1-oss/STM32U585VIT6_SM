@@ -178,7 +178,7 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 ## [v2.1.0] - 2026-10-14
 
 ### Added
-- **Dynamic DLMS Conformance Negotiation (IEC 62056-5-3 §9.4.4.3.4)**:
+- **Dynamic DLMS Conformance Negotiation (IEC 62056-5-3)**:
   - Menambahkan ekstraksi bitmask `proposed_conformance` dari payload xDLMS `InitiateRequest` pada `parse_aarq` (`ami_dlms_association.c`).
   - Mengimplementasikan kalkulasi negosiasi conformance secara dinamis menggunakan operasi bitwise AND antara proposal client dan layanan yang diimplementasikan server (`Get` `0x10` dan `SelectiveAccess` `0x04`).
   - Menolak asosiasi (`result = 1, diagnostic = 2`) apabila hasil negosiasi conformance menghasilkan irisan kosong (tidak ada kesamaan layanan antara client dan meter).
