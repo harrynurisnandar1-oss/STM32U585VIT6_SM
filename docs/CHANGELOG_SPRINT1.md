@@ -204,3 +204,20 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 - **Meter Karakteristik Read-Only**: Pengujian `Write` pada CTT harus dimatikan (*disabled/unchecked*) karena meter Sprint 1 secara arsitektur menolak seluruh operasi `SET`/penulisan register.
 - **Profile Generic Range Filtering**: Seleksi parsial kolom (*column projection*) dan *selective access by date range* mendalam dialokasikan pada Sprint 3.
 - **Sprint 2 Handoff**: Fondasi komunikasi HDLC framing, AARQ/AARE state machine, negosiasi conformance, dan pembacaan objek dasar (LDN, Firmware, Clock) dinyatakan selesai dan siap dilanjutkan ke Sprint 2 (Authentication LLS/HLS & Security Setup Class 64).
+
+## [v2.1.1] - 2026-10-14
+
+### Fixed
+- **Perbaikan GitHub Actions Workflow CI (`.github/workflows/ci.yml`)**:
+  - Mengoreksi versi action checkout dari `actions/checkout@v7` (versi non-eksisten/typo) menjadi `actions/checkout@v4` agar pipeline GitHub Actions dapat dieksekusi tanpa error resolusi action.
+  - Memperluas matriks pengujian CI menjadi dual-platform:
+    - **Host Tests (Ubuntu Linux)**: Eksekusi tes berbasis `Ninja` + `GCC` untuk kecepatan dan determinisme.
+    - **Host Tests (Windows)**: Eksekusi tes native Windows menggunakan CMake MSVC toolchain untuk memverifikasi kompatibilitas socket WinSock2 (`ws2_32`) dan library host.
+
+### Added
+- **Penegasan Standar C11 pada Host Tests (`tests/CMakeLists.txt`)**:
+  - Menambahkan konfigurasi `CMAKE_C_STANDARD 11` dan `CMAKE_C_STANDARD_REQUIRED ON` pada build tests agar seluruh compiler (GCC, Clang, dan MSVC `/std:c11`) mengompilasi kode dengan standar C11 yang konsisten.
+- **Penyempurnaan Aturan `.gitignore`**:
+  - Menambahkan aturan ignore untuk artefak kompilasi host executable (`*.exe`, `*.dll`, `*.lib`, `*.so`), binary flash firmware (`*.axf`, `*.srec`, `*.s19`), direktori IDE (`Debug/`, `Release/`), dump/log files (`*.log`, `*.dmp`), dan temporary editor swap files (`*.swp`, `*~`).
+  - Mengizinkan file konfigurasi VS Code esensial (`settings.json`, `launch.json`, `tasks.json`) dan mengabaikan cache lokal lainnya.
+
