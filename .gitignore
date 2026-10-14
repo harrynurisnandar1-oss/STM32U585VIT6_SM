@@ -47,12 +47,7 @@ Release/
 *.dmp
 
 # IDE and operating-system temporary files
-.vscode/.browse.VC.db
-.vscode/ipch/
-.vscode/*
-!.vscode/settings.json
-!.vscode/launch.json
-!.vscode/tasks.json
+.vscode/
 .DS_Store
 Thumbs.db
 Desktop.ini

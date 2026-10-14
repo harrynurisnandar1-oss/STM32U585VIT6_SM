@@ -17,6 +17,7 @@ static int socket_startup(void) { WSADATA data; return WSAStartup(MAKEWORD(2, 2)
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <unistd.h>
 typedef int socket_t;

@@ -213,11 +213,13 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
   - Memperluas matriks pengujian CI menjadi dual-platform:
     - **Host Tests (Ubuntu Linux)**: Eksekusi tes berbasis `Ninja` + `GCC` untuk kecepatan dan determinisme.
     - **Host Tests (Windows)**: Eksekusi tes native Windows menggunakan CMake MSVC toolchain untuk memverifikasi kompatibilitas socket WinSock2 (`ws2_32`) dan library host.
+- **Header Kompatibilitas Socket Linux (`tests/gurux_simulator.c`)**:
+  - Menambahkan `#include <netinet/tcp.h>` pada cabang POSIX/Linux agar konstanta socket `TCP_NODELAY` terdefinisi dengan benar di kernel Linux/GCC (penyebab kegagalan build pada runner Ubuntu).
 
 ### Added
 - **Penegasan Standar C11 pada Host Tests (`tests/CMakeLists.txt`)**:
   - Menambahkan konfigurasi `CMAKE_C_STANDARD 11` dan `CMAKE_C_STANDARD_REQUIRED ON` pada build tests agar seluruh compiler (GCC, Clang, dan MSVC `/std:c11`) mengompilasi kode dengan standar C11 yang konsisten.
 - **Penyempurnaan Aturan `.gitignore`**:
+  - Mengabaikan direktori `.vscode/` secara penuh dan menghapus pelacakan file konfigurasi lokal (`.vscode/settings.json`) dari index git.
   - Menambahkan aturan ignore untuk artefak kompilasi host executable (`*.exe`, `*.dll`, `*.lib`, `*.so`), binary flash firmware (`*.axf`, `*.srec`, `*.s19`), direktori IDE (`Debug/`, `Release/`), dump/log files (`*.log`, `*.dmp`), dan temporary editor swap files (`*.swp`, `*~`).
-  - Mengizinkan file konfigurasi VS Code esensial (`settings.json`, `launch.json`, `tasks.json`) dan mengabaikan cache lokal lainnya.
 
