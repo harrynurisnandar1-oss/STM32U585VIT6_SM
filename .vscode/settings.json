@@ -1,7 +1,0 @@
-{
-    "cmake.sourceDirectory": "${workspaceFolder}/tests",
-    "cmake.useCMakePresets": "always",
-    "cmake.configurePreset": "host-tests",
-    "cmake.buildPreset": "host-tests",
-    "cmake.testPreset": "host-tests"
-}
