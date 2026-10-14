@@ -174,3 +174,33 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 - **Cakupan HCS/FCS CRC-16 HDLC (`ami_dlms_hdlc.c`)**:
   - Menyelaraskan rentang byte yang dihitung oleh CRC HCS dan FCS agar mencakup Frame Format dan panjang oktet, serta menambahkan vektor uji SNRM riil Gurux (`7E A0 08 02 03 2D 93 26 CE 7E`) ke dalam suite pengujian.
   - *Rasional*: Menjamin interoperabilitas penuh perhitungan checksum CRC terhadap implementasi referensi resmi Gurux.
+
+## [v2.1.0] - 2026-10-14
+
+### Added
+- **Dynamic DLMS Conformance Negotiation (IEC 62056-5-3 §9.4.4.3.4)**:
+  - Menambahkan ekstraksi bitmask `proposed_conformance` dari payload xDLMS `InitiateRequest` pada `parse_aarq` (`ami_dlms_association.c`).
+  - Mengimplementasikan kalkulasi negosiasi conformance secara dinamis menggunakan operasi bitwise AND antara proposal client dan layanan yang diimplementasikan server (`Get` `0x10` dan `SelectiveAccess` `0x04`).
+  - Menolak asosiasi (`result = 1, diagnostic = 2`) apabila hasil negosiasi conformance menghasilkan irisan kosong (tidak ada kesamaan layanan antara client dan meter).
+- **Kepatuhan Pengujian CTT `T_APPL_IDLE_N1` & `T_APPL_OPEN_9`**:
+  - Mengimplementasikan *silent drop* untuk permintaan data `GET` pada kondisi unassociated (sesuai aturan CTT `T_APPL_IDLE_N1`), sembari tetap merespons permintaan Short Name Read (`0x05`) dengan `ExceptionResponse` (*service not supported*) untuk verifikasi status disconnect.
+  - Menolak AARQ secara permanen jika client mengirimkan `dedicated_key` pada `InitiateRequest` saat ciphering/security suite tidak diaktifkan (`T_APPL_OPEN_9`).
+- **Toleransi Kolom Entry Selector Profile Generic (`ami_dlms_apdu.c`)**:
+  - Menyesuaikan parser `parse_profile_selection` agar menerima nilai kolom indeks 0 atau 1 pada pengujian `ReadRowsByEntry` dari Gurux CTT.
+  - Menginisialisasi data snapshot simulasi awal (1 baris *Event Log* dan 1 baris *Billing History*) pada `tests/gurux_simulator.c` agar atribut *buffer* mengembalikan struktur data valid.
+
+### Changed
+- **Penyelarasan Mask Layanan Server Terverifikasi (`ami_dlms_association.c`)**:
+  - Mengubah conformance mask default server dari `0x00 0x50 0x1F` (yang mengiklankan Set, Action, Event Notification tanpa implementasi) menjadi mask faktual Sprint 1: `0x00 0x00 0x14` (`Get` + `SelectiveAccess`).
+  - Menyelaraskan seluruh unit test asosiasi host (`test_ami_dlms_association.c`) terhadap nilai conformance mask baru.
+- **Validasi & Negosiasi Max PDU Size (`T_APPL_OPEN_14`)**:
+  - Menyesuaikan negosiasi batas ukuran PDU pada balasan AARE agar mengikuti batas penerimaan client jika di bawah 500 byte, dan menolak ukuran AARQ jika di bawah batas minimum frame xDLMS valid.
+
+### Fixed
+- **Verifikasi 100% CTest Suite**:
+  - Memperbarui seluruh host test CTest (`AmiCosemTest`, `AmiSecurityTest`, `AmiDlmsAssociationTest`, `AmiDlmsApduTest`, `AmiDlmsHdlcTest`), seluruh 5 test suite lulus 100%.
+
+### Scope & CTT Testing Notes
+- **Meter Karakteristik Read-Only**: Pengujian `Write` pada CTT harus dimatikan (*disabled/unchecked*) karena meter Sprint 1 secara arsitektur menolak seluruh operasi `SET`/penulisan register.
+- **Profile Generic Range Filtering**: Seleksi parsial kolom (*column projection*) dan *selective access by date range* mendalam dialokasikan pada Sprint 3.
+- **Sprint 2 Handoff**: Fondasi komunikasi HDLC framing, AARQ/AARE state machine, negosiasi conformance, dan pembacaan objek dasar (LDN, Firmware, Clock) dinyatakan selesai dan siap dilanjutkan ke Sprint 2 (Authentication LLS/HLS & Security Setup Class 64).

@@ -114,6 +114,7 @@ typedef enum {
     AMI_COSEM_TYPE_DOUBLE_LONG = 5,
     AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED = 6,
     AMI_COSEM_TYPE_OCTET_STRING = 9,
+    AMI_COSEM_TYPE_VISIBLE_STRING = 10,
     AMI_COSEM_TYPE_UNSIGNED = 17,
     AMI_COSEM_TYPE_INTEGER = 15,
     AMI_COSEM_TYPE_LONG_UNSIGNED = 18,
@@ -136,7 +137,7 @@ typedef struct {
         AmiCosemScalerUnit scaler_unit;
         int32_t double_long;
         uint8_t unsigned_integer;
-        uint8_t octets[12];
+        uint8_t octets[32];
         AmiCosemDateTime date_time;
         uint8_t encoded[AMI_COSEM_AXDR_ENCODED_MAX];
     } value;

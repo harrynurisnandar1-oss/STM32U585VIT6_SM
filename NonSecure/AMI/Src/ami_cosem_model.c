@@ -248,8 +248,18 @@ static int compare_profile_datetime(const AmiCosemDateTime *left,
         right->year[0], right->year[1], right->month, right->day,
         right->hour, right->minute, right->second, right->hundredths
     };
-    /* Day-of-week, deviation, and status are metadata, not sort keys. */
-    return memcmp(left_fields, right_fields, sizeof(left_fields));
+    /* Handle DLMS wildcards: 0xFF in fields indicates unspecified/wildcard */
+    for (size_t i = 0u; i < sizeof(left_fields); ++i) {
+        if (i < 2u && ((left->year[0] == 0xFFu && left->year[1] == 0xFFu) ||
+                       (right->year[0] == 0xFFu && right->year[1] == 0xFFu))) {
+            i = 1u; /* skip both year bytes */
+            continue;
+        }
+        if (left_fields[i] == 0xFFu || right_fields[i] == 0xFFu) continue;
+        if (left_fields[i] < right_fields[i]) return -1;
+        if (left_fields[i] > right_fields[i]) return 1;
+    }
+    return 0;
 }
 static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
                                    const uint8_t *logical_name,
@@ -502,12 +512,53 @@ AmiCosemStatus ami_cosem_register_read_selected(
     if (class_id != AMI_COSEM_REGISTER_CLASS_ID &&
         class_id != AMI_COSEM_PROFILE_GENERIC_CLASS_ID &&
         class_id != AMI_COSEM_CLOCK_CLASS_ID &&
-        class_id != AMI_COSEM_SECURITY_SETUP_CLASS_ID) {
+        class_id != AMI_COSEM_SECURITY_SETUP_CLASS_ID &&
+        class_id != 1u /* Data */) {
         return AMI_COSEM_OBJECT_NOT_FOUND;
     }
 
     if (selection != NULL && class_id != AMI_COSEM_PROFILE_GENERIC_CLASS_ID) {
         return AMI_COSEM_SCOPE_VIOLATED;
+    }
+
+    if (class_id == 1u) {
+        static const uint8_t ldn_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 42, 0, 0, 255};
+        static const uint8_t fw_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {1, 0, 0, 2, 0, 255};
+        memset(out, 0, sizeof(*out));
+        if (memcmp(logical_name, ldn_ln, sizeof(ldn_ln)) == 0) {
+            if (attribute_id == 1u) {
+                out->type = AMI_COSEM_TYPE_OCTET_STRING;
+                out->length = AMI_COSEM_LOGICAL_NAME_LENGTH;
+                memcpy(out->value.logical_name, ldn_ln, AMI_COSEM_LOGICAL_NAME_LENGTH);
+                return AMI_COSEM_OK;
+            }
+            if (attribute_id == 2u) {
+                /* Return Logical Device Name (e.g., STM32U585-METER-01) */
+                static const char device_name[] = "STM32U585-AMI-01";
+                out->type = AMI_COSEM_TYPE_VISIBLE_STRING;
+                out->length = sizeof(device_name) - 1u;
+                memcpy(out->value.octets, device_name, out->length);
+                return AMI_COSEM_OK;
+            }
+            return AMI_COSEM_ATTRIBUTE_NOT_FOUND;
+        }
+        if (memcmp(logical_name, fw_ln, sizeof(fw_ln)) == 0) {
+            if (attribute_id == 1u) {
+                out->type = AMI_COSEM_TYPE_OCTET_STRING;
+                out->length = AMI_COSEM_LOGICAL_NAME_LENGTH;
+                memcpy(out->value.logical_name, fw_ln, AMI_COSEM_LOGICAL_NAME_LENGTH);
+                return AMI_COSEM_OK;
+            }
+            if (attribute_id == 2u) {
+                static const char fw_version[] = "v1.0.0-sprint1";
+                out->type = AMI_COSEM_TYPE_VISIBLE_STRING;
+                out->length = sizeof(fw_version) - 1u;
+                memcpy(out->value.octets, fw_version, out->length);
+                return AMI_COSEM_OK;
+            }
+            return AMI_COSEM_ATTRIBUTE_NOT_FOUND;
+        }
+        return AMI_COSEM_OBJECT_NOT_FOUND;
     }
 
     if (class_id == AMI_COSEM_PROFILE_GENERIC_CLASS_ID) {

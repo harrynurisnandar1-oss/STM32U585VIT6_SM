@@ -60,6 +60,16 @@ static int encode_data(const AmiCosemData *data, uint8_t *out,
         }
         offset += data->length;
         break;
+    case AMI_COSEM_TYPE_VISIBLE_STRING:
+        if (data->length > UINT8_MAX || data->length > capacity ||
+            capacity - data->length < 2u) {
+            return 0;
+        }
+        out[offset++] = (uint8_t)AMI_COSEM_TYPE_VISIBLE_STRING;
+        out[offset++] = (uint8_t)data->length;
+        memcpy(out + offset, data->value.octets, data->length);
+        offset += data->length;
+        break;
     case AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED:
         if (capacity < 5u) return 0;
         out[offset++] = (uint8_t)AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED;
@@ -112,7 +122,7 @@ static uint8_t access_error(AmiCosemStatus status)
     case AMI_COSEM_ATTRIBUTE_NOT_FOUND: return 3u; /* read-write-denied */
     case AMI_COSEM_VALUE_UNAVAILABLE: return 2u; /* temporary-failure */
     case AMI_COSEM_SCOPE_VIOLATED: return 11u; /* scope-of-access-violated */
-    default: return 15u; /* other-reason */
+    default: return 3u; /* read-write-denied */
     }
 }
 
@@ -147,8 +157,18 @@ static int compare_profile_datetime(const AmiCosemDateTime *left,
         right->year[0], right->year[1], right->month, right->day,
         right->hour, right->minute, right->second, right->hundredths
     };
-    /* Ignore day-of-week, deviation, and status when ordering a date-time range. */
-    return memcmp(left_fields, right_fields, sizeof(left_fields));
+    /* Handle DLMS wildcards: 0xFF in fields indicates unspecified/wildcard */
+    for (size_t i = 0u; i < sizeof(left_fields); ++i) {
+        if (i < 2u && ((left->year[0] == 0xFFu && left->year[1] == 0xFFu) ||
+                       (right->year[0] == 0xFFu && right->year[1] == 0xFFu))) {
+            i = 1u;
+            continue;
+        }
+        if (left_fields[i] == 0xFFu || right_fields[i] == 0xFFu) continue;
+        if (left_fields[i] < right_fields[i]) return -1;
+        if (left_fields[i] > right_fields[i]) return 1;
+    }
+    return 0;
 }
 /* Supports selector 1 (Clock range) and selector 2 (entry range, all columns).
  * Unknown descriptors are rejected rather than returning the whole buffer. */
@@ -172,7 +192,9 @@ static int parse_profile_selection(const uint8_t *request, size_t request_length
             !read_be_u16(request, request_length, &offset, &from_column) ||
             offset >= request_length || request[offset++] != AMI_COSEM_TYPE_LONG_UNSIGNED ||
             !read_be_u16(request, request_length, &offset, &to_column) ||
-            offset != request_length || from_column != 0u || to_column != 0u) return 0;
+            offset != request_length || from_column > 1u || to_column > 1u) return 0;
+        /* Column projection is not supported: full rows are always returned
+         * (from_column 0/1 with to_column 0 means all columns per Green Book). */
         selection->from_entry = from_entry;
         selection->to_entry = to_entry;
         return 1;
@@ -427,11 +449,11 @@ static AmiDlmsApduStatus process_get_request_plain(
     }
     if (request_length < 3u || request[0] != GET_REQUEST_TAG ||
         request[1] != GET_NORMAL_CHOICE) {
-        return build_error(request_length > 2u ? request[2] : 0u, 15u,
+        return build_error(request_length > 2u ? request[2] : 0u, 3u,
                            response, response_capacity, response_length);
     }
     if (request_length < 13u || request[12] > 1u) {
-        return build_error(request[2], 15u, response,
+        return build_error(request[2], 3u, response,
                            response_capacity, response_length);
     }
 
@@ -441,11 +463,29 @@ static AmiDlmsApduStatus process_get_request_plain(
     uint8_t attribute_id = request[11];
     static const uint8_t association_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] =
         {0u, 0u, 40u, 0u, 0u, 255u};
-    if (class_id == 15u && memcmp(logical_name, association_ln,
-                                  sizeof(association_ln)) == 0 &&
-        attribute_id == 2u && request[12] == 0u && request_length == 13u) {
-        return build_association_object_list(request[2], response,
-                                             response_capacity, response_length);
+    if (class_id == 15u) {
+        if (memcmp(logical_name, association_ln, sizeof(association_ln)) != 0) {
+            return build_error(request[2], 3u, response, response_capacity, response_length);
+        }
+        if (request[12] == 0u && request_length == 13u) {
+        if (attribute_id == 1u) {
+            if (response_capacity < 12u) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+            response[0] = GET_RESPONSE_TAG;
+            response[1] = GET_NORMAL_CHOICE;
+            response[2] = request[2];
+            response[3] = 0u; /* data alternative */
+            response[4] = (uint8_t)AMI_COSEM_TYPE_OCTET_STRING;
+            response[5] = AMI_COSEM_LOGICAL_NAME_LENGTH;
+            memcpy(response + 6u, association_ln, AMI_COSEM_LOGICAL_NAME_LENGTH);
+            *response_length = 12u;
+            return AMI_DLMS_APDU_OK;
+        }
+        if (attribute_id == 2u) {
+            return build_association_object_list(request[2], response,
+                                                 response_capacity, response_length);
+        }
+        }
+        return build_error(request[2], 3u, response, response_capacity, response_length);
     }
     AmiCosemProfileSelection selection;
     const AmiCosemProfileSelection *selection_pointer = NULL;

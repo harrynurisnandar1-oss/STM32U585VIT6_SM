@@ -27,6 +27,12 @@ typedef struct {
     size_t mechanism_oid_length;
     const uint8_t *auth_value;
     size_t auth_value_length;
+    uint16_t client_max_pdu_size;
+    int qos_present;
+    uint8_t proposed_qos;
+    int dedicated_key_present;
+    int conformance_present;
+    uint8_t proposed_conformance[3];
 } ParsedAarq;
 
 static int read_ber_length(const uint8_t *bytes, size_t available,
@@ -110,13 +116,60 @@ static int parse_aarq(const uint8_t *aarq, size_t length, ParsedAarq *parsed)
             auth_value_seen = 1;
         } else if (tag == 0xBEu) {
             BerTlv user_information;
-            if (field.length < 2u || field.value[0] != 0x04u ||
-                !read_tlv(field.value, field.length, &user_information) ||
-                user_information.encoded_length != field.length ||
+            size_t available_ui = outer.length - offset > 2u ? outer.length - offset - 2u : field.length;
+            const uint8_t *ui_bytes = outer.value + offset + 2u;
+            if (available_ui < 2u || ui_bytes[0] != 0x04u ||
+                !read_tlv(ui_bytes, available_ui, &user_information) ||
                 user_information.length == 0u) return 0;
+            field.encoded_length = 2u + user_information.encoded_length;
+            /* Parse InitiateRequest from user_information if available.
+             * InitiateRequest ::= [1] IMPLICIT SEQUENCE {
+             *   dedicated_key [OPTIONAL], response_allowed [OPTIONAL/BOOLEAN],
+             *   proposed_quality_of_service [OPTIONAL], proposed_dlms_version,
+             *   proposed_conformance, client_max_receive_pdu_size }
+             */
+            const uint8_t *pdu = user_information.value;
+            size_t pdu_len = user_information.length;
+            if (pdu_len >= 8u && pdu[0] == 0x01u) {
+                size_t ppos = 1u;
+                if (ppos < pdu_len && pdu[ppos] == 0x00u) ppos++; /* dedicated_key absent */
+                else if (ppos < pdu_len && pdu[ppos] == 0x01u) {
+                    ppos++;
+                    parsed->dedicated_key_present = 1;
+                    if (ppos < pdu_len) { size_t klen = pdu[ppos++]; ppos += klen; }
+                }
+                if (ppos < pdu_len && pdu[ppos] == 0x00u) ppos++; /* response_allowed absent */
+                else if (ppos + 1u < pdu_len && pdu[ppos] == 0x01u) ppos += 2u; /* response_allowed present (flag + bool) */
+
+                if (ppos < pdu_len && pdu[ppos] == 0x00u) {
+                    ppos++; /* qos absent */
+                    parsed->qos_present = 0;
+                } else if (ppos + 1u < pdu_len && pdu[ppos] == 0x01u) {
+                    parsed->qos_present = 1;
+                    parsed->proposed_qos = pdu[ppos + 1u];
+                    ppos += 2u; /* qos present (flag + int8) */
+                }
+                if (ppos < pdu_len) ppos++; /* dlms_version */
+                if (ppos + 2u < pdu_len && pdu[ppos] == 0x5Fu && pdu[ppos + 1u] == 0x1Fu) {
+                    ppos += 2u;
+                    if (ppos < pdu_len) {
+                        size_t clen = pdu[ppos++];
+                        if (clen >= 1u && ppos + clen <= pdu_len) {
+                            parsed->conformance_present = 1;
+                            parsed->proposed_conformance[0] = (clen > 1u) ? pdu[ppos + 1u] : 0u;
+                            parsed->proposed_conformance[1] = (clen > 2u) ? pdu[ppos + 2u] : 0u;
+                            parsed->proposed_conformance[2] = (clen > 3u) ? pdu[ppos + 3u] : 0u;
+                        }
+                        ppos += clen;
+                    }
+                }
+                if (ppos + 1u < pdu_len) {
+                    parsed->client_max_pdu_size = (uint16_t)(((uint16_t)pdu[ppos] << 8) | pdu[ppos + 1u]);
+                }
+            }
         } else if (tag != 0x80u && tag != 0xA2u && tag != 0xA3u &&
                    tag != 0xA4u && tag != 0xA5u && tag != 0xBDu) {
-            return 0;
+            /* Unknown optional ACSE tags are tolerated in standard BER decoding */
         }
         offset += field.encoded_length;
     }
@@ -128,7 +181,10 @@ static int parse_aarq(const uint8_t *aarq, size_t length, ParsedAarq *parsed)
 static int build_aare(uint8_t *out, size_t capacity, size_t *out_length,
                       uint8_t result, uint8_t diagnostic,
                       const uint8_t *mechanism_oid, size_t mechanism_oid_length,
-                      const uint8_t *server_challenge, size_t challenge_length)
+                      const uint8_t *server_challenge, size_t challenge_length,
+                      uint16_t client_max_pdu_size,
+                      int qos_present, uint8_t proposed_qos,
+                      int conformance_present, const uint8_t *proposed_conformance)
 {
     static const uint8_t context_field[] = {
         BER_APP_CONTEXT_TAG, 0x09u, BER_OID_TAG, 0x07u,
@@ -136,17 +192,54 @@ static int build_aare(uint8_t *out, size_t capacity, size_t *out_length,
     };
     const uint8_t result_field[] = {0xA2u, 0x03u, 0x02u, 0x01u, result};
     const uint8_t diagnostic_field[] = {0xA3u, 0x05u, 0xA1u, 0x03u, 0x02u, 0x01u, diagnostic};
-    /* xDLMS InitiateResponse: version 6, read/GET/selective-access
-     * conformance subset, 500-byte server PDU, logical-name referencing. */
-    static const uint8_t initiate_response_field[] = {
-        0xBEu, 0x10u, 0x04u, 0x0Eu,
-        0x08u, 0x00u, 0x06u, 0x5Fu, 0x1Fu, 0x04u, 0x00u,
-        0x00u, 0x50u, 0x1Fu, 0x01u, 0xF4u, 0x00u, 0x07u
-    };
+    /* xDLMS InitiateResponse: negotiate server max PDU size (respect client proposal). */
+    uint16_t negotiated_pdu = (client_max_pdu_size > 0u && client_max_pdu_size < 500u)
+        ? client_max_pdu_size : 500u;
+    /* Conformance negotiation: server supported mask = 0x00, 0x50, 0x1F.
+     * Negotiated conformance is bitwise AND of proposed and supported. */
+    uint8_t conf0 = 0x00u;
+    uint8_t conf1 = 0x00u;
+    uint8_t conf2 = 0x14u; /* Get (0x10) + Selective-access (0x04) only */
+    if (conformance_present && proposed_conformance != NULL) {
+        conf0 = (uint8_t)(proposed_conformance[0] & 0x00u);
+        conf1 = (uint8_t)(proposed_conformance[1] & 0x00u);
+        conf2 = (uint8_t)(proposed_conformance[2] & 0x14u);
+    }
+    uint8_t initiate_response_field[24];
+    size_t init_len = 0u;
+    if (qos_present) {
+        initiate_response_field[init_len++] = 0xBEu;
+        initiate_response_field[init_len++] = 0x11u; /* 17 bytes */
+        initiate_response_field[init_len++] = 0x04u;
+        initiate_response_field[init_len++] = 0x0Fu; /* 15 bytes */
+        initiate_response_field[init_len++] = 0x08u;
+        initiate_response_field[init_len++] = 0x01u; /* qos present */
+        initiate_response_field[init_len++] = proposed_qos;
+    } else {
+        initiate_response_field[init_len++] = 0xBEu;
+        initiate_response_field[init_len++] = 0x10u; /* 16 bytes */
+        initiate_response_field[init_len++] = 0x04u;
+        initiate_response_field[init_len++] = 0x0Eu; /* 14 bytes */
+        initiate_response_field[init_len++] = 0x08u;
+        initiate_response_field[init_len++] = 0x00u; /* qos absent */
+    }
+    initiate_response_field[init_len++] = 0x06u; /* dlms version 6 */
+    initiate_response_field[init_len++] = 0x5Fu;
+    initiate_response_field[init_len++] = 0x1Fu;
+    initiate_response_field[init_len++] = 0x04u;
+    initiate_response_field[init_len++] = 0x00u;
+    initiate_response_field[init_len++] = conf0;
+    initiate_response_field[init_len++] = conf1;
+    initiate_response_field[init_len++] = conf2;
+    initiate_response_field[init_len++] = (uint8_t)(negotiated_pdu >> 8);
+    initiate_response_field[init_len++] = (uint8_t)negotiated_pdu;
+    initiate_response_field[init_len++] = 0x00u; /* vaa name */
+    initiate_response_field[init_len++] = 0x07u;
+
     const size_t auth_extra = challenge_length == 0u ? 0u : 4u + challenge_length;
     const size_t mechanism_extra = challenge_length == 0u ? 0u : 2u + mechanism_oid_length;
     const size_t acse_extra = challenge_length == 0u ? 0u : 4u;
-    const size_t user_info_extra = result == 0u ? sizeof(initiate_response_field) : 0u;
+    const size_t user_info_extra = result == 0u ? init_len : 0u;
     const size_t body_length = sizeof(context_field) + sizeof(result_field) +
         sizeof(diagnostic_field) + auth_extra + mechanism_extra + acse_extra + user_info_extra;
     if (out == NULL || out_length == NULL || body_length > 127u ||
@@ -168,8 +261,8 @@ static int build_aare(uint8_t *out, size_t capacity, size_t *out_length,
         memcpy(out + n, server_challenge, challenge_length); n += challenge_length;
     }
     if (result == 0u) {
-        memcpy(out + n, initiate_response_field, sizeof(initiate_response_field));
-        n += sizeof(initiate_response_field);
+        memcpy(out + n, initiate_response_field, init_len);
+        n += init_len;
     }
     *out_length = n;
     return 1;
@@ -224,7 +317,19 @@ AmiDlmsAssociationStatus ami_dlms_process_aarq_with_security(
     int accepted = 0;
     uint8_t server_challenge[AMI_DLMS_HLS_CHALLENGE_LENGTH] = {0};
     size_t server_challenge_length = 0u;
-    if (parsed_ok && parsed.mechanism_oid == NULL && security->allow_no_auth != 0u) {
+    if (parsed_ok && parsed.conformance_present &&
+        (((parsed.proposed_conformance[0] & 0x00u) |
+          (parsed.proposed_conformance[1] & 0x00u) |
+          (parsed.proposed_conformance[2] & 0x14u)) == 0u)) {
+        /* Empty/incompatible conformance: no common services, reject association */
+        accepted = 0;
+    } else if (parsed_ok && parsed.client_max_pdu_size != 0u && parsed.client_max_pdu_size < 12u) {
+        /* T_APPL_OPEN_14: client max receive PDU size below the 12-byte minimum is rejected */
+        accepted = 0;
+    } else if (parsed_ok && parsed.dedicated_key_present) {
+        /* DLMS CTT T_APPL_OPEN_9: dedicated key when ciphering is not used must be rejected */
+        accepted = 0;
+    } else if (parsed_ok && parsed.mechanism_oid == NULL && security->allow_no_auth != 0u) {
         accepted = 1;
     } else if (parsed_ok && oid_equal(parsed.mechanism_oid, parsed.mechanism_oid_length,
                                       lls_mechanism_oid, sizeof(lls_mechanism_oid)) &&
@@ -259,7 +364,10 @@ AmiDlmsAssociationStatus ami_dlms_process_aarq_with_security(
                     hls_started ? association->hls_mechanism_oid : NULL,
                     hls_started ? association->hls_mechanism_oid_length : 0u,
                     hls_started ? association->server_challenge : NULL,
-                    hls_started ? association->server_challenge_length : 0u)) {
+                    hls_started ? association->server_challenge_length : 0u,
+                    parsed.client_max_pdu_size,
+                    parsed.qos_present, parsed.proposed_qos,
+                    parsed.conformance_present, parsed.proposed_conformance)) {
         clear_challenges(association);
         association->state = AMI_DLMS_ASSOC_ERROR;
         return AMI_DLMS_ASSOC_BUFFER_TOO_SMALL;

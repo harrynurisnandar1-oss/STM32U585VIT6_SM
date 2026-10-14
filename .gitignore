@@ -2,6 +2,7 @@
 /build/
 **/build/
 CMakeFiles/
+**/CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
 compile_commands.json
@@ -9,13 +10,21 @@ compile_commands.json
 .ninja_log
 build.ninja
 
-# Compiled firmware and intermediate files
+# Compiled firmware, host executables, and intermediate files
 *.o
 *.obj
 *.a
+*.lib
+*.so
+*.dll
+*.dylib
+*.exe
 *.elf
-*.hex
 *.bin
+*.hex
+*.srec
+*.s19
+*.axf
 *.map
 *.lst
 *.su
@@ -23,15 +32,27 @@ build.ninja
 *.gcda
 *.gcno
 
+# STM32CubeIDE / Eclipse / Keil / IAR build folders
+Debug/
+**/Debug/
+Release/
+**/Release/
+
 # CTest generated results
 /Testing/
 **/Testing/
+
+# Logs and dumps
+*.log
+*.dmp
 
 # IDE and operating-system temporary files
 .vscode/.browse.VC.db
 .vscode/ipch/
 .vscode/*
 !.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
 .DS_Store
 Thumbs.db
 Desktop.ini
@@ -40,3 +61,6 @@ Desktop.ini
 *.tmp
 *.bak
 *.orig
+*.swp
+*~
+

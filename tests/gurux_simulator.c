@@ -62,7 +62,6 @@ static void make_development_snapshot(AmiCosemRegisterSnapshot *snapshot)
     snapshot->clock_date_time.hour = 12u;
     snapshot->clock_date_time.deviation[0] = 0x80u; /* unspecified */
     snapshot->clock_date_time.deviation[1] = 0x00u;
-    snapshot->clock_status = 0u;
     snapshot->valid_mask = AMI_COSEM_VALID_VOLTAGE_A |
                            AMI_COSEM_VALID_VOLTAGE_B |
                            AMI_COSEM_VALID_VOLTAGE_C |
@@ -71,7 +70,17 @@ static void make_development_snapshot(AmiCosemRegisterSnapshot *snapshot)
                            AMI_COSEM_VALID_CURRENT_C |
                            AMI_COSEM_VALID_ACTIVE_IMPORT |
                            AMI_COSEM_VALID_ACTIVE_EXPORT |
-                           AMI_COSEM_VALID_CLOCK;
+                           AMI_COSEM_VALID_CLOCK |
+                           AMI_COSEM_VALID_EVENT_LOG |
+                           AMI_COSEM_VALID_BILLING_PROFILE;
+    snapshot->event_log_count = 1u;
+    snapshot->event_log[0].timestamp = snapshot->clock_date_time;
+    snapshot->event_log[0].event_code = 1u;
+
+    snapshot->billing_history_count = 1u;
+    snapshot->billing_history[0].billing_timestamp = snapshot->clock_date_time;
+    snapshot->billing_history[0].active_import_wh = 1234567u;
+    snapshot->billing_history[0].active_export_wh = 0u;
 }
 
 static int process_i_frame(HdlcContext *hdlc, const HdlcFrame *request,
@@ -92,6 +101,7 @@ static int process_i_frame(HdlcContext *hdlc, const HdlcFrame *request,
     if (apdu_length_in == 0u) return 1;
 
     if (apdu[0] == 0x60u) {
+        ami_dlms_association_reset(association);
         association_status = ami_dlms_process_aarq(association, apdu, apdu_length_in,
             apdu_response, sizeof(apdu_response), &apdu_length);
         fprintf(stdout, "[APDU AARE] status=%d response=%u bytes",
@@ -104,7 +114,35 @@ static int process_i_frame(HdlcContext *hdlc, const HdlcFrame *request,
             fprintf(stderr, "AARQ rejected (status=%d)\n", (int)association_status);
             if (apdu_length == 0u) return 1;
         }
-    } else {
+    } else if (apdu[0] == 0x62u) {
+        /* ACSE RLRQ (Release Request) -> Reply with RLRE (Release Response) */
+        ami_dlms_association_reset(association);
+        apdu_response[0] = 0x63u; /* RLRE tag */
+        apdu_response[1] = 0x03u; /* length */
+        apdu_response[2] = 0x80u; /* reason tag */
+        apdu_response[3] = 0x01u;
+        apdu_response[4] = 0x00u; /* normal */
+        apdu_length = 5u;
+        fprintf(stdout, "[APDU RLRE] Association released cleanly.\n");
+        fflush(stdout);
+    } else if (association->state != AMI_DLMS_ASSOC_ASSOCIATED) {
+        /* When unassociated:
+         * Per DLMS CTT T_APPL_IDLE_N1, meter must NOT answer for Get request.
+         * For Short Name Read (0x05) when checking disconnect (APPL_REL_P1), return ExceptionResponse.
+         */
+        if (apdu[0] == 0x05u) {
+            apdu_response[0] = 0xD8u; /* ExceptionResponse */
+            apdu_response[1] = 0x00u; /* no state error */
+            apdu_response[2] = 0x02u; /* service not supported */
+            apdu_length = 3u;
+            fprintf(stdout, "[APDU EXCEPTION] Unassociated Read SN rejected\n");
+            fflush(stdout);
+        } else {
+            fprintf(stdout, "[APDU IDLE] Silently dropping unassociated request 0x%02X per T_APPL_IDLE_N1\n", apdu[0]);
+            fflush(stdout);
+            return 1;
+        }
+    } else if (apdu[0] == 0xC0u) {
         apdu_status = ami_dlms_process_get_request(association, snapshot, apdu,
             apdu_length_in, apdu_response, sizeof(apdu_response), &apdu_length);
         fprintf(stdout, "[APDU GET] status=%d response=%u bytes",
@@ -113,10 +151,33 @@ static int process_i_frame(HdlcContext *hdlc, const HdlcFrame *request,
             fprintf(stdout, " %02X", apdu_response[i]);
         fputc('\n', stdout);
         fflush(stdout);
-        if (apdu_status != AMI_DLMS_APDU_OK && apdu_length == 0u) {
-            fprintf(stderr, "APDU rejected (status=%d)\n", (int)apdu_status);
-            return 1;
-        }
+    } else if (apdu[0] == 0xC1u) {
+        /* SetRequest -> SetResponseNormal with read-write-denied (3) */
+        apdu_response[0] = 0xC5u; /* SetResponse */
+        apdu_response[1] = 0x01u; /* SetResponseNormal */
+        apdu_response[2] = apdu_length_in > 2u ? apdu[2] : 0u; /* invoke_id */
+        apdu_response[3] = 0x03u; /* read-write-denied */
+        apdu_length = 4u;
+        fprintf(stdout, "[APDU SET] Denied (read-only meter)\n");
+        fflush(stdout);
+    } else if (apdu[0] == 0xC3u) {
+        /* ActionRequest -> ActionResponseNormal with read-write-denied (3) */
+        apdu_response[0] = 0xC7u; /* ActionResponse */
+        apdu_response[1] = 0x01u; /* ActionResponseNormal */
+        apdu_response[2] = apdu_length_in > 2u ? apdu[2] : 0u; /* invoke_id */
+        apdu_response[3] = 0x01u; /* action-result choice: error */
+        apdu_response[4] = 0x03u; /* read-write-denied */
+        apdu_length = 5u;
+        fprintf(stdout, "[APDU ACTION] Denied (read-only meter)\n");
+        fflush(stdout);
+    } else {
+        /* Short Name referencing (e.g. 0x05 ReadRequest) or unsupported service on LN meter */
+        apdu_response[0] = 0xD8u; /* ExceptionResponse */
+        apdu_response[1] = 0x00u; /* no state error */
+        apdu_response[2] = 0x02u; /* service-error: service-not-supported */
+        apdu_length = 3u;
+        fprintf(stdout, "[APDU EXCEPTION] Service 0x%02X not supported (LN meter)\n", apdu[0]);
+        fflush(stdout);
     }
 
     return ami_dlms_hdlc_build_frame(hdlc, request, apdu_response, apdu_length,
@@ -179,6 +240,7 @@ static int serve_client(socket_t client)
 
         response_length = 0u;
         if (frame.type == AMI_HDLC_FRAME_SNRM || frame.type == AMI_HDLC_FRAME_DISC) {
+            ami_dlms_association_reset(&association);
             status = ami_dlms_hdlc_build_frame(&hdlc, &frame, NULL, 0u,
                 wire_response, sizeof(wire_response), &response_length);
             if (status == AMI_HDLC_FRAME_READY) {
@@ -187,6 +249,18 @@ static int serve_client(socket_t client)
                 if (!send_all(client, wire_response, response_length)) return 0;
             } else {
                 fprintf(stderr, "[ERR] Failed to build UA response (status=%d)\n", (int)status);
+            }
+        } else if (frame.type == AMI_HDLC_FRAME_RR) {
+            status = ami_dlms_hdlc_build_frame(&hdlc, &frame, NULL, 0u,
+                wire_response, sizeof(wire_response), &response_length);
+            if (status == AMI_HDLC_FRAME_READY) {
+                fprintf(stdout, "[TX to Gurux] RR Response (%u bytes):", (unsigned)response_length);
+                for (size_t i = 0u; i < response_length; ++i) fprintf(stdout, " %02X", wire_response[i]);
+                fputc('\n', stdout);
+                fflush(stdout);
+                if (!send_all(client, wire_response, response_length)) return 0;
+            } else {
+                fprintf(stderr, "[ERR] Failed to build RR response (status=%d)\n", (int)status);
             }
         } else if (frame.type == AMI_HDLC_FRAME_I) {
             if (!process_i_frame(&hdlc, &frame, &association, &snapshot,
@@ -237,6 +311,10 @@ int main(void)
             perror("accept");
             continue;
         }
+        int nodelay = 1;
+        (void)setsockopt(client, IPPROTO_TCP, TCP_NODELAY, (const char *)&nodelay, sizeof(nodelay));
+        int sndbuf = 0;
+        (void)setsockopt(client, SOL_SOCKET, SO_SNDBUF, (const char *)&sndbuf, sizeof(sndbuf));
         (void)serve_client(client);
         CLOSE_SOCKET(client);
         fprintf(stdout, "Client disconnected.\n");

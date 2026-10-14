@@ -45,6 +45,7 @@ static AmiHdlcStatus decode_raw(const uint8_t *raw,size_t n,HdlcFrame *f){
   if(get_crc(raw+off)!=ami_dlms_hdlc_crc16(raw,off))return AMI_HDLC_FCS_ERROR;
  f->destination_sap=dst;f->source_sap=src;if(f->control==AMI_HDLC_CONTROL_SNRM)f->type=AMI_HDLC_FRAME_SNRM;
  else if(f->control==AMI_HDLC_CONTROL_UA)f->type=AMI_HDLC_FRAME_UA;else if(f->control==AMI_HDLC_CONTROL_DISC)f->type=AMI_HDLC_FRAME_DISC;
+ else if((f->control&0x0Fu)==0x01u)f->type=AMI_HDLC_FRAME_RR;
  else if((f->control&1u)==0u)f->type=AMI_HDLC_FRAME_I;else f->type=AMI_HDLC_FRAME_OTHER_CONTROL;return AMI_HDLC_FRAME_READY;
 }
 AmiHdlcStatus ami_dlms_hdlc_parse_byte(HdlcContext *c,uint8_t byte,HdlcFrame *f){
@@ -74,6 +75,10 @@ AmiHdlcStatus ami_dlms_hdlc_parse_byte(HdlcContext *c,uint8_t byte,HdlcFrame *f)
 }AmiHdlcStatus ami_dlms_hdlc_build_frame(HdlcContext *c,const HdlcFrame *r,const uint8_t *p,size_t n,uint8_t *out,size_t cap,size_t *olen){
  uint8_t control,payload[AMI_HDLC_MAX_INFO_LENGTH],ua_parameters[23];size_t payload_len;AmiHdlcStatus s;if(!c||!r||!out||!olen||(!p&&n))return AMI_HDLC_INVALID_ARGUMENT;
  if(r->type==AMI_HDLC_FRAME_SNRM||r->type==AMI_HDLC_FRAME_DISC){if(n)return AMI_HDLC_INVALID_ARGUMENT;payload_len=0u;if(r->type==AMI_HDLC_FRAME_SNRM&&r->payload_length){s=make_ua_parameters(r,ua_parameters,&payload_len);if(s!=AMI_HDLC_FRAME_READY)return s;}s=ami_dlms_hdlc_encode_frame(r->source_sap,r->destination_sap,AMI_HDLC_CONTROL_UA,payload_len?ua_parameters:NULL,payload_len,out,cap,olen);if(s==AMI_HDLC_FRAME_READY){c->tx_sequence=0u;c->rx_sequence=0u;}return s;}
+ if(r->type==AMI_HDLC_FRAME_RR){
+  control=(uint8_t)(0x01u|((c->rx_sequence&7u)<<5)|(r->control&0x10u));
+  return ami_dlms_hdlc_encode_frame(r->source_sap,r->destination_sap,control,NULL,0u,out,cap,olen);
+ }
  if(r->type!=AMI_HDLC_FRAME_I)return AMI_HDLC_UNSUPPORTED_CONTROL;
  control=(uint8_t)(((c->tx_sequence&7u)<<1)|((c->rx_sequence&7u)<<5)|(r->control&0x10u));
  if(n>sizeof(payload)-3u)return AMI_HDLC_INFO_TOO_LARGE;payload[0]=0xE6u;payload[1]=0xE7u;payload[2]=0x00u;if(n)memcpy(payload+3u,p,n);payload_len=n+3u;
