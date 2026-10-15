@@ -64,9 +64,20 @@ Root proyek memiliki `CMakeLists.txt` CubeMX untuk firmware STM32 dan toolchain 
 
 Jika preset tidak muncul, pastikan versi CMake dapat membaca Presets versi 3 (CMake 3.21+), extension CMake Tools sudah aktif, lalu jalankan `CMake: Delete Cache and Reconfigure`. `tests/CMakePresets.json` menggunakan Ninja; pasang Ninja atau ubah preset ke generator host yang tersedia. Untuk kembali membangun firmware CubeMX dari extension, ubah `cmake.sourceDirectory` ke `${workspaceFolder}` dan pilih preset firmware `Debug`.
 
-## GitHub Actions
+## GitHub Actions (Continuous Integration)
 
-Workflow `../.github/workflows/ci.yml` berjalan otomatis saat ada push atau pull request, dan dapat dijalankan manual melalui `workflow_dispatch`. Workflow menggunakan Ubuntu runner, membangun target test host, lalu menjalankan seluruh suite CTest. Workflow ini tidak membangun firmware ARM dan tidak memerlukan Docker.
+Workflow CI (`.github/workflows/ci.yml`) berfungsi sebagai **gerbang verifikasi otomatis (Quality Gate)** untuk memastikan integritas logika protokol dan keamanan tidak rusak saat ada perubahan kode:
+
+1. **Trigger Otomatis**:
+   - Berjalan otomatis setiap kali ada `git push` ke cabang utama atau pembukaan `pull_request`, serta dapat dipicu manual melalui `workflow_dispatch`.
+2. **Pengujian Multi-Platform Paralel**:
+   - **`host-tests-linux` (`ubuntu-latest`)**: Memverifikasi kompilasi GCC/Clang dan eksekusi CTest di lingkungan Linux.
+   - **`host-tests-windows` (`windows-latest`)**: Memverifikasi kompilasi MSVC/Windows runtime untuk memastikan kompatibilitas lingkungan PC developer.
+3. **Fungsi & Manfaat Utama Pengujian di GitHub**:
+   - **Mencegah Regresi (Regression Guard)**: Memastikan perubahan logika parser HDLC atau APDU tidak merusak suite pengujian yang sudah lulus.
+   - **Verifikasi Tanpa Hardware**: Memungkinkan tim memvalidasi logika DLMS/COSEM, ciphering Suite 0, anti-replay, dan framing HDLC tanpa memerlukan board STM32 fisik.
+   - **Standar Kolaborasi Tim**: Setiap pull request wajib berstatus hijau (*passed 5/5 suite test*) sebelum di-merge ke branch utama.
+   - **Deteksi Dini Memory Leak / Buffer Overflow**: Menangkap kegagalan boundary data, CRC error, dan eksploitasi framing langsung di pipeline cloud.
 
 
 
