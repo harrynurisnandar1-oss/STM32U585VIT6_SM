@@ -23,6 +23,7 @@ Dokumen ini menjelaskan pengujian host-native untuk model DLMS/COSEM dan batas k
 | `AmiSecurityTest` | `test_ami_security.c` | Validasi backend, RNG dan pembersihan buffer, batas nonce/tag AES-GCM, kegagalan backend, serta zeroization saat autentikasi gagal. |
 | `AmiDlmsAssociationTest` | `test_ami_dlms_association.c` | Penerimaan AARQ logical-name no-auth, pembentukan AARE, penolakan AARQ malformed/ber-auth, state transition, dan reset association. |
 | `AmiDlmsApduTest` | `test_ami_dlms_apdu.c` | GET response, Class 7 selective access berdasarkan entry/date-time, penolakan plaintext setelah HLS, global-ciphered GET/SET/Action, key-transfer SAL callback, tag rusak, dan anti-replay. |
+| `AmiDlmsHdlcTest` | `test_ami_dlms_hdlc.c` | Byte-stream parsing buffer tetap, vektor referensi CRC-16 (FCS/HCS), batas alamat SAP, deteksi frame terpangkas/error, serta pembentukan frame SNRM/UA/DISC dan I-Frame. |
 
 Test model dan protokol menggunakan data snapshot development yang diberikan langsung oleh test. Test tidak membuktikan perilaku metrologi hardware maupun komunikasi UART/HDLC.
 
@@ -44,6 +45,7 @@ ctest --test-dir tests/build -R AmiDlmsAssociationTest --verbose
 ctest --test-dir tests/build -R AmiDlmsApduTest --verbose
 ctest --test-dir tests/build -R AmiCosemTest --verbose
 ctest --test-dir tests/build -R AmiSecurityTest --verbose
+ctest --test-dir tests/build -R AmiDlmsHdlcTest --verbose
 ```
 
 Test host terpisah dari build firmware CubeMX. Build firmware tetap dijalankan dari preset/folder build STM32, bukan dari `tests/build`.
