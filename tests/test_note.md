@@ -128,7 +128,7 @@ Pada Spin 2, prototipe berpindah ke papan tegangan penuh (*mains board* 230/400V
     *   Menghubungkan *Secure-world SAL callbacks* dengan hardware crypto accelerator STM32U585 (SAES / PKA) dan Secure Storage TrustZone untuk proteksi KEK/Master Key.
     *   Durable invocation counter storage di non-volatile memory (FRAM) untuk pencegahan *replay attack* permanen pasca power-cycle (*last gasp*).
 *   ⏳ **Week 21–24 (End-to-End Validation pada Mains 3-Phase):**
-    *   Uji baca jarak jauh *end-to-end* via HES / DLMS Client pihak ketiga (Gurux DLMSDirector) melalui optical probe dan RS-485 pada beban aktif 3 fasa.
+    *   Uji baca jarak jauh *end-to-end* via HES / DLMS Client pihak ketiga (Gurux DLMSDirector) melalui optical probe dan RS-232 pada beban aktif 3 fasa.
     *   Verifikasi pembacaan Event Log, Load Profile, dan eksekusi Key Transfer Class 64.
 *   ⏳ **Week 25–26 (Soak Test & Handoff):**
     *   *Feature freeze*, soak test stabilitas komunikasi non-stop, dokumentasi final protokol, dan persiapan uji sertifikasi PLN Pusertif.
