@@ -62,6 +62,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_cosem_model.c
     ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_dlms_association.c
     ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_dlms_apdu.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_dlms_hdlc.c
 )
 
 # Link directories setup
@@ -81,6 +82,7 @@ list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 if((CMAKE_C_STANDARD EQUAL 90) OR (CMAKE_C_STANDARD EQUAL 99))
     message(ERROR "Generated code requires C11 or higher")
 endif()
+
 
 
 

@@ -1,0 +1,55 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 25,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "host-tests",
+            "displayName": "AMI host unit tests",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "host-tests",
+            "configurePreset": "host-tests"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "host-tests",
+            "configurePreset": "host-tests",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ],
+    "workflowPresets": [
+        {
+            "name": "host-tests",
+            "displayName": "Run Full Host CI Workflow",
+            "description": "Configure, Build, and Run CTest in one command",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "host-tests"
+                },
+                {
+                    "type": "build",
+                    "name": "host-tests"
+                },
+                {
+                    "type": "test",
+                    "name": "host-tests"
+                }
+            ]
+        }
+    ]
+}

@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 project(ami_tests C)
 
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
 enable_testing()
 
 set(AMI_INC "${CMAKE_CURRENT_LIST_DIR}/../NonSecure/AMI/Inc")
@@ -31,3 +34,22 @@ add_executable(test_ami_dlms_apdu
     "${AMI_SRC}/ami_cosem_model.c")
 target_include_directories(test_ami_dlms_apdu PRIVATE "${AMI_INC}")
 add_test(NAME AmiDlmsApduTest COMMAND test_ami_dlms_apdu)
+
+add_executable(test_ami_dlms_hdlc
+    test_ami_dlms_hdlc.c
+    "${AMI_SRC}/ami_dlms_hdlc.c")
+target_include_directories(test_ami_dlms_hdlc PRIVATE "${AMI_INC}")
+add_test(NAME AmiDlmsHdlcTest COMMAND test_ami_dlms_hdlc)
+
+add_executable(gurux_simulator
+    gurux_simulator.c
+    "${AMI_SRC}/ami_dlms_hdlc.c"
+    "${AMI_SRC}/ami_dlms_association.c"
+    "${AMI_SRC}/ami_dlms_apdu.c"
+    "${AMI_SRC}/ami_cosem_model.c")
+target_include_directories(gurux_simulator PRIVATE "${AMI_INC}")
+set_target_properties(gurux_simulator PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/host-tools")
+if(WIN32)
+    target_link_libraries(gurux_simulator PRIVATE ws2_32)
+endif()

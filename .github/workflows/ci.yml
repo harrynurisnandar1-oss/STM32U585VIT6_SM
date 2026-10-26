@@ -1,4 +1,4 @@
-name: Host CMake and CTest
+name: Host Unit Tests CI
 
 on:
   push:
@@ -9,21 +9,21 @@ permissions:
   contents: read
 
 jobs:
-  host-tests:
-    name: Build and run host tests
+  host-tests-linux:
+    name: Host Tests (Ubuntu Linux)
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Install host build tools
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends cmake ninja-build build-essential
 
-      - name: Configure test targets
+      - name: Configure CMake
         run: cmake -S tests -B build/host-tests -G Ninja -DCMAKE_BUILD_TYPE=Debug
 
       - name: Build test targets
@@ -31,3 +31,22 @@ jobs:
 
       - name: Run CTest
         run: ctest --test-dir build/host-tests --output-on-failure
+
+  host-tests-windows:
+    name: Host Tests (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: cmake -S tests -B build/host-tests -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build test targets
+        run: cmake --build build/host-tests --config Debug --parallel
+
+      - name: Run CTest
+        run: ctest --test-dir build/host-tests -C Debug --output-on-failure
+
