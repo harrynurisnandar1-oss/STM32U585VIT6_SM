@@ -240,3 +240,34 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 - **Sinkronisasi Direktori Output Build (`binaryDir`)**:
   - Menyelaraskan `binaryDir` pada `CMakePresets.json` ke `${sourceDir}/build` agar seragam dengan target path pada `tasks.json` dan `launch.json`.
 
+
+## [v2.2.0] - 2026-10-26
+
+### Added
+- **Multi-Pipeline Continuous Integration (CI) Architecture (`.github/workflows/`)**:
+  - **`windows-ci.yml`**: Pipeline khusus untuk pengujian dan build aplikasi native Windows (`runs-on: windows-latest`) menggunakan CMake dan Ninja, menjalankan eksekusi menyeluruh pada seluruh suite CTest host dan `gurux_simulator.exe`.
+  - **`stm32u585-freertos-ci.yml`**: Pipeline cross-compilation embedded untuk target arsitektur ARM Cortex-M33 (STM32U585) dengan FreeRTOS. Mengompilasi multi-context TrustZone (`Secure` dan `NonSecure`), memverifikasi konsumsi memori footprint (`arm-none-eabi-size`), dan mengunggah artefak binary firmware (`.elf`, `.bin`, `.hex`, `.map`).
+  - **`cpp-analysis.yml`**: Pipeline analisis statis dan audit keamanan kode otomatis menggunakan GitHub CodeQL (`security-extended` & `security-and-quality`) untuk mendeteksi memory leak, buffer overflow, boundary check error, serta potensi celah keamanan logika pada implementasi protokol DLMS/COSEM dan HDLC framing.
+
+### Fixed
+- **Resolusi Header Missing `math.h` pada Embedded ARM Toolchain (`stm32u585-freertos-ci.yml`)**:
+  - Memperbaiki kegagalan preprocessor `fatal error: math.h: No such file or directory` pada saat mengompilasi HAL driver STM32 (`stm32u5xx_hal_def.h`).
+  - Menginstal paket C standard library target ARM Newlib (`libnewlib-arm-none-eabi` dan `libstdc++-arm-none-eabi-newlib`) bersamaan dengan `gcc-arm-none-eabi` pada runner Ubuntu, sehingga seluruh header C runtime standar dan library `libm.a` tersedia secara lengkap dan deterministik.
+- **Koreksi Multi-Context Artifact Paths**:
+  - Menyesuaikan jalur pengumpulan artefak firmware pada runner CI agar mengambil file hasil build dari direktori TrustZone `Secure/build/` dan `NonSecure/build/` sesuai struktur `ExternalProject_Add` STM32CubeMX.
+
+## [v2.2.0] - 2026-10-26
+
+### Added
+- **Multi-Pipeline Continuous Integration (CI) Architecture (`.github/workflows/`)**:
+  - **`windows-ci.yml`**: Pipeline khusus untuk pengujian dan build aplikasi native Windows (`runs-on: windows-latest`) menggunakan CMake dan Ninja, menjalankan eksekusi menyeluruh pada seluruh suite CTest host dan `gurux_simulator.exe`.
+  - **`stm32u585-freertos-ci.yml`**: Pipeline cross-compilation embedded untuk target arsitektur ARM Cortex-M33 (STM32U585) dengan FreeRTOS. Mengompilasi multi-context TrustZone (`Secure` dan `NonSecure`), memverifikasi konsumsi memori footprint (`arm-none-eabi-size`), dan mengunggah artefak binary firmware (`.elf`, `.bin`, `.hex`, `.map`).
+  - **`cpp-analysis.yml`**: Pipeline analisis statis dan audit keamanan kode otomatis menggunakan GitHub CodeQL (`security-extended` & `security-and-quality`) untuk mendeteksi memory leak, buffer overflow, boundary check error, serta potensi celah keamanan logika pada implementasi protokol DLMS/COSEM dan HDLC framing.
+
+### Fixed
+- **Resolusi Header Missing `math.h` pada Embedded ARM Toolchain (`stm32u585-freertos-ci.yml`)**:
+  - Memperbaiki kegagalan preprocessor `fatal error: math.h: No such file or directory` pada saat mengompilasi HAL driver STM32 (`stm32u5xx_hal_def.h`).
+  - Menginstal paket C standard library target ARM Newlib (`libnewlib-arm-none-eabi` dan `libstdc++-arm-none-eabi-newlib`) bersamaan dengan `gcc-arm-none-eabi` pada runner Ubuntu, sehingga seluruh header C runtime standar dan library `libm.a` tersedia secara lengkap dan deterministik.
+- **Koreksi Multi-Context Artifact Paths**:
+  - Menyesuaikan jalur pengumpulan artefak firmware pada runner CI agar mengambil file hasil build dari direktori TrustZone `Secure/build/` dan `NonSecure/build/` sesuai struktur `ExternalProject_Add` STM32CubeMX.
+
