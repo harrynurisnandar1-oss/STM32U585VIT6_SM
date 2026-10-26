@@ -25,14 +25,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends ninja-build
 
-      - name: Install ARM GNU Embedded Toolchain (gcc-arm-none-eabi)
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends gcc-arm-none-eabi
+      - name: Install ARM GNU Embedded Toolchain & C Standard Libraries (Newlib)
+        uses: arm-software/setup-arm-toolchain@v1
+        with:
+          arm-version: '13.3.rel1'
 
-      - name: Verify Arm Toolchain Installation
+      - name: Verify Arm Toolchain & Libc Installation
         run: |
           arm-none-eabi-gcc --version
+          arm-none-eabi-gcc -print-file-name=include/math.h
 
       - name: Configure CMake with ARM Toolchain Preset
         run: |
@@ -44,7 +45,8 @@ jobs:
 
       - name: Display Memory Footprint (Size)
         run: |
-          arm-none-eabi-size build/Debug/*.elf || echo "Checking ELF outputs..."
+          arm-none-eabi-size Secure/build/STM32U585VIT6_SM_S.elf || true
+          arm-none-eabi-size NonSecure/build/STM32U585VIT6_SM_NS.elf || true
 
       - name: Upload Firmware Artifacts
         uses: actions/upload-artifact@v4
@@ -52,9 +54,12 @@ jobs:
         with:
           name: stm32u585-freertos-firmware-debug
           path: |
-            build/Debug/*.elf
-            build/Debug/*.bin
-            build/Debug/*.hex
-            build/Debug/*.map
+            Secure/build/*.elf
+            Secure/build/*.bin
+            Secure/build/*.hex
+            Secure/build/*.map
+            NonSecure/build/*.elf
+            NonSecure/build/*.bin
+            NonSecure/build/*.hex
+            NonSecure/build/*.map
           retention-days: 7
-
