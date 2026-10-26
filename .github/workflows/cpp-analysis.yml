@@ -1,10 +1,6 @@
 name: C/C++ CodeQL Static Analysis
 
 on:
-  push:
-    branches: [ "main", "master"]
-  pull_request:
-    branches: [ "main", "master"]
   schedule:
     # Menjalankan pemindaian otomatis setiap hari Senin pukul 02:00 UTC
     - cron: '0 2 * * 1'
