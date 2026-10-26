@@ -2,9 +2,9 @@ name: STM32U585 FreeRTOS Firmware CI
 
 on:
   push:
-    branches: [ "main", "master", "develop" ]
+    branches: [ "main", "master", ]
   pull_request:
-    branches: [ "main", "master", "develop" ]
+    branches: [ "main", "master", ]
   workflow_dispatch:
 
 permissions:
@@ -20,15 +20,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install Ninja build tool
+      - name: Install Build Tools & ARM Toolchain with Standard C Libraries (Newlib)
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends ninja-build
-
-      - name: Install ARM GNU Embedded Toolchain & C Standard Libraries (Newlib)
-        uses: arm-software/setup-arm-toolchain@v1
-        with:
-          arm-version: '13.3.rel1'
+          sudo apt-get install --yes --no-install-recommends \
+            ninja-build \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            libstdc++-arm-none-eabi-newlib
 
       - name: Verify Arm Toolchain & Libc Installation
         run: |
