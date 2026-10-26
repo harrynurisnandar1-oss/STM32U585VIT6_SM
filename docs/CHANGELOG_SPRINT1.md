@@ -73,7 +73,7 @@ These checks validate host logic only; they do not validate FreeRTOS scheduling,
 ### Scope notes
 
 - This adds basic full-buffer reads only. Selective access by entry range or date range, profile capture/reset methods, persistent storage, and a FreeRTOS producer task are not implemented in this slice.
-- Class 7 A-XDR encoding and the configured billing OBIS must be reviewed against the controlled IEC 62056 and product/SPLN profile editions. This change alone does not establish DLMS conformance.
+- Class 7 A-XDR encoding and the configured billing OBIS must be reviewed against the controlled IEC 62056 and product/SPLN profile editions. This change alone does not establish DLMS conformancee.
 
 ## [v1.4.0] Added 12/10/2026
 
