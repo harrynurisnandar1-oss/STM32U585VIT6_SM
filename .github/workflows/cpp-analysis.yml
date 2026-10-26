@@ -1,0 +1,48 @@
+name: C/C++ CodeQL Static Analysis
+
+on:
+  push:
+    branches: [ "main", "master", "develop" ]
+  pull_request:
+    branches: [ "main", "master", "develop" ]
+  schedule:
+    # Menjalankan pemindaian otomatis setiap hari Senin pukul 02:00 UTC
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: CodeQL Security & Logical Bug Scan (C/C++)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Host Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends cmake ninja-build build-essential
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: c-cpp
+          queries: security-extended,security-and-quality
+
+      - name: Build Codebase for CodeQL Tracing
+        run: |
+          # Mengompilasi host test suite dan model protokol DLMS/COSEM/HDLC agar seluruh AST tertangkap CodeQL
+          cmake -S tests -B tests/build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          cmake --build tests/build --parallel
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:c-cpp"
+

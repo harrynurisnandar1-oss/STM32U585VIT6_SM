@@ -1,0 +1,60 @@
+name: STM32U585 FreeRTOS Firmware CI
+
+on:
+  push:
+    branches: [ "main", "master", "develop" ]
+  pull_request:
+    branches: [ "main", "master", "develop" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-arm-cortex-m33:
+    name: Build Embedded Firmware (Cortex-M33 / FreeRTOS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Ninja build tool
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ninja-build
+
+      - name: Install ARM GNU Embedded Toolchain (gcc-arm-none-eabi)
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends gcc-arm-none-eabi
+
+      - name: Verify Arm Toolchain Installation
+        run: |
+          arm-none-eabi-gcc --version
+
+      - name: Configure CMake with ARM Toolchain Preset
+        run: |
+          cmake --preset Debug
+
+      - name: Build Firmware
+        run: |
+          cmake --build --preset Debug --parallel
+
+      - name: Display Memory Footprint (Size)
+        run: |
+          arm-none-eabi-size build/Debug/*.elf || echo "Checking ELF outputs..."
+
+      - name: Upload Firmware Artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: stm32u585-freertos-firmware-debug
+          path: |
+            build/Debug/*.elf
+            build/Debug/*.bin
+            build/Debug/*.hex
+            build/Debug/*.map
+          retention-days: 7
+

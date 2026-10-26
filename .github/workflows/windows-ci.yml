@@ -1,0 +1,39 @@
+name: Windows Native CI
+
+on:
+  push:
+    branches: [ "main", "master", "develop" ]
+  pull_request:
+    branches: [ "main", "master", "develop" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-build-and-test:
+    name: Build & Test Native Windows
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Setup Ninja
+        uses: ashutoshvarma/setup-ninja@v1.1
+        with:
+          version: 1.11.1
+
+      - name: Configure CMake (Host Unit Tests & Tools)
+        run: |
+          cmake -S tests -B tests/build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build Host Tests and Gurux Simulator
+        run: |
+          cmake --build tests/build --parallel
+
+      - name: Run CTest Suite
+        run: |
+          ctest --test-dir tests/build --output-on-failure --verbose
+
