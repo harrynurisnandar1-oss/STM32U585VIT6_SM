@@ -1,4 +1,4 @@
-# Unit Testing AMI Smart Meter
+﻿# Unit Testing AMI Smart Meter
 
 ## Gurux raw HDLC host harness
 
@@ -64,22 +64,21 @@ Root proyek memiliki `CMakeLists.txt` CubeMX untuk firmware STM32 dan toolchain 
 
 Jika preset tidak muncul, pastikan versi CMake dapat membaca Presets versi 3 (CMake 3.21+), extension CMake Tools sudah aktif, lalu jalankan `CMake: Delete Cache and Reconfigure`. `tests/CMakePresets.json` menggunakan Ninja; pasang Ninja atau ubah preset ke generator host yang tersedia. Untuk kembali membangun firmware CubeMX dari extension, ubah `cmake.sourceDirectory` ke `${workspaceFolder}` dan pilih preset firmware `Debug`.
 
-## GitHub Actions (Continuous Integration)
+## GitHub Actions (Continuous Integration Pipelines)
 
-Workflow CI (`.github/workflows/ci.yml`) berfungsi sebagai **gerbang verifikasi otomatis (Quality Gate)** untuk memastikan integritas logika protokol dan keamanan tidak rusak saat ada perubahan kode:
+Proyek ini dilengkapi dengan 4 pipeline workflow terdedikasi di .github/workflows/ sebagai gerbang kendali mutu (*Quality Gate*) otomatis:
 
-1. **Trigger Otomatis**:
-   - Berjalan otomatis setiap kali ada `git push` ke cabang utama atau pembukaan `pull_request`, serta dapat dipicu manual melalui `workflow_dispatch`.
-2. **Pengujian Multi-Platform Paralel**:
-   - **`host-tests-linux` (`ubuntu-latest`)**: Memverifikasi kompilasi GCC/Clang dan eksekusi CTest di lingkungan Linux.
-   - **`host-tests-windows` (`windows-latest`)**: Memverifikasi kompilasi MSVC/Windows runtime untuk memastikan kompatibilitas lingkungan PC developer.
-3. **Fungsi & Manfaat Utama Pengujian di GitHub**:
-   - **Mencegah Regresi (Regression Guard)**: Memastikan perubahan logika parser HDLC atau APDU tidak merusak suite pengujian yang sudah lulus.
-   - **Verifikasi Tanpa Hardware**: Memungkinkan tim memvalidasi logika DLMS/COSEM, ciphering Suite 0, anti-replay, dan framing HDLC tanpa memerlukan board STM32 fisik.
-   - **Standar Kolaborasi Tim**: Setiap pull request wajib berstatus hijau (*passed 5/5 suite test*) sebelum di-merge ke branch utama.
-   - **Deteksi Dini Memory Leak / Buffer Overflow**: Menangkap kegagalan boundary data, CRC error, dan eksploitasi framing langsung di pipeline cloud.
+| Workflow File | Runner | Lingkup & Fungsi Utama |
+|---|---|---|
+| **windows-ci.yml** | windows-latest | Build & pengujian aplikasi native Windows host menggunakan Ninja & MSVC. Menjalankan seluruh 5/5 CTest suite dan kompilasi gurux_simulator.exe. |
+| **stm32u585-freertos-ci.yml** | ubuntu-latest | Cross-compilation embedded Cortex-M33 (STM32U585) dengan FreeRTOS. Menggunakan gcc-arm-none-eabi + libnewlib-arm-none-eabi (math.h/libc lengkap), mengompilasi TrustZone Secure & NonSecure, memverifikasi konsumsi memori footprint (rm-none-eabi-size), dan menyimpan artefak firmware (.elf, .bin, .hex, .map). |
+| **cpp-analysis.yml** | ubuntu-latest | Analisis statis dan audit keamanan kode otomatis dengan **GitHub CodeQL** (security-extended & security-and-quality) untuk mendeteksi memory leak, buffer overflow, dan celah logika. |
+| **ci.yml** | ubuntu-latest & windows-latest | Dual-platform host regression test runner cepat untuk setiap push dan pull request. |
 
-
+### Manfaat & Keunggulan Pipeline CI:
+1. **Pencegahan Regresi Otomatis (*Regression Guard*)**: Setiap perubahan kode di-parse dan diuji secara instan terhadap 5 test suite DLMS/COSEM/HDLC.
+2. **Kompilasi Firmware Deterministik**: Memverifikasi bahwa firmware mikrokontroler STM32U585 selalu berhasil di-build tanpa missing header library (math.h) atau linker script error sebelum di-flash ke hardware fisik.
+3. **Audit Keamanan Otomatis**: Analisis CodeQL memastikan kode parser dan kriptografi bebas dari kerentanan keamanan memori sebelum deployment.
 
 Baik, jika kita menyaring jadwal **Spin 1 (Weeks 1–10)** *hanya* khusus untuk *scope* pekerjaan **E2 (Protocol & Data Model) + Security**, maka tampilannya akan menjadi jauh lebih fokus pada standar komunikasi dan keamanan data.
 
