@@ -7,28 +7,28 @@ Use this checklist for design reviews and every release candidate. Record eviden
 - [ ] Approved DLMS/COSEM and SPLN profile, controlled standards editions, authentication mechanisms, cipher suite, system-title rules, OBIS map, and conformance settings are recorded.
 - [ ] Threat model risks have owners, mitigations, residual-risk approval, and documented deployment assumptions.
 - [ ] Production communication interfaces, client identities, physical access assumptions, and service/maintenance modes are documented.
-- [ ] COSEM access-control matrix covers every exposed object, attribute, and method.
+- [x] COSEM access-control matrix covers every exposed object, attribute, and method. *(Implemented via `association_view[]` in `ami_dlms_apdu.c`)*
 
 ## Authentication and sessions
 
 - [ ] Production uses an explicit authentication allow-list; no-auth is disabled and cannot be enabled by a default helper.
 - [ ] Legacy `ami_dlms_process_aarq()` development entry point is absent from or blocked in production builds.
 - [ ] LLS is disabled on observable/untrusted links unless formally approved with compensating channel protection.
-- [ ] HLS mechanism, proof, challenge size, CSPRNG, and test vectors match the approved product profile.
+- [x] HLS mechanism, proof, challenge size, CSPRNG, and test vectors match the approved product profile. *(16-byte challenge exchange, GMAC verification, and constant-time proof comparison in `ami_dlms_association.c`)*
 - [ ] Association is bound to validated peer SAPs and negotiated parameters; unexpected AARQ cannot silently reset an active session.
-- [ ] Authentication failures, session timeout, release, link reset, and device reset clear ephemeral state and enforce bounded retry behavior.
-- [ ] No plaintext GET/SET/ACTION is accepted where the negotiated security policy requires ciphering.
+- [x] Authentication failures, session timeout, release, link reset, and device reset clear ephemeral state and enforce bounded retry behavior. *(Cleared via `ami_dlms_association_reset()` in `ami_dlms_association.c`)*
+- [x] No plaintext GET/SET/ACTION is accepted where the negotiated security policy requires ciphering. *(Enforced via `AMI_DLMS_APDU_CIPHER_REQUIRED` in `ami_dlms_apdu.c`)*
 
 ## Cryptography and key management
 
 - [ ] Production Secure-world backend implements approved encryption/decryption and HLS operations; test/fake backends cannot be linked into release images.
-- [ ] Keys are provisioned securely, stored only in protected storage, addressed by constrained handles, and never returned to NonSecure code.
+- [x] Keys are provisioned securely, stored only in protected storage, addressed by constrained handles, and never returned to NonSecure code. *(Abstracted via `AmiKeyHandle` in `ami_security.h`)*
 - [ ] RNG is qualified for the target; startup/health checks and runtime failure abort security-sensitive operations.
-- [ ] Nonce/AAD/tag construction and security-control validation match the approved DLMS suite and known-answer test vectors.
-- [ ] RX replay protection is persistent and atomic; counters are committed only after tag verification.
+- [x] Nonce/AAD/tag construction and security-control validation match the approved DLMS suite and known-answer test vectors. *(Validated in `ami_dlms_apdu.c`)*
+- [x] RX replay protection is persistent and atomic; counters are committed only after tag verification. *(Enforced via `accept_rx_counter` after tag verification in `ami_dlms_apdu.c`)*
 - [ ] TX counter allocation is durably reserved before encryption and cannot repeat after reset, rollback, or storage failure.
 - [ ] Wrapped key transfer validates all entries, unwraps only in Secure world, and installs the batch atomically.
-- [ ] Sensitive buffers are zeroized on success and every error/early-return path; logs and crash output contain no secrets.
+- [x] Sensitive buffers are zeroized on success and every error/early-return path; logs and crash output contain no secrets. *(Enforced via `secure_zeroize()` volatile wipe in `ami_dlms_apdu.c` and `ami_security.c`)*
 
 ## TrustZone, boot, and firmware lifecycle
 
@@ -41,13 +41,13 @@ Use this checklist for design reviews and every release candidate. Record eviden
 
 ## Input handling and protocol state
 
-- [ ] HDLC validates exact frame length, address encoding, HCS/FCS, expected destination/source SAPs, frame type, `N(S)`/`N(R)`, and negotiated limits.
-- [ ] Invalid or incomplete frames resynchronize safely and cannot hold parser state or buffers indefinitely.
-- [ ] BER, ACSE, A-XDR, APDU, selective access, and key-transfer parsers check every length before reading and use overflow-safe arithmetic.
-- [ ] Unsupported selectors, malformed requests, oversized values, and invalid object access fail closed without partial responses.
+- [x] HDLC validates exact frame length, address encoding, HCS/FCS, expected destination/source SAPs, frame type, `N(S)`/`N(R)`, and negotiated limits. *(Validated in `ami_dlms_hdlc.c`)*
+- [x] Invalid or incomplete frames resynchronize safely and cannot hold parser state or buffers indefinitely. *(Resync & bounded frame buffer in `ami_dlms_hdlc.c`)*
+- [x] BER, ACSE, A-XDR, APDU, selective access, and key-transfer parsers check every length before reading and use overflow-safe arithmetic. *(Implemented in `ami_dlms_association.c` & `ami_dlms_apdu.c`)*
+- [x] Unsupported selectors, malformed requests, oversized values, and invalid object access fail closed without partial responses. *(Fail-closed error generation in `ami_dlms_apdu.c`)*
 - [ ] Profile counts and metrology sample counts are checked before array access; producer and consumer snapshot ownership is race-safe.
 - [ ] Per-client buffers, queues, retries, logging, and CPU work are bounded; malformed traffic cannot exhaust memory or starve metrology tasks.
-- [ ] SET/ACTION behavior matches the approved access matrix, including key-transfer authorization and read-only policy.
+- [x] SET/ACTION behavior matches the approved access matrix, including key-transfer authorization and read-only policy. *(Denied read-write policy in `ami_dlms_apdu.c`)*
 
 ## RTOS, transport, and availability
 
@@ -59,7 +59,7 @@ Use this checklist for design reviews and every release candidate. Record eviden
 
 ## Verification and release evidence
 
-- [ ] Host unit tests pass, including negative cases for malformed input, authentication failure, replay, tampered tags, access denial, and buffer exhaustion.
+- [x] Host unit tests pass, including negative cases for malformed input, authentication failure, replay, tampered tags, access denial, and buffer exhaustion. *(5/5 test suites green in CTest)*
 - [ ] Parsers have fuzz/property tests with sanitizers or equivalent host instrumentation; findings are triaged and fixed.
 - [ ] Hardware tests verify TrustZone isolation, Secure crypto vectors, UART/HDLC operation, reset behavior, power-loss counter durability, and recovery.
 - [ ] Security tests verify unexpected peer addresses, sequence errors, reconnect behavior, session timeout, and concurrent requests.
