@@ -313,8 +313,8 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 ## [v2.4.0] - 2026-10-28
 
 ### Added
-- **Katalog Lengkap Kode OBIS SPLN D3.002:2021 (`NonSecure/AMI/Inc/ami_obis_catalog.h`)**:
-  - Mengintegrasikan seluruh 276 kode OBIS objek DLMS/COSEM dari dokumen spesifikasi teknis PLN (`dokumen_PLN/refrence/obis.md`) ke dalam header C standar.
+- **Katalog Lengkap Kode OBIS SPLN D3.006:2021 (`NonSecure/AMI/Inc/ami_obis_catalog.h`)**:
+  - Mengintegrasikan seluruh 276 kode OBIS objek DLMS/COSEM dari dokumen spesifikasi teknis PLN ke dalam header C standar.
   - Setiap kode OBIS didefinisikan sebagai macro C berupa 6 octet array `{A, B, C, D, E, F}` lengkap dengan metadata keterangan nama objek, class ID COSEM, dan representasi notasi desimal OBIS (`A.B.C.D.E.F`).
   - Mengelompokkan seluruh 276 kode OBIS ke dalam 22 kategori fungsional terstruktur:
     1. Meter Identification & Device Information (Tipe meter, Meter ID, HW/SW version, Pelanggan ID, Unit PLN ID, Mode ekspor-impor, LDN).
