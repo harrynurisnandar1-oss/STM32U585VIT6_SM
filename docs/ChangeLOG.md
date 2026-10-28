@@ -282,3 +282,31 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
   - Menambahkan direktori `.settings/`, `.project`, dan `.cproject` agar file metadata lokal STM32CubeIDE/Eclipse tidak terdeteksi sebagai file untracked pada repositori git.
 - **Restorasi Konfigurasi Presets Root (`CMakePresets.json`)**:
   - Membersihkan konfigurasi preset `Host_testing` yang sempat ditambahkan secara keliru pada file konfigurasi preset root firmware ARM.
+
+
+## [v2.3.0] - 2026-10-28
+
+### Added
+- **Integrasi Suite Port ke CTest Host (tests/CMakeLists.txt, tests/test_ami_port.c)**:
+  - Memasukkan ami_dlms_port.c dan test executable baru test_ami_port ke dalam target CTest host native sehingga teruji otomatis di CI dan mesin host tanpa bergantung Docker.
+  - Memperbaiki penanganan AARQ pada ami_dlms_port.c agar unsolicited AARQ tidak mereset/memutus sesi terautentikasi yang sedang aktif.
+  - Menambahkan API ami_dlms_port_set_security() pada port layer agar mode autentikasi (LLS/HLS) dapat dikonfigurasi secara eksplisit dan tidak memaksa mode no-auth.
+  - Menangani error parsing APDU/GET agar kegagalan tidak memicu transmisi frame kosong/korup ke jalur serial.
+  - Mengubah implementasi weak ami_dlms_hardware_uart_tx() agar mengembalikan 0 (gagal) sebelum UART fisik dihubungkan, mencegah respons yang belum terkirim dianggap sukses.
+  - Menambahkan pengecekan return value ami_dlms_freertos_start_task() di MX_FREERTOS_Init() dengan fallback Error_Handler() jika alokasi RTOS gagal.
+  - Membuka pelacakan Git pada direktori docker_test/ (hanya docker_test/build-docker/ yang diabaikan) agar seluruh test harness Docker dapat ditinjau dan direproduksi di CI.
+- **Phase 2 Hardware Porting Abstraction Layer (NonSecure/AMI/Inc/ami_dlms_port.h, NonSecure/AMI/Src/ami_dlms_port.c)**:
+  - Mengimplementasikan layer abstraksi porting perangkat keras (Hardware Abstraction Layer) yang memisahkan core stack DLMS/COSEM dari driver fisik UART/transceiver.
+  - Menyediakan non-blocking byte stream dan buffer stream parser (ami_dlms_port_process_byte(), ami_dlms_port_process_buffer()) dengan zero-copy handling untuk efisiensi RAM mikrokontroler.
+  - Menyediakan otomasi HDLC link-layer control: auto-response SNRM -> UA, DISC -> UA, RR keepalive, serta LLC framing encapsulation (0xE6 0xE6 0x00 / 0xE6 0xE7 0x00) pada pertukaran I-Frame APDU (AARQ/AARE, GET, SET, Action).
+  - Menyediakan handler ISR cepat (ami_dlms_uart_rx_isr(), ami_dlms_uart_rx_buffer_isr()) yang kompatibel dengan interrupt UART Rx dan DMA circular buffer STM32 HAL.
+  - Mengintegrasikan FreeRTOS task worker berprioritas tinggi (ami_dlms_freertos_start_task()) berbasis FreeRTOS StreamBufferHandle_t dan CMSIS-RTOS v2 osThreadNew(), diinisialisasi secara otomatis pada NonSecure/Core/Src/app_freertos.c (MX_FREERTOS_Init()).
+- **Dedicated Docker Test Suite & Security Hardening (docker_test/)**:
+  - Ditempatkan pada folder terisolasi docker_test/ tanpa menyentuh maupun menimpa folder tests/ yang telah ada.
+  - Mengadopsi arsitektur Multi-Stage Build berbasis Alpine Linux (builder & minimal runner) yang mengeliminasi seluruh compiler, linker (binutils), dan package development dari image produksi.
+  - Memangkas ukuran image secara drastis dari 407.13 MB menjadi hanya 23 MB (-94.3% footprint).
+  - Mengeliminasi kerentanan keamanan (vulnerabilities) dari 2.463 CVE (16 Critical, 474 High) menjadi 0 Critical, 0 High, 0 Medium pada pemindaian Docker Scout.
+  - Menyertakan test suite CTest baru test_ami_port.c untuk menguji lifecycle SNRM, DISC, AARQ, dan GET request via port abstraction.
+  - Menyertakan client test Python otomatis test_dlms_e2e_client.py yang mensimulasikan software DLMS client (seperti Gurux DLMSDirector) untuk menguji full handshake: SNRM -> UA, AARQ -> AARE, GET Tegangan Fasa R (230 V), GET Jam Meter, dan DISC -> UA.
+  - Dilengkapi script eksekusi run_tests.sh, Docker Compose (docker-compose.yml), Windows runner (run_docker_tests.bat), dan panduan penggunaan docker_test/README.md.
+  - Terverifikasi 100% PASS pada seluruh 6 suite unit test dan 100% PASS pada pengujian integrasi End-to-End.

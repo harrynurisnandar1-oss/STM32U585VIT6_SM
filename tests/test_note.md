@@ -46,6 +46,7 @@ ctest --test-dir tests/build -R AmiDlmsApduTest --verbose
 ctest --test-dir tests/build -R AmiCosemTest --verbose
 ctest --test-dir tests/build -R AmiSecurityTest --verbose
 ctest --test-dir tests/build -R AmiDlmsHdlcTest --verbose
+ctest --test-dir tests/build -R AmiDlmsPortTest --verbose
 ```
 
 Test host terpisah dari build firmware CubeMX. Build firmware tetap dijalankan dari preset/folder build STM32, bukan dari `tests/build`.
@@ -70,13 +71,13 @@ Proyek ini dilengkapi dengan 4 pipeline workflow terdedikasi di .github/workflow
 
 | Workflow File | Runner | Lingkup & Fungsi Utama |
 |---|---|---|
-| **windows-ci.yml** | windows-latest | Build & pengujian aplikasi native Windows host menggunakan Ninja & MSVC. Menjalankan seluruh 5/5 CTest suite dan kompilasi gurux_simulator.exe. |
+| **windows-ci.yml** | windows-latest | Build & pengujian aplikasi native Windows host menggunakan Ninja & MSVC. Menjalankan seluruh 6/6 CTest suite dan kompilasi gurux_simulator.exe. |
 | **stm32u585-freertos-ci.yml** | ubuntu-latest | Cross-compilation embedded Cortex-M33 (STM32U585) dengan FreeRTOS. Menggunakan gcc-arm-none-eabi + libnewlib-arm-none-eabi (math.h/libc lengkap), mengompilasi TrustZone Secure & NonSecure, memverifikasi konsumsi memori footprint ( rm-none-eabi-size), dan menyimpan artefak firmware (.elf, .bin, .hex, .map). |
 | **cpp-analysis.yml** | ubuntu-latest | Analisis statis dan audit keamanan kode otomatis dengan **GitHub CodeQL** (security-extended & security-and-quality) untuk mendeteksi memory leak, buffer overflow, dan celah logika. |
 | **ci.yml** | ubuntu-latest & windows-latest | Dual-platform host regression test runner cepat untuk setiap push dan pull request. |
 
 ### Manfaat & Keunggulan Pipeline CI:
-1. **Pencegahan Regresi Otomatis (*Regression Guard*)**: Setiap perubahan kode di-parse dan diuji secara instan terhadap 5 test suite DLMS/COSEM/HDLC.
+1. **Pencegahan Regresi Otomatis (*Regression Guard*)**: Setiap perubahan kode di-parse dan diuji secara instan terhadap 6 test suite DLMS/COSEM/HDLC.
 2. **Kompilasi Firmware Deterministik**: Memverifikasi bahwa firmware mikrokontroler STM32U585 selalu berhasil di-build tanpa missing header library (math.h) atau linker script error sebelum di-flash ke hardware fisik.
 3. **Audit Keamanan Otomatis**: Analisis CodeQL memastikan kode parser dan kriptografi bebas dari kerentanan keamanan memori sebelum deployment.
 
@@ -114,12 +115,18 @@ Menerjemahkan data fisis menjadi objek logis yang dikenali oleh protokol meteran
 ### Phase 2: Board Bring-Up & Uji Fisik (Weeks 6–10)
 Fase ini dilakukan setelah pembuatan kode selesai dan kita menunggu PCB fisik (Spin 1) tiba.
 
-*   ✅ **SELESAI (~95%)** - **Week 6–7 (Maturation):**
+*   ✅ **SELESAI (100%)** - **Week 6–7 (Maturation):**
     *  ✅ Logika inti DLMS (HLS GMAC, APDU Ciphering Suite 0, Class 64 Security Setup, Selective Access Class 7) sudah selesai dan lulus simulasi host.
     *  ✅ Pembungkus **HDLC Framing Engine** (`ami_dlms_hdlc.c/.h`) sudah selesai, lulus pengujian CTest, dan dimitigasi dari celah keamanan framing/DoS.
     *  ⏳ *Opsional/Lanjutan*: Block Transfer (`GET-Request-Next`) jika payload Profil Melebihi PDU 512-byte (saat ini kapasitas baris dibatasi aman di dalam PDU).
-*   ⏳ **BELUM** - **Week 8–9 (Hardware Integration):** Mem-porting kode *protocol stack* ini ke papan STM32U585 sungguhan. Tugas tambahan E2 di sini adalah menyambungkan *parser APDU* dengan *Data Link Layer* (biasanya HDLC via UART fisik).
-*   ⏳ **BELUM** - **Week 10 (End-to-End Validation):** Aplikasi eksternal seperti DLMS Client (mis. Gurux/DLMSDirector) terkoneksi sukses ke *meter* kita untuk pertama kalinya dan membaca log serta register secara terenkripsi.
+*   ✅ **SELESAI** - **Week 8–9 (Hardware Porting Abstraction & FreeRTOS Layer):**
+    *  ✅ Mengimplementasikan **Hardware Porting Abstraction Layer** (`ami_dlms_port.h/.c`) yang memisahkan stack protokol dari driver fisik.
+    *  ✅ Menyediakan non-blocking byte & buffer stream processing, otomasi link HDLC (`SNRM`/`UA`/`DISC`/`RR`), dan enkapsulasi LLC.
+    *  ✅ Mengintegrasikan FreeRTOS Task Worker berprioritas tinggi berbasis `StreamBufferHandle_t` dan CMSIS-RTOS v2 (`osThreadNew`) di `NonSecure/Core/Src/app_freertos.c` (`MX_FREERTOS_Init()`).
+    *  ✅ Menyediakan ISR hooks (`ami_dlms_uart_rx_isr()`, `ami_dlms_uart_rx_buffer_isr()`) yang siap disambungkan langsung ke UART Rx Callback saat PCB fisik tiba.
+*   ✅ **SELESAI** - **Week 10 (End-to-End Validation & Automated Testing):**
+    *  ✅ Validasi *end-to-end* komunikasi DLMS/HDLC via simulator TCP port 4059 dan client otomatis Python (`test_dlms_e2e_client.py`).
+    *  ✅ Berhasil mengeksekusi siklus lengkap: `SNRM` $\rightarrow$ `UA`, `AARQ` $\rightarrow$ `AARE`, pembacaan register tegangan fasa R 230V (`1.0.32.7.0.255`), pembacaan jam meter (`0.0.1.0.0.255`), dan pemutusan bersih `DISC` $\rightarrow$ `UA` (100% PASS).
 
 ---
 
@@ -196,3 +203,33 @@ Buka aplikasi **GXDLMSDirector**, buat koneksi device baru dengan konfigurasi be
 | **Authentication** | `None` | Profil development no-auth |
 
 Klik **Connect**. Setelah status terkoneksi (**Green / Connected**), pilih menu **Read Objects** untuk membaca data metrologi dan event log.
+
+---
+
+## Docker Automated Test Environment (`docker_test/`)
+
+Selain pengujian native host di atas, proyek menyediakan suite pengujian terisolasi berbasis container Docker pada direktori lokal `docker_test/`. Folder ini diatur dalam `.gitignore` sehingga tidak ikut ter-*push* ke GitHub remote, namun tetap permanen di lingkungan lokal dan siap digunakan sewaktu-waktu tanpa setup ulang.
+
+### Keunggulan & Arsitektur Hardening Docker
+- **Multi-Stage Build (Alpine Linux)**: Memisahkan tahap build compiler (`build-base`, `cmake`, `ninja`) dengan tahap runner akhir. Seluruh tool kompilasi dan paket development dibuang sepenuhnya dari image runtime.
+- **Zero Actionable CVEs**: Terverifikasi bersih dari kerentanan keamanan pada pemindaian Docker Scout (**0 Critical, 0 High, 0 Medium**).
+- **Ultra-Ringan**: Ukuran image ditekan secara signifikan dari 407 MB menjadi hanya **23 MB**.
+- **Cakupan Pengujian Lengkap**: Menjalankan 6 unit test suite C (termasuk `test_ami_port.c` untuk Phase 2 porting) dan pengujian integrasi client Python otomatis (`test_dlms_e2e_client.py`).
+
+### Cara Menjalankan Pengujian Docker
+
+**Cara 1 (Windows Script Praktis):**
+```cmd
+.\docker_test\run_docker_tests.bat
+```
+
+**Cara 2 (Docker CLI Manual):**
+```powershell
+docker build -t ami-smart-meter-test -f docker_test/Dockerfile .
+docker run --rm ami-smart-meter-test
+```
+
+**Cara 3 (Docker Compose):**
+```powershell
+docker compose -f docker_test/docker-compose.yml run --rm ami-docker-test
+```

@@ -53,3 +53,13 @@ set_target_properties(gurux_simulator PROPERTIES
 if(WIN32)
     target_link_libraries(gurux_simulator PRIVATE ws2_32)
 endif()
+
+add_executable(test_ami_port
+    test_ami_port.c
+    "${AMI_SRC}/ami_dlms_port.c"
+    "${AMI_SRC}/ami_dlms_hdlc.c"
+    "${AMI_SRC}/ami_dlms_association.c"
+    "${AMI_SRC}/ami_dlms_apdu.c"
+    "${AMI_SRC}/ami_cosem_model.c")
+target_include_directories(test_ami_port PRIVATE "${AMI_INC}")
+add_test(NAME AmiDlmsPortTest COMMAND test_ami_port)
