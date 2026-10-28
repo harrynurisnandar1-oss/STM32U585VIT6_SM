@@ -100,7 +100,7 @@ static size_t make_glo_request(uint8_t *out, uint8_t tag,
 
 static void test_voltage_get_request_response(void)
 {
-    AmiDlmsAssociation association = {AMI_DLMS_ASSOC_ASSOCIATED};
+    AmiDlmsAssociation association = {.state = AMI_DLMS_ASSOC_ASSOCIATED};
     const AmiCosemRegisterSnapshot snapshot = {
         .phase_voltage_millivolts = {230000u, 229000u, 231000u},
         .valid_mask = AMI_COSEM_VALID_VOLTAGE_A
@@ -127,7 +127,7 @@ static void test_voltage_get_request_response(void)
 
 static void test_unknown_obis_returns_access_error(void)
 {
-    AmiDlmsAssociation association = {AMI_DLMS_ASSOC_ASSOCIATED};
+    AmiDlmsAssociation association = {.state = AMI_DLMS_ASSOC_ASSOCIATED};
     const AmiCosemRegisterSnapshot snapshot = {0};
     const uint8_t request[] = {
         0xC0u, 0x01u, 0xC2u, 0x00u, 0x03u,

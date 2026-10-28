@@ -255,3 +255,30 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
   - Menginstal paket C standard library target ARM Newlib (`libnewlib-arm-none-eabi` dan `libstdc++-arm-none-eabi-newlib`) bersamaan dengan `gcc-arm-none-eabi` pada runner Ubuntu, sehingga seluruh header C runtime standar dan library `libm.a` tersedia secara lengkap dan deterministik.
 - **Koreksi Multi-Context Artifact Paths**:
   - Menyesuaikan jalur pengumpulan artefak firmware pada runner CI agar mengambil file hasil build dari direktori TrustZone `Secure/build/` dan `NonSecure/build/` sesuai struktur `ExternalProject_Add` STM32CubeMX.
+
+
+## [v2.2.1] - 2026-10-28
+
+### Added
+- **Konfigurasi Workspace VS Code & Integrasi CTest Explorer (`.vscode/settings.json`, `.vscode/tasks.json`)**:
+  - Menetapkan `cmake.sourceDirectory` ke `${workspaceFolder}/tests` dengan preset otomatis `host-tests` agar Test Explorer dan tombol CTest pada extension VS Code CMake Tools langsung mendeteksi serta menjalankan seluruh 5 unit test suite host secara interaktif.
+  - Menyediakan automated tasks pada `tasks.json` untuk memudahkan build firmware ARM STM32 (`cmake --build --preset Debug`), eksekusi CTest host, dan menjalankan `gurux_simulator.exe`.
+
+### Fixed
+- **Toolchain Environment CI Windows (`.github/workflows/windows-ci.yml`)**:
+  - Menambahkan step `ilammy/msvc-dev-cmd@v1` sebelum tahap Configure CMake pada runner `windows-latest`. Memastikan toolchain compiler C MSVC (`cl.exe`) otomatis terdaftar pada environment `$PATH` ketika CMake dipanggil dengan generator `Ninja`, mencegah kegagalan `CMAKE_C_COMPILER not found`.
+- **Refactoring & Eliminasi Warning Kompiler HDLC (`NonSecure/AMI/Src/ami_dlms_hdlc.c`)**:
+  - Merefaktor formatting source code yang sebelumnya termampatkan dalam satu baris (*single-line compression*) menjadi struktur standar C yang rapi, menghilangkan seluruh peringatan kompiler GCC/Clang `-Wmisleading-indentation`.
+  - Memperkuat ketahanan parsing frame control (`decode_raw`) dengan menambahkan masking bit P/F (Poll/Final `0x10`) pada evaluasi tipe frame `SNRM`, `UA`, dan `DISC`.
+  - Membersihkan duplikasi blok kode yang sempat menyebabkan redefinisi fungsi (`get_crc`, `put_be32`, `decode_raw`, dll).
+- **Inisialisasi Field C99/C11 Designated Initializers (`tests/test_ami_dlms_apdu.c`)**:
+  - Memperbaiki deklarasi `AmiDlmsAssociation association` pada `test_voltage_get_request_response` dan `test_unknown_obis_returns_access_error` menggunakan designated initializer `.state = AMI_DLMS_ASSOC_ASSOCIATED`, mengeliminasi peringatan kompiler `-Wmissing-field-initializers`.
+- **Penyelarasan Output Unit Test HDLC (`tests/test_ami_dlms_hdlc.c`)**:
+  - Merapikan struktur pengujian, membersihkan duplikasi kode di luar fungsi `main()`, dan menambahkan laporan status eksplisit `DLMS HDLC tests passed.` saat test selesai, menyelaraskan konsistensi log output dengan suite CTest lainnya.
+- **Koreksi Panduan & Path Hardcoded (`tests/test_note.md`)**:
+  - Menghapus path hardcoded lokal non-portabel (`D:\STM32U585VIT6_SM`) dan menggantinya dengan petunjuk direktori proyek relatif yang portabel di berbagai workstation.
+  - Memperbaiki target path kompilasi dan eksekusi `gurux_simulator.exe` dari `build/host-tools/` (folder build firmware STM32) menjadi `tests/build/host-tools/gurux_simulator.exe`.
+- **Pembersihan Git Hygiene (`.gitignore`)**:
+  - Menambahkan direktori `.settings/`, `.project`, dan `.cproject` agar file metadata lokal STM32CubeIDE/Eclipse tidak terdeteksi sebagai file untracked pada repositori git.
+- **Restorasi Konfigurasi Presets Root (`CMakePresets.json`)**:
+  - Membersihkan konfigurasi preset `Host_testing` yang sempat ditambahkan secara keliru pada file konfigurasi preset root firmware ARM.

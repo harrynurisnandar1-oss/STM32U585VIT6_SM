@@ -25,6 +25,9 @@ jobs:
         with:
           version: 1.11.1
 
+      - name: Enable MSVC Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Configure CMake (Host Unit Tests & Tools)
         run: |
           cmake -S tests -B tests/build -G Ninja -DCMAKE_BUILD_TYPE=Debug
@@ -36,4 +39,3 @@ jobs:
       - name: Run CTest Suite
         run: |
           ctest --test-dir tests/build --output-on-failure --verbose
-

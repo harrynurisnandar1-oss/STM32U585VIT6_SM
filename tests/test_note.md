@@ -1,12 +1,13 @@
-﻿# Unit Testing AMI Smart Meter
+# Unit Testing AMI Smart Meter
 
 ## Gurux raw HDLC host harness
 
 Build and run the development TCP server:
 
 ```powershell
-cmake --build build --target gurux_simulator
-.\build\host-tools\gurux_simulator.exe
+cmake -S tests -B tests/build -G Ninja
+cmake --build tests/build --target gurux_simulator
+.\tests\build\host-tools\gurux_simulator.exe
 ```
 
 The server listens only on `127.0.0.1:4059`. It supports no-auth AARQ and read-only GETs using sample three-phase values. The HDLC decoder removes incoming LLC (`E6 E6 00` / `E6 E7 00`); outgoing I-frames include server LLC (`E6 E7 00`). SNRM negotiation is answered with UA parameters capped to 512-byte information fields and window size 1.
@@ -32,7 +33,6 @@ Test model dan protokol menggunakan data snapshot development yang diberikan lan
 Dari PowerShell pada root proyek:
 
 ```powershell
-cd D:\STM32U585VIT6_SM
 cmake -S tests -B tests/build -G Ninja
 cmake --build tests/build --parallel
 ctest --test-dir tests/build --output-on-failure
@@ -58,7 +58,7 @@ Implementasi saat ini mencakup AARQ/AARE, LLS/HLS, GET, dan selective access Cla
 
 Root proyek memiliki `CMakeLists.txt` CubeMX untuk firmware STM32 dan toolchain ARM; host tests adalah proyek CMake terpisah di `tests/`. Karena itu, saat VS Code membuka root tanpa pengaturan source directory, CMake Tools memilih proyek firmware, bukan CTest host. Workspace settings mengarahkan extension ke `tests/`, sedangkan `tests/CMakePresets.json` memilih compiler host dan folder output terpisah.
 
-1. Buka folder `D:\STM32U585VIT6_SM` di VS Code dan pastikan extension **CMake Tools** aktif.
+1. Buka folder proyek di VS Code dan pastikan extension **CMake Tools** aktif.
 2. Jalankan `CMake: Configure`, pilih preset **AMI host unit tests** bila diminta, lalu `CMake: Build`.
 3. Jalankan `CMake: Run Tests` atau pilih tes melalui Test Explorer.
 
@@ -71,7 +71,7 @@ Proyek ini dilengkapi dengan 4 pipeline workflow terdedikasi di .github/workflow
 | Workflow File | Runner | Lingkup & Fungsi Utama |
 |---|---|---|
 | **windows-ci.yml** | windows-latest | Build & pengujian aplikasi native Windows host menggunakan Ninja & MSVC. Menjalankan seluruh 5/5 CTest suite dan kompilasi gurux_simulator.exe. |
-| **stm32u585-freertos-ci.yml** | ubuntu-latest | Cross-compilation embedded Cortex-M33 (STM32U585) dengan FreeRTOS. Menggunakan gcc-arm-none-eabi + libnewlib-arm-none-eabi (math.h/libc lengkap), mengompilasi TrustZone Secure & NonSecure, memverifikasi konsumsi memori footprint (rm-none-eabi-size), dan menyimpan artefak firmware (.elf, .bin, .hex, .map). |
+| **stm32u585-freertos-ci.yml** | ubuntu-latest | Cross-compilation embedded Cortex-M33 (STM32U585) dengan FreeRTOS. Menggunakan gcc-arm-none-eabi + libnewlib-arm-none-eabi (math.h/libc lengkap), mengompilasi TrustZone Secure & NonSecure, memverifikasi konsumsi memori footprint ( rm-none-eabi-size), dan menyimpan artefak firmware (.elf, .bin, .hex, .map). |
 | **cpp-analysis.yml** | ubuntu-latest | Analisis statis dan audit keamanan kode otomatis dengan **GitHub CodeQL** (security-extended & security-and-quality) untuk mendeteksi memory leak, buffer overflow, dan celah logika. |
 | **ci.yml** | ubuntu-latest & windows-latest | Dual-platform host regression test runner cepat untuk setiap push dan pull request. |
 
