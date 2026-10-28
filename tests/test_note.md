@@ -25,8 +25,22 @@ Dokumen ini menjelaskan pengujian host-native untuk model DLMS/COSEM dan batas k
 | `AmiDlmsAssociationTest` | `test_ami_dlms_association.c` | Penerimaan AARQ logical-name no-auth, pembentukan AARE, penolakan AARQ malformed/ber-auth, state transition, dan reset association. |
 | `AmiDlmsApduTest` | `test_ami_dlms_apdu.c` | GET response, Class 7 selective access berdasarkan entry/date-time, penolakan plaintext setelah HLS, global-ciphered GET/SET/Action, key-transfer SAL callback, tag rusak, dan anti-replay. |
 | `AmiDlmsHdlcTest` | `test_ami_dlms_hdlc.c` | Byte-stream parsing buffer tetap, vektor referensi CRC-16 (FCS/HCS), batas alamat SAP, deteksi frame terpangkas/error, serta pembentukan frame SNRM/UA/DISC dan I-Frame. |
+| `AmiDlmsPortTest` | `test_ami_port.c` | Hardware porting abstraction: stream buffer, UART RX ISR callback, HDLC auto-negotiation (SNRM/DISC), policy security level, dan APDU transport. |
 
 Test model dan protokol menggunakan data snapshot development yang diberikan langsung oleh test. Test tidak membuktikan perilaku metrologi hardware maupun komunikasi UART/HDLC.
+
+## Katalog Kode OBIS SPLN D3.002:2021 (`NonSecure/AMI/Inc/ami_obis_catalog.h`)
+
+Katalog kode OBIS telah dimutakhirkan penuh mencakup 276 objek standar DLMS/COSEM sesuai dokumen teknis PLN. Definisi macro menggunakan representasi 6 octet array `{A, B, C, D, E, F}` yang terbagi dalam 22 kategori fungsional:
+- **Identifikasi & Perangkat**: Meter Type, Meter ID, Versi HW/SW, Pelanggan ID, Unit PLN ID, LDN.
+- **Konstanta & Daya Cadangan**: Konstanta meter aktif/reaktif, kapasitas baterai & superkapasitor.
+- **Pengukuran Listrik**: Arus, Tegangan, Frekuensi, Power Factor, Sudut Fase R/S/T/N.
+- **Daya & Energi**: Daya aktif, reaktif, semu total & per fase; Energi aktif, reaktif, semu total, per fase, kuadran Q1..Q4, dan tarif 1..5.
+- **Demand**: Demand dan Maksimum Demand aktif, reaktif, semu (total & per tarif 1..5).
+- **Power Quality (PQ)**: THD/TDD tegangan & arus, profil tegangan, event batas kompensasi.
+- **Profile Generic**: Load Profile 1 (`1.0.99.1.0.255`), Billing Profile (`0.0.98.1.0.255`), Instant Profile (`1.96.98.128.0.255`).
+- **Alarm, Event, & Tamper**: Alarm Log Profiles (1..8), Event Log Profiles (8..19), Tamper Log Profiles (20..36).
+- **Kontrol & Keamanan**: Disconnect control (breaker), Power limiter, Script tables, Push setup, Association LN (1..6), Security setup (2..6).
 
 ## Menjalankan test
 

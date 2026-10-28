@@ -283,7 +283,6 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 - **Restorasi Konfigurasi Presets Root (`CMakePresets.json`)**:
   - Membersihkan konfigurasi preset `Host_testing` yang sempat ditambahkan secara keliru pada file konfigurasi preset root firmware ARM.
 
-
 ## [v2.3.0] - 2026-10-28
 
 ### Added
@@ -310,3 +309,35 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
   - Menyertakan client test Python otomatis test_dlms_e2e_client.py yang mensimulasikan software DLMS client (seperti Gurux DLMSDirector) untuk menguji full handshake: SNRM -> UA, AARQ -> AARE, GET Tegangan Fasa R (230 V), GET Jam Meter, dan DISC -> UA.
   - Dilengkapi script eksekusi run_tests.sh, Docker Compose (docker-compose.yml), Windows runner (run_docker_tests.bat), dan panduan penggunaan docker_test/README.md.
   - Terverifikasi 100% PASS pada seluruh 6 suite unit test dan 100% PASS pada pengujian integrasi End-to-End.
+
+## [v2.4.0] - 2026-10-28
+
+### Added
+- **Katalog Lengkap Kode OBIS SPLN D3.002:2021 (`NonSecure/AMI/Inc/ami_obis_catalog.h`)**:
+  - Mengintegrasikan seluruh 276 kode OBIS objek DLMS/COSEM dari dokumen spesifikasi teknis PLN (`dokumen_PLN/refrence/obis.md`) ke dalam header C standar.
+  - Setiap kode OBIS didefinisikan sebagai macro C berupa 6 octet array `{A, B, C, D, E, F}` lengkap dengan metadata keterangan nama objek, class ID COSEM, dan representasi notasi desimal OBIS (`A.B.C.D.E.F`).
+  - Mengelompokkan seluruh 276 kode OBIS ke dalam 22 kategori fungsional terstruktur:
+    1. Meter Identification & Device Information (Tipe meter, Meter ID, HW/SW version, Pelanggan ID, Unit PLN ID, Mode ekspor-impor, LDN).
+    2. Meter Constants & Auxiliary Power (Konstanta aktif/reaktif, Kapasitas baterai, Kapasitas superkapasitor).
+    3. Measurement Algorithms & General Configuration (Algoritma pengukuran energi aktif).
+    4. Script Tables & Control I/O (Reset meter, Clear all tamper, Trigger test, Control I/O state/script, Limiter script, Tariff script, Push script, Alarm push 1/2, Image activation).
+    5. Electrical Instantaneous Measurements (Frekuensi, Arus dan Tegangan fase R, S, T, dan Netral).
+    6. Power Factor & Phase Angles (Power factor total & per fase, Sudut tegangan dan arus fase R, S, T, dan Netral).
+    7. Instantaneous Power Registers (Daya aktif, reaktif, semu total dan per fase R, S, T kirim & terima).
+    8. Cumulative Energy Registers (Energi aktif, reaktif, semu total dan per fase kirim & terima, Energi reaktif kuadran Q1..Q4 per fase, Billing compensation, Total active energy).
+    9. Tariff-Based Energy Registers (Energi aktif, reaktif, dan semu kirim & terima untuk Tarif 1 s.d. 5).
+    10. Demand & Maximum Demand Registers (Demand daya aktif, reaktif, semu kirim/terima, Maksimum demand total dan per Tarif 1 s.d. 5).
+    11. Power Quality (PQ), Harmonics & Voltage Profiles (THD/TDD tegangan & arus per fase dan total, Low voltage limits/delay/count, PQ voltage registers R/S/T, PQ voltage log profiles R/S/T, PF batas kompensasi).
+    12. Profiles (Data historikal / Billing profile, Scheduler billing, Load profile, Instant profile, Load profile descriptor & monitor).
+    13. Power Limiter & Disconnect Control (Power limiter, Disconnect control / breaker).
+    14. Alarm Registers, Status & Descriptors (Alarm register 1 & 2, Status register, Alarm descriptor 1 & 2, Alarm filter 1 & 2, Alarm monitor 1 & 2).
+    15. Alarm Log Profiles (Flash error, RAM error, Clock loss, Low battery, MCU fault, ADC sampling fault, Supercap fault, Relay fault).
+    16. Event Log Profiles (Power supply fail/up, ToU config change, Non-ToU config change, Stop measurement, I/O status change, Relay state change, Meter reset, Time/date change, Asymmetric power, Ready remote reconnect, Pinhole button, Manufacturer-specific events, Total meter off count).
+    17. Tamper Log Profiles (Pembukaan tutup meter/terminal, Salah urutan fase, Arus/tegangan tidak sefase, Arus netral putus, Hilang tegangan fase, Medan magnet, Reverse power 3P/1P, Kuadran 4 low PF, Over limit, INSCEK, GNDCEK, Arus tidak seimbang 6 jam, Tutup terminal dibuka bertegangan/tanpa tegangan, Total kejadian tamper).
+    18. Time, Clock & Calendar Management (Clock Class 8, Activity calendar, Tariff activation, Special days table).
+    19. Push Setup & IP Registration (Push setup alarm 1/2, load profile, data historikal, IP registration).
+    20. Image Transfer / Firmware Upgrade Management (Image transfer 0/1/2, Activation schedulers 0/1/2, Image activation script, Active firmware identifiers & signatures 0/1/2).
+    21. COSEM Associations & Security Setup (Association LN 1 s.d. 6, Security setup LN 2 s.d. 6, Frame counter unicast & broadcast).
+    22. Communication Ports & HDLC Setup (Optical port setup, Optical HDLC setup, RS232/RS485 HDLC setup).
+  - Menjaga 100% kompatibilitas mundur (*backward compatibility*) dengan seluruh 65 macro yang telah digunakan pada implementasi `ami_cosem_model.c` dan unit test suite.
+  - Memperbaiki anomali pada tabel dokumen PLN baris 39 (`Energi reaktif Q2 fase S` di mana kolom C bernilai 45 namun Kode OBIS tertulis `1.0.46.8.0.255`), dikoreksi menjadi octet `46` sesuai standar IEC 62056-6-2 / DLMS Blue Book dan diberikan catatan dokumentasi yang jelas.
