@@ -31,7 +31,7 @@ Test model dan protokol menggunakan data snapshot development yang diberikan lan
 
 ## Katalog Kode OBIS SPLN D3.002:2021 (`NonSecure/AMI/Inc/ami_obis_catalog.h`)
 
-Katalog kode OBIS telah dimutakhirkan penuh mencakup 276 objek standar DLMS/COSEM sesuai dokumen teknis PLN. Definisi macro menggunakan representasi 6 octet array `{A, B, C, D, E, F}` yang terbagi dalam 22 kategori fungsional:
+Katalog kode OBIS telah dimutakhirkan penuh mencakup 276 objek standar DLMS/COSEM sesuai dokumen teknis PLN (`dokumen_PLN/refrence/obis.md`). Definisi macro menggunakan representasi 6 octet array `{A, B, C, D, E, F}` yang terbagi dalam 22 kategori fungsional:
 - **Identifikasi & Perangkat**: Meter Type, Meter ID, Versi HW/SW, Pelanggan ID, Unit PLN ID, LDN.
 - **Konstanta & Daya Cadangan**: Konstanta meter aktif/reaktif, kapasitas baterai & superkapasitor.
 - **Pengukuran Listrik**: Arus, Tegangan, Frekuensi, Power Factor, Sudut Fase R/S/T/N.
