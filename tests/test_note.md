@@ -247,3 +247,32 @@ docker run --rm ami-smart-meter-test
 ```powershell
 docker compose -f docker_test/docker-compose.yml run --rm ami-docker-test
 ```
+
+
+---
+
+## Verifikasi HLS Mechanism 5 (GMAC) & AES-128-GCM KAT (`test_ami_security.c` & `test_ami_dlms_association.c`)
+
+Mulai versi v2.5.0, stack mengintegrasikan cryptographic core perangkat lunak untuk standard AES-128 (NIST FIPS 197), GF(2^128) GHASH, dan AES-GCM/GMAC (NIST SP 800-38D). Hal ini memungkinkan pembuktian otentikasi High Level Security (HLS) Mechanism 5 GMAC secara riil pada layer DLMS/COSEM tanpa bergantung pada Secure World TrustZone/perangkat keras kriptografi eksternal selama pengujian.
+
+### 1. Known Answer Test (KAT) NIST SP 800-38D
+Diverifikasi langsung terhadap test vector resmi NIST:
+- **Test Case 1**: Kunci 0x00...00, IV 0x00...00, Plaintext kosong (0 byte), AAD kosong (0 byte).
+  - *Expected GMAC Tag*: `58e2fccefa7e3061367f1d57a4e7455a` -> **PASSED**.
+- **Test Case 2**: Kunci 0x00...00, IV 0x00...00, Plaintext 16-byte nol, AAD kosong.
+  - *Expected Ciphertext*: `0388dace60b6a392f328c2b971b2fe78`
+  - *Expected Tag*: `ab6e47d42cec13bdf53a67b21257bddf` -> **PASSED**.
+- **Test Case 4**: Kunci `feffe9928665731c6d6a8f9467308308`, IV `cafebabefacedbaddecaf888`, Plaintext 60 byte, AAD 20 byte `feedfacedeadbeeffeedfacedeadbeefabaddad2`.
+  - *Expected Tag*: `5bc94fbc3221a5db94fae95ae7121a47` -> **PASSED**.
+
+### 2. Keamanan & Integritas (Tamper Resistance & Constant-Time)
+- **Tamper Detection**: Setiap modifikasi 1-bit pada ciphertext atau GMAC tag menyebabkan dekripsi ditolak seketika (`AMI_SEC_ERR_AUTH_FAILED`) dan buffer output dibersihkan (zeroized).
+- **Constant-Time Verification**: Verifikasi tag `ami_sec_dlms_hls5_gmac_verify()` dan `ami_sec_constant_time_equals()` berjalan dengan waktu konstan independen dari lokasi byte yang berbeda guna mencegah serangan analisis waktu (timing attacks).
+- **Secure Memory Sanitization**: Subkey H, expanded round keys K0..K10, dan intermediate counter hash dibersihkan dari RAM menggunakan volatile zeroization (`secure_zeroize()`).
+
+### 3. Mutual Authentication 4-Pass HLS 5 GMAC Handshake
+Diverifikasi pada `test_ami_dlms_association.c` (`test_real_hls5_gmac_association_handshake()`):
+- **Pass 1 (Client -> Meter)**: AARQ membawa OID HLS 5 (`2.16.756.5.8.2.5`), System Title Client, dan Client Challenge ($C_{to\_s}$).
+- **Pass 2 (Meter -> Client)**: AARE merespons dengan status `AUTH_PENDING`, System Title Meter, dan Server Challenge ($C_{to\_c}$).
+- **Pass 3 (Client -> Meter)**: Client menghitung GMAC tag $f(C_{to\_c}) = \text{SC} \parallel \text{IC} \parallel \text{GMAC}_{\text{AK}}(\text{IV}, \text{AAD})$ dan mengirimkannya via `ActionRequest`. Meter memverifikasi proof client secara sukses dan berpindah status ke `ASSOCIATED`.
+- **Pass 4 (Meter -> Client)**: Meter menghasilkan balasan GMAC proof $f(C_{to\_s})$ via `ActionResponse` sehingga client dapat memverifikasi identitas meter (autentikasi mutual).

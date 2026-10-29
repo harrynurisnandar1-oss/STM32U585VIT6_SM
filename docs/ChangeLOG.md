@@ -341,3 +341,31 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
     22. Communication Ports & HDLC Setup (Optical port setup, Optical HDLC setup, RS232/RS485 HDLC setup).
   - Menjaga 100% kompatibilitas mundur (*backward compatibility*) dengan seluruh 65 macro yang telah digunakan pada implementasi `ami_cosem_model.c` dan unit test suite.
   - Memperbaiki anomali pada tabel dokumen PLN baris 39 (`Energi reaktif Q2 fase S` di mana kolom C bernilai 45 namun Kode OBIS tertulis `1.0.46.8.0.255`), dikoreksi menjadi octet `46` sesuai standar IEC 62056-6-2 / DLMS Blue Book dan diberikan catatan dokumentasi yang jelas.
+
+
+## [v2.5.0] - 2026-10-29
+
+### Added
+- **Implementasi HLS Mechanism 5 (GMAC) & Cryptographic Core AES-128-GCM (`NonSecure/AMI/Inc/ami_security.h`, `NonSecure/AMI/Src/ami_security.c`)**:
+  - Mengimplementasikan cryptographic core AES-128 standar NIST FIPS 197 (Forward cipher, S-Box substitution, ShiftRows, MixColumns, AddRoundKey, Key Expansion 10 round, Galois field `xtime`).
+  - Mengimplementasikan GHASH dan operasi perkalian Galois Field GF(2^128) standar NIST SP 800-38D dengan polinomial reduksi R = 0xE1 || 0^120.
+  - Mengimplementasikan NIST SP 800-38D Galois/Counter Mode (AES-128-GCM) authenticated encryption dan decryption (`ami_sec_aes_128_gcm_encrypt()`, `ami_sec_aes_128_gcm_decrypt()`) dengan IV/Nonce 96-bit (12 bytes) dan Tag 128-bit (16 bytes).
+  - Mengimplementasikan AES-128-GMAC mode autentikasi data mandiri (`ami_sec_aes_128_gmac()`).
+  - Mengimplementasikan kalkulasi dan verifikasi autentikasi DLMS/COSEM High Level Security (HLS) Mechanism 5 GMAC (`ami_sec_dlms_hls5_gmac_calculate()`, `ami_sec_dlms_hls5_gmac_verify()`):
+    - OID Mekanisme HLS 5: `{2, 16, 756, 5, 8, 2, 5}` (`0x60, 0x85, 0x74, 0x05, 0x08, 0x02, 0x05`).
+    - Format IV 96-bit: System Title (8 bytes) || Invocation Counter IC (4 bytes Big-Endian).
+    - Format AAD: Security Control Byte (`0x10`, auth-only) || Authentication Key AK (16 bytes) || Challenge (up to 64 bytes).
+    - Format tag proof: Security Control Byte (1 byte) || IC (4 bytes) || GMAC Tag (16 bytes) = 21 octet.
+  - Constant-time verification (`ami_sec_constant_time_equals()`) untuk mencegah side-channel timing attack.
+  - Volatile memory zeroization (`secure_zeroize()`) untuk membersihkan round key, subkey hash H, dan buffer sensitif dari RAM setelah eksekusi.
+  - Adapter callback `ami_sec_hls5_gmac_proof_callback()` untuk integrasi langsung dengan state machine asosiasi DLMS/COSEM (`AmiDlmsAssociation`).
+- **Verifikasi Uji Mandiri NIST SP 800-38D KAT & HLS 5 Handshake (`tests/test_ami_security.c`, `tests/test_ami_dlms_association.c`)**:
+  - Menambahkan pengujian Known Answer Test (KAT) NIST SP 800-38D:
+    - Test Case 1 (Empty Plaintext & AAD): Memvalidasi output Tag GMAC `58e2fccefa7e3061367f1d57a4e7455a`.
+    - Test Case 2 (16B Plaintext, Empty AAD): Memvalidasi Ciphertext dan Tag GMAC `ab6e47d42cec13bdf53a67b21257bddf`.
+    - Test Case 4 (60B Plaintext, 20B AAD): Memvalidasi Ciphertext dan Tag GMAC `5bc94fbc3221a5db94fae95ae7121a47`.
+  - Memvalidasi tamper resilience: penolakan seketika dekripsi saat ciphertext atau tag dirusak 1 bit.
+  - Memvalidasi fungsi GMAC authentication-only.
+  - Memvalidasi end-to-end HLS 5 GMAC challenge-response calculation & verification.
+  - Memvalidasi integrasi callback `ami_sec_hls5_gmac_proof_callback` pada 4-pass mutual authentication handshake di `test_ami_dlms_association.c`.
+  - Seluruh 6 suite CTest lulus 100% (6/6 passed) dan build firmware Cortex-M33 bebas error/warning.

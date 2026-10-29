@@ -23,7 +23,8 @@ add_test(NAME AmiSecurityTest COMMAND test_ami_security)
 
 add_executable(test_ami_dlms_association
     test_ami_dlms_association.c
-    "${AMI_SRC}/ami_dlms_association.c")
+    "${AMI_SRC}/ami_dlms_association.c"
+    "${AMI_SRC}/ami_security.c")
 target_include_directories(test_ami_dlms_association PRIVATE "${AMI_INC}")
 add_test(NAME AmiDlmsAssociationTest COMMAND test_ami_dlms_association)
 
