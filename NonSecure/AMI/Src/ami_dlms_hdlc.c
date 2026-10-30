@@ -302,6 +302,30 @@ AmiHdlcStatus ami_dlms_hdlc_parse_byte(HdlcContext *c, uint8_t byte, HdlcFrame *
             }
             return s;
         }
+        if (c->frame_length < expected && c->frame_length >= 7u) {
+            /* Check if the header has valid HCS before treating 0x7E as payload data */
+            size_t off = 2u, used = 0u;
+            uint32_t dummy_sap;
+            if (addr_decode(c->frame_buffer + off, c->frame_length - off, &dummy_sap, &used)) {
+                off += used;
+                if (addr_decode(c->frame_buffer + off, c->frame_length - off, &dummy_sap, &used)) {
+                    off += used;
+                    if (off + 3u <= c->frame_length) {
+                        /* Control (1) + HCS (2) */
+                        off += 1u;
+                        if (get_crc(c->frame_buffer + off) == ami_dlms_hdlc_crc16(c->frame_buffer, off)) {
+                            /* Header is authenticated via HCS! 0x7E is transparent data/FCS */
+                            if (c->frame_length >= sizeof(c->frame_buffer)) {
+                                c->overflow = 1u;
+                                return AMI_HDLC_INCOMPLETE;
+                            }
+                            c->frame_buffer[c->frame_length++] = byte;
+                            return AMI_HDLC_INCOMPLETE;
+                        }
+                    }
+                }
+            }
+        }
         c->frame_length = 0u;
         return AMI_HDLC_INVALID_FRAME;
     }

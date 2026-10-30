@@ -369,3 +369,16 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
   - Memvalidasi end-to-end HLS 5 GMAC challenge-response calculation & verification.
   - Memvalidasi integrasi callback `ami_sec_hls5_gmac_proof_callback` pada 4-pass mutual authentication handshake di `test_ami_dlms_association.c`.
   - Seluruh 6 suite CTest lulus 100% (6/6 passed) dan build firmware Cortex-M33 bebas error/warning.
+  
+## [v2.5.1] - 2026-10-30
+
+### Fixed
+- **Penanganan Transparent Flag (0x7E) pada Payload & FCS HDLC (`NonSecure/AMI/Src/ami_dlms_hdlc.c`)**:
+  - Memperbaiki kegagalan pembacaan objek DLMS/COSEM (seperti `0.0.96.96.0.255` dari software Gurux DLMSDirector) ketika nilai checksum CRC FCS atau payload I-frame mengandung byte `0x7E` sebelum akhir batas frame.
+  - Menambahkan verifikasi integritas Header Check Sequence (HCS): saat terdeteksi byte `0x7E` sebelum panjang total frame tercapai (`c->frame_length < expected`), parser mengevaluasi HCS header terlebih dahulu. Jika HCS terotentikasi valid, byte `0x7E` diperlakukan sebagai transparent payload data/byte FCS yang sah tanpa memutus sinkronisasi stream.
+- **Suite Uji HDLC Transparent Flag (`tests/test_ami_dlms_hdlc.c`)**:
+  - Menambahkan test case `test_transparent_flag_in_payload_and_fcs()` yang memverifikasi frame riil Gurux dengan checksum berakhiran `0x7E 0x0A 0x7E`.
+
+### Added
+- **Sinkronisasi Katalog Objek SPLN D3.006:2021 pada Profil Gurux (`STM32U585VIT6_SM.gxc`)**:
+  - Memetakan dan menyinkronkan 276 objek OBIS pascabayar standar PLN ke dalam file workspace Gurux DLMSDirector XML, meliputi meter identification, instantaneous measurement, billing profiles, event logs, tamper logs, dan disconnect control (breaker).

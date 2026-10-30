@@ -167,8 +167,32 @@ static void test_gurux_snrm_known_frame(void)
     assert(feed(&c, output, output_length, &reply) == AMI_HDLC_FRAME_READY && reply.type == AMI_HDLC_FRAME_UA);
 }
 
+
+static void test_transparent_flag_in_payload_and_fcs(void)
+{
+    /* Gurux frame requesting 0.0.96.96.0.255 whose FCS ends in 0x7E 0x0A:
+     * 7E A0 1A 02 03 2D BA 2D D0 E6 E6 00 C0 01 C1 00 01 00 00 60 60 00 FF 02 00 7E 0A 7E
+     */
+    const uint8_t raw[] = {
+        0x7E,
+        0xA0, 0x1A, 0x02, 0x03, 0x2D, 0xBA, 0x2D, 0xD0,
+        0xE6, 0xE6, 0x00, 0xC0, 0x01, 0xC1, 0x00, 0x01,
+        0x00, 0x00, 0x60, 0x60, 0x00, 0xFF, 0x02, 0x00,
+        0x7E, 0x0A,
+        0x7E
+    };
+    HdlcContext c;
+    HdlcFrame f;
+
+    ami_dlms_hdlc_init(&c);
+    assert(feed(&c, raw, sizeof(raw), &f) == AMI_HDLC_FRAME_READY);
+    assert(f.type == AMI_HDLC_FRAME_I);
+    assert(f.destination_sap == 129u && f.source_sap == 22u);
+}
+
 int main(void)
 {
+    test_transparent_flag_in_payload_and_fcs();
     test_crc_and_stream_roundtrip();
     test_sap_and_output_boundaries();
     test_crc_and_truncated_errors();

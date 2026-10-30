@@ -276,3 +276,12 @@ Diverifikasi pada `test_ami_dlms_association.c` (`test_real_hls5_gmac_associatio
 - **Pass 2 (Meter -> Client)**: AARE merespons dengan status `AUTH_PENDING`, System Title Meter, dan Server Challenge ($C_{to\_c}$).
 - **Pass 3 (Client -> Meter)**: Client menghitung GMAC tag $f(C_{to\_c}) = \text{SC} \parallel \text{IC} \parallel \text{GMAC}_{\text{AK}}(\text{IV}, \text{AAD})$ dan mengirimkannya via `ActionRequest`. Meter memverifikasi proof client secara sukses dan berpindah status ke `ASSOCIATED`.
 - **Pass 4 (Meter -> Client)**: Meter menghasilkan balasan GMAC proof $f(C_{to\_s})$ via `ActionResponse` sehingga client dapat memverifikasi identitas meter (autentikasi mutual).
+
+---
+
+## Verifikasi Resiliensi Flag Transparan HDLC 0x7E (`test_ami_dlms_hdlc.c`)
+
+Mulai versi v2.5.1, parser streaming HDLC Frame Format Type 3 (`ami_dlms_hdlc.c`) ditingkatkan ketahanannya terhadap kemunculan byte `0x7E` di tengah payload data atau byte FCS (Frame Check Sequence):
+- **Masalah**: Pada saat software resmi seperti Gurux DLMSDirector meminta pembacaan objek OBIS tertentu (contohnya `0.0.96.96.0.255`), nilai CRC-16 kalkulasi paket dapat menghasilkan byte `0x7E` sebelum flag penutup. Implementasi sebelumnya memotong frame secara prematur (`AMI_HDLC_INVALID_FRAME`).
+- **Solusi & Verifikasi**: Parser mengevaluasi Header Check Sequence (HCS) terlebih dahulu. Jika header terbukti valid dan terotentikasi, byte `0x7E` diperlakukan secara transparan sebagai bagian dari stream data/FCS.
+- **Hasil Pengujian**: Test case `test_transparent_flag_in_payload_and_fcs()` memverifikasi byte frame raw `7E A0 1A 02 03 2D BA 2D D0 E6 E6 00 C0 01 C1 00 01 00 00 60 60 00 FF 02 00 7E 0A 7E` dan berhasil diparsing 100% sebagai `AMI_HDLC_FRAME_READY`.
