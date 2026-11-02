@@ -467,3 +467,44 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 - **Modul Token STS Prabayar (`ami_sts_token.h`, `ami_sts_token.c`, `test_ami_sts_token.c`, `SECURE_KEY_STS`)**:
   - Membersihkan seluruh decoder token prabayar, parser STS 20-digit, pengurangan kredit, dan buku besar kredit.
   - Menegaskan kembali arsitektur Smart Meter AMI 3-Phase **Pascabayar (Postpaid)** sesuai mandat SPLN D3.006:2021 dan batas area kerja E2 Protocol Data & Security.
+
+## [v2.7.0] - 2026-11-02
+
+### Added
+- **Buffer Profile Generic Class 7 (Load Profile 15-menit `1.0.99.1.0.255` & Monthly Billing Freeze `0.0.98.1.0.255` / `1.0.98.1.0.255`)**:
+  - Penambahan tipe data `AmiCosemLoadProfileEntry` dan array buffer `load_profile[]` pada `AmiCosemRegisterSnapshot` dengan kapasitas buffer hingga `AMI_COSEM_PROFILE_MAX_ENTRIES` (8 baris).
+  - Penambahan flag validitas `AMI_COSEM_VALID_LOAD_PROFILE` (`1u << 14`) dan penyesuaian alokasi buffer encoded `AMI_COSEM_AXDR_ENCODED_MAX` menjadi 1024 bytes.
+  - Implementasi 12 kolom capture object pada Load Profile 15-menit sesuai SPLN D3.006:2021:
+    1. Clock (`0.0.1.0.0.255`, Class 8)
+    2. Status Register (`0.0.96.10.1.255`, Class 1)
+    3. Active Import Wh (`1.0.1.8.0.255`, Class 3)
+    4. Active Export Wh (`1.0.2.8.0.255`, Class 3)
+    5. Reactive Import varh (`1.0.3.8.0.255`, Class 3)
+    6. Reactive Export varh (`1.0.4.8.0.255`, Class 3)
+    7. Tegangan Fase A mV (`1.0.32.7.0.255`, Class 3)
+    8. Tegangan Fase B mV (`1.0.52.7.0.255`, Class 3)
+    9. Tegangan Fase C mV (`1.0.72.7.0.255`, Class 3)
+    10. Arus Fase A mA (`1.0.31.7.0.255`, Class 3)
+    11. Arus Fase B mA (`1.0.51.7.0.255`, Class 3)
+    12. Arus Fase C mA (`1.0.71.7.0.255`, Class 3)
+  - Implementasi 5 kolom capture object pada Monthly Billing Freeze: Clock, Active Import Wh, Active Export Wh, Reactive Import varh, Reactive Export varh.
+  - Penanganan dinamis attribute Profile Generic:
+    - Attribute 2 (`buffer`): Serialisasi array baris struktur berformat A-XDR.
+    - Attribute 3 (`capture_objects`): Serialisasi array deskriptor kolom class_id, logical_name, attribute_index, data_index.
+    - Attribute 4 (`capture_period`): Mengembalikan 900 detik (15 menit) untuk Load Profile dan 0 detik untuk trigger-based profiles (Billing Profile dan Event Log).
+    - Attribute 5 (`sort_method`): Mengembalikan 1 (FIFO).
+    - Attribute 6 (`sort_object`): Mengembalikan deskriptor Clock capture object.
+    - Attribute 7 (`entries_in_use`): Mengembalikan jumlah entri aktif saat ini.
+    - Attribute 8 (`profile_entries`): Mengembalikan kapasitas maksimum buffer (8 entri).
+- **Dukungan Selective Access pada Profile Generic**:
+  - **Selector 1 (Range by DateTime)**: Memfilter baris buffer berdasarkan rentang timestamp (`from_date` sampai `to_date`). Mengembalikan status `AMI_COSEM_SCOPE_VIOLATED` bila urutan tanggal terbalik (`from_date > to_date`).
+  - **Selector 2 (Entry by Index)**: Memfilter baris buffer berdasarkan indeks 1-based (`from_entry` sampai `to_entry`). Mengembalikan `AMI_COSEM_SCOPE_VIOLATED` bila `from_entry == 0`, `from_entry > to_entry`, atau `to_entry > count`.
+  - Penolakan akses berparameter (selection) pada atribut di luar buffer (attribute 1 atau 3) dengan status `AMI_COSEM_SCOPE_VIOLATED`.
+- **Integrasi DLMS Association View (`NonSecure/AMI/Src/ami_dlms_apdu.c`)**:
+  - Mendaftarkan Load Profile 15-menit `{7u, 0u, {1, 0, 99, 1, 0, 255}}` pada `association_view[]`.
+  - Jumlah objek Association View bertambah menjadi 13 objek (Association, Clock, 3x Tegangan, 3x Arus, 2x Energi Aktif, Event Log, Billing Profile, Load Profile).
+- **Penambahan Pengujian Unit & Verifikasi (`tests/test_ami_cosem.c`, `tests/test_ami_dlms_apdu.c`)**:
+  - `test_profile_generic_buffers`: Memvalidasi serialisasi 12 elemen Load Profile, 5 elemen Billing Profile, capture period 900s, sort method FIFO, serta Selective Access Selector 1 dan Selector 2 termasuk pengujian skenario pelanggaran batas (scope violation).
+  - `test_load_profile_apdu_selective_access`: Memvalidasi pemrosesan APDU xDLMS `GET-Request-Normal` berparameter selective access terhadap objek Load Profile melalui pipeline asosiasi DLMS.
+  - Verifikasi CTest: **9/9 tests PASSing (100%)**.
+  - Verifikasi Cross-Compilation Firmware ARM Cortex-M33 TrustZone: Berhasil dibangun dengan **0 error dan 0 warning**.

@@ -355,7 +355,8 @@ static const AssociationViewObject association_view[] = {
     {3u,  0u, {1, 0, 1, 8, 0, 255}},  /* Active import */
     {3u,  0u, {1, 0, 2, 8, 0, 255}},  /* Active export */
     {7u,  0u, {0, 0, 99, 98, 0, 255}},/* Event log */
-    {7u,  0u, {1, 0, 98, 1, 0, 255}} /* Billing profile */
+    {7u,  0u, {1, 0, 98, 1, 0, 255}},/* Billing profile */
+    {7u,  0u, {1, 0, 99, 1, 0, 255}} /* Load profile 15-min */
 };
 
 static int view_put(uint8_t *out, size_t capacity, size_t *offset,

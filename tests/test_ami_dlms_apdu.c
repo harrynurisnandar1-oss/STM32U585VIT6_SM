@@ -160,21 +160,26 @@ static void test_association_ln_object_list(void)
     assert(response_length > 6u && response[0] == 0xC4u &&
            response[1] == 0x01u && response[2] == 0xC1u &&
            response[3] == 0u && response[4] == 1u);
-    assert(response[5] == 12u); /* Association, clock, 3-phase + profiles. */
+    assert(response[5] == 13u); /* Association, clock, 3-phase + profiles (event, billing, load). */
 
     /* Association object followed by voltage L1; each advertises attr 2 RO. */
     const uint8_t association_ln[] = {9u, 6u, 0u, 0u, 40u, 0u, 0u, 255u};
     const uint8_t voltage_l1_ln[] = {9u, 6u, 1u, 0u, 32u, 7u, 0u, 255u};
+    const uint8_t load_profile_ln[] = {9u, 6u, 1u, 0u, 99u, 1u, 0u, 255u};
     int found_association = 0;
     int found_voltage_l1 = 0;
+    int found_load_profile = 0;
     for (size_t i = 0u; i + sizeof(association_ln) <= response_length; ++i) {
         if (memcmp(response + i, association_ln, sizeof(association_ln)) == 0)
             found_association = 1;
         if (i + sizeof(voltage_l1_ln) <= response_length &&
             memcmp(response + i, voltage_l1_ln, sizeof(voltage_l1_ln)) == 0)
             found_voltage_l1 = 1;
+        if (i + sizeof(load_profile_ln) <= response_length &&
+            memcmp(response + i, load_profile_ln, sizeof(load_profile_ln)) == 0)
+            found_load_profile = 1;
     }
-    assert(found_association && found_voltage_l1);
+    assert(found_association && found_voltage_l1 && found_load_profile);
 }
 
 static void test_association_view_objects_are_readable(void)
@@ -196,7 +201,8 @@ static void test_association_view_objects_are_readable(void)
         {3u,  {1u, 0u, 1u, 8u, 0u, 255u}},
         {3u,  {1u, 0u, 2u, 8u, 0u, 255u}},
         {7u,  {0u, 0u, 99u, 98u, 0u, 255u}},
-        {7u,  {1u, 0u, 98u, 1u, 0u, 255u}}
+        {7u,  {1u, 0u, 98u, 1u, 0u, 255u}},
+        {7u,  {1u, 0u, 99u, 1u, 0u, 255u}}
     };
     AmiDlmsAssociation association = {.state = AMI_DLMS_ASSOC_ASSOCIATED};
     AmiCosemRegisterSnapshot snapshot = {
@@ -214,13 +220,17 @@ static void test_association_view_objects_are_readable(void)
                       AMI_COSEM_VALID_ACTIVE_IMPORT |
                       AMI_COSEM_VALID_ACTIVE_EXPORT |
                       AMI_COSEM_VALID_EVENT_LOG |
-                      AMI_COSEM_VALID_BILLING_PROFILE
+                      AMI_COSEM_VALID_BILLING_PROFILE |
+                      AMI_COSEM_VALID_LOAD_PROFILE
     };
 
     snapshot.event_log_count = 1u;
     snapshot.event_log[0].event_code = 1u;
     snapshot.billing_history_count = 1u;
     snapshot.billing_history[0].active_import_wh = 1234u;
+    snapshot.load_profile_count = 1u;
+    snapshot.load_profile[0].status = 0x1234u;
+    snapshot.load_profile[0].active_import_wh = 5678u;
 
     for (size_t i = 0u; i < sizeof(objects) / sizeof(objects[0]); ++i) {
         const uint8_t request[] = {
@@ -322,6 +332,59 @@ static void test_profile_clock_range_selective_access(void)
     assert(response_length > 6u && response[0] == 0xC4u && response[4] == 1u);
     assert(response[5] == 1u); /* only the matching date is returned */
     assert(response[response_length - 1u] == 4u);
+}
+
+static void test_load_profile_apdu_selective_access(void)
+{
+    AmiDlmsAssociation association = {.state = AMI_DLMS_ASSOC_ASSOCIATED};
+    AmiCosemRegisterSnapshot snapshot = {0};
+    snapshot.valid_mask = AMI_COSEM_VALID_LOAD_PROFILE;
+    snapshot.load_profile_count = 2u;
+    snapshot.load_profile[0].timestamp.year[0] = 0x07u;
+    snapshot.load_profile[0].timestamp.year[1] = 0xEAu;
+    snapshot.load_profile[0].timestamp.month = 10u;
+    snapshot.load_profile[0].timestamp.day = 15u;
+    snapshot.load_profile[0].timestamp.hour = 12u;
+    snapshot.load_profile[0].timestamp.minute = 0u;
+    snapshot.load_profile[0].status = 0x00000000u;
+    snapshot.load_profile[0].active_import_wh = 1000u;
+
+    snapshot.load_profile[1].timestamp.year[0] = 0x07u;
+    snapshot.load_profile[1].timestamp.year[1] = 0xEAu;
+    snapshot.load_profile[1].timestamp.month = 10u;
+    snapshot.load_profile[1].timestamp.day = 15u;
+    snapshot.load_profile[1].timestamp.hour = 12u;
+    snapshot.load_profile[1].timestamp.minute = 15u;
+    snapshot.load_profile[1].status = 0x00000001u;
+    snapshot.load_profile[1].active_import_wh = 1050u;
+
+    /* 1. GET attribute 4: capture_period (OBIS 1.0.99.1.0.255) */
+    const uint8_t req_period[] = {
+        0xC0u, 0x01u, 0x60u, 0x00u, 0x07u, 0x01u, 0x00u, 0x63u, 0x01u, 0x00u, 0xFFu,
+        0x04u, 0x00u
+    };
+    uint8_t response[AMI_COSEM_AXDR_ENCODED_MAX];
+    size_t response_length = 0u;
+    assert(ami_dlms_process_get_request(&association, &snapshot, req_period,
+        sizeof(req_period), response, sizeof(response), &response_length) == AMI_DLMS_APDU_OK);
+    assert(response_length >= 9u && response[0] == 0xC4u && response[3] == 0u);
+    assert(response[4] == AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED);
+    assert(response[7] == 0x03u && response[8] == 0x84u); /* 900 seconds */
+
+    /* 2. GET attribute 2: buffer with entry selector (entry 2 only) */
+    const uint8_t req_entry_sel[] = {
+        0xC0u, 0x01u, 0x61u, 0x00u, 0x07u, 0x01u, 0x00u, 0x63u, 0x01u, 0x00u, 0xFFu,
+        0x02u, 0x01u, 0x02u, 0x02u, 0x04u,
+        0x06u, 0x00u, 0x00u, 0x00u, 0x02u, /* from_entry = 2 */
+        0x06u, 0x00u, 0x00u, 0x00u, 0x02u, /* to_entry = 2 */
+        0x12u, 0x00u, 0x00u, 0x12u, 0x00u, 0x00u
+    };
+    assert(ami_dlms_process_get_request(&association, &snapshot, req_entry_sel,
+        sizeof(req_entry_sel), response, sizeof(response), &response_length) == AMI_DLMS_APDU_OK);
+    assert(response_length > 6u && response[0] == 0xC4u && response[3] == 0u);
+    assert(response[4] == 1u); /* array tag */
+    assert(response[5] == 1u); /* 1 row returned */
+    assert(response[6] == AMI_COSEM_TYPE_STRUCTURE && response[7] == 12u); /* 12 columns */
 }
 
 static void test_hls_requires_ciphered_apdu_and_returns_ciphered_response(void)
@@ -446,6 +509,7 @@ int main(void)
     test_association_view_objects_are_readable();
     test_profile_entry_selective_access();
     test_profile_clock_range_selective_access();
+    test_load_profile_apdu_selective_access();
     test_hls_requires_ciphered_apdu_and_returns_ciphered_response();
     test_cipher_tamper_and_set_read_only_response();
     test_secure_setup_key_transfer_action();

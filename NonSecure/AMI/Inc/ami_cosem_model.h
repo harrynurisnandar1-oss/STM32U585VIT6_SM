@@ -17,13 +17,14 @@ extern "C" {
 #define AMI_COSEM_REGISTER_SAMPLE_MAX 64u
 
 #define AMI_COSEM_PROFILE_MAX_ENTRIES 8u
-#define AMI_COSEM_AXDR_ENCODED_MAX 512u
+#define AMI_COSEM_AXDR_ENCODED_MAX 1024u
 #define AMI_COSEM_PROFILE_SELECTOR_RANGE 1u
 #define AMI_COSEM_PROFILE_SELECTOR_ENTRY 2u
 
 #define AMI_COSEM_VALID_EVENT_LOG (1u << 11)
 #define AMI_COSEM_VALID_BILLING_PROFILE (1u << 12)
 #define AMI_COSEM_VALID_SECURITY_CLIENT_TITLE (1u << 13)
+#define AMI_COSEM_VALID_LOAD_PROFILE (1u << 14)
 
 #define AMI_COSEM_VALID_CLOCK (1u << 10)
 
@@ -60,7 +61,20 @@ typedef struct {
     AmiCosemDateTime billing_timestamp;
     uint64_t active_import_wh;
     uint64_t active_export_wh;
+    uint64_t reactive_import_varh;
+    uint64_t reactive_export_varh;
 } AmiCosemBillingEntry;
+
+typedef struct {
+    AmiCosemDateTime timestamp;
+    uint32_t status;
+    uint64_t active_import_wh;
+    uint64_t active_export_wh;
+    uint64_t reactive_import_varh;
+    uint64_t reactive_export_varh;
+    uint32_t phase_voltage_mv[3];
+    uint32_t phase_current_ma[3];
+} AmiCosemLoadProfileEntry;
 
 /* Raw register values supplied by metrology. The model only accepts logical
  * names present in its SPLN measurement catalog and supplies type/scaler/unit. */
@@ -94,6 +108,8 @@ typedef struct {
     size_t event_log_count;
     AmiCosemBillingEntry billing_history[AMI_COSEM_PROFILE_MAX_ENTRIES];
     size_t billing_history_count;
+    AmiCosemLoadProfileEntry load_profile[AMI_COSEM_PROFILE_MAX_ENTRIES];
+    size_t load_profile_count;
     AmiCosemRegisterSample measurement_samples[AMI_COSEM_REGISTER_SAMPLE_MAX];
     size_t measurement_sample_count;
 } AmiCosemRegisterSnapshot;

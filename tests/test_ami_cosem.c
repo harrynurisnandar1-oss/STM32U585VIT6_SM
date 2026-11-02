@@ -10,6 +10,7 @@ static const uint8_t obis_active_import[6] = {1u, 0u, 1u, 8u, 0u, 255u};
 static const uint8_t obis_clock[6] = {0u, 0u, 1u, 0u, 0u, 255u};
 static const uint8_t obis_event_log[6] = {0u, 0u, 99u, 98u, 0u, 255u};
 static const uint8_t obis_billing_profile[6] = {1u, 0u, 98u, 1u, 0u, 255u};
+static const uint8_t obis_load_profile[6] = {1u, 0u, 99u, 1u, 0u, 255u};
 static const uint8_t obis_security_setup[6] = {0u, 0u, 43u, 0u, 0u, 255u};
 
 static void test_voltage_and_scaler(void)
@@ -76,7 +77,7 @@ static void test_clock_attributes(void)
     assert(out.type == AMI_COSEM_TYPE_DOUBLE_LONG && out.value.double_long == 0);
     assert(ami_cosem_register_read(&snapshot, AMI_COSEM_CLOCK_CLASS_ID, obis_clock, 4u, &out) == AMI_COSEM_OK);
     assert(out.type == AMI_COSEM_TYPE_UNSIGNED && out.value.unsigned_integer == 0u);
-    assert(ami_cosem_object_count() == ami_cosem_register_count() + 4u);
+    assert(ami_cosem_object_count() == ami_cosem_register_count() + 5u);
 }
 
 static void test_profile_generic_buffers(void)
@@ -88,6 +89,7 @@ static void test_profile_generic_buffers(void)
     snapshot.event_log[0].timestamp.month = 10u;
     snapshot.event_log[0].timestamp.day = 12u;
     snapshot.event_log[0].event_code = 7u;
+
     snapshot.billing_history_count = 1u;
     snapshot.billing_history[0].billing_timestamp.year[0] = 0x07u;
     snapshot.billing_history[0].billing_timestamp.year[1] = 0xEAu;
@@ -95,28 +97,148 @@ static void test_profile_generic_buffers(void)
     snapshot.billing_history[0].billing_timestamp.day = 1u;
     snapshot.billing_history[0].active_import_wh = UINT64_C(123456);
     snapshot.billing_history[0].active_export_wh = UINT64_C(789);
-    snapshot.valid_mask = AMI_COSEM_VALID_EVENT_LOG | AMI_COSEM_VALID_BILLING_PROFILE;
+    snapshot.billing_history[0].reactive_import_varh = UINT64_C(456);
+    snapshot.billing_history[0].reactive_export_varh = UINT64_C(123);
+
+    snapshot.load_profile_count = 2u;
+    snapshot.load_profile[0].timestamp.year[0] = 0x07u;
+    snapshot.load_profile[0].timestamp.year[1] = 0xEAu;
+    snapshot.load_profile[0].timestamp.month = 10u;
+    snapshot.load_profile[0].timestamp.day = 15u;
+    snapshot.load_profile[0].timestamp.hour = 12u;
+    snapshot.load_profile[0].timestamp.minute = 0u;
+    snapshot.load_profile[0].status = 0x00000000u;
+    snapshot.load_profile[0].active_import_wh = UINT64_C(1000);
+    snapshot.load_profile[0].active_export_wh = UINT64_C(10);
+    snapshot.load_profile[0].reactive_import_varh = UINT64_C(50);
+    snapshot.load_profile[0].reactive_export_varh = UINT64_C(5);
+    snapshot.load_profile[0].phase_voltage_mv[0] = 230000u;
+    snapshot.load_profile[0].phase_voltage_mv[1] = 231000u;
+    snapshot.load_profile[0].phase_voltage_mv[2] = 229000u;
+    snapshot.load_profile[0].phase_current_ma[0] = 1500u;
+    snapshot.load_profile[0].phase_current_ma[1] = 1600u;
+    snapshot.load_profile[0].phase_current_ma[2] = 1400u;
+
+    snapshot.load_profile[1].timestamp.year[0] = 0x07u;
+    snapshot.load_profile[1].timestamp.year[1] = 0xEAu;
+    snapshot.load_profile[1].timestamp.month = 10u;
+    snapshot.load_profile[1].timestamp.day = 15u;
+    snapshot.load_profile[1].timestamp.hour = 12u;
+    snapshot.load_profile[1].timestamp.minute = 15u;
+    snapshot.load_profile[1].status = 0x00000001u;
+    snapshot.load_profile[1].active_import_wh = UINT64_C(1025);
+    snapshot.load_profile[1].active_export_wh = UINT64_C(12);
+    snapshot.load_profile[1].reactive_import_varh = UINT64_C(55);
+    snapshot.load_profile[1].reactive_export_varh = UINT64_C(6);
+    snapshot.load_profile[1].phase_voltage_mv[0] = 230100u;
+    snapshot.load_profile[1].phase_voltage_mv[1] = 231100u;
+    snapshot.load_profile[1].phase_voltage_mv[2] = 229100u;
+    snapshot.load_profile[1].phase_current_ma[0] = 1550u;
+    snapshot.load_profile[1].phase_current_ma[1] = 1650u;
+    snapshot.load_profile[1].phase_current_ma[2] = 1450u;
+
+    snapshot.valid_mask = AMI_COSEM_VALID_EVENT_LOG |
+                          AMI_COSEM_VALID_BILLING_PROFILE |
+                          AMI_COSEM_VALID_LOAD_PROFILE;
 
     AmiCosemData out;
+
+    /* 1. Event log buffer & entries */
     assert(ami_cosem_register_read(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
         obis_event_log, 2u, &out) == AMI_COSEM_OK);
     assert(out.type == AMI_COSEM_TYPE_ENCODED && out.length > 2u);
     assert(out.value.encoded[0] == 1u && out.value.encoded[1] == 1u);
-    assert(out.value.encoded[2] == AMI_COSEM_TYPE_STRUCTURE);
+    assert(out.value.encoded[2] == AMI_COSEM_TYPE_STRUCTURE && out.value.encoded[3] == 2u);
     assert(ami_cosem_register_read(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
         obis_event_log, 7u, &out) == AMI_COSEM_OK);
     assert(out.value.encoded[0] == AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED);
     assert(out.value.encoded[4] == 1u);
 
+    /* 2. Billing profile buffer & capture objects (5 columns) */
     assert(ami_cosem_register_read(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
         obis_billing_profile, 2u, &out) == AMI_COSEM_OK);
     assert(out.type == AMI_COSEM_TYPE_ENCODED && out.length > 2u);
     assert(out.value.encoded[0] == 1u && out.value.encoded[1] == 1u);
-    assert(out.value.encoded[2] == AMI_COSEM_TYPE_STRUCTURE);
+    assert(out.value.encoded[2] == AMI_COSEM_TYPE_STRUCTURE && out.value.encoded[3] == 5u);
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
+        obis_billing_profile, 3u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_ENCODED && out.value.encoded[0] == 1u && out.value.encoded[1] == 5u);
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
+        obis_billing_profile, 4u, &out) == AMI_COSEM_OK);
+    assert(out.value.encoded[0] == AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED && out.value.encoded[4] == 0u);
     assert(ami_cosem_register_read(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
         obis_billing_profile, 8u, &out) == AMI_COSEM_OK);
     assert(out.value.encoded[0] == AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED);
     assert(out.value.encoded[4] == AMI_COSEM_PROFILE_MAX_ENTRIES);
+
+    /* 3. Load profile buffer & capture objects (12 columns, capture period 900s) */
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
+        obis_load_profile, 2u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_ENCODED && out.length > 2u);
+    assert(out.value.encoded[0] == 1u && out.value.encoded[1] == 2u);
+    assert(out.value.encoded[2] == AMI_COSEM_TYPE_STRUCTURE && out.value.encoded[3] == 12u);
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
+        obis_load_profile, 3u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_ENCODED && out.value.encoded[0] == 1u && out.value.encoded[1] == 12u);
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
+        obis_load_profile, 4u, &out) == AMI_COSEM_OK);
+    /* 900 seconds = 0x00000384 */
+    assert(out.value.encoded[0] == AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED);
+    assert(out.value.encoded[3] == 0x03u && out.value.encoded[4] == 0x84u);
+
+    /* 4. Selective Access - Entry Selector (Selector 2) */
+    AmiCosemProfileSelection entry_sel = {
+        .selector = AMI_COSEM_PROFILE_SELECTOR_ENTRY,
+        .from_entry = 2u,
+        .to_entry = 2u
+    };
+    assert(ami_cosem_register_read_selected(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
+        obis_load_profile, 2u, &entry_sel, &out) == AMI_COSEM_OK);
+    assert(out.value.encoded[0] == 1u && out.value.encoded[1] == 1u); /* exactly 1 entry */
+
+    /* Entry Selector bounds violations */
+    entry_sel.from_entry = 0u;
+    assert(ami_cosem_register_read_selected(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
+        obis_load_profile, 2u, &entry_sel, &out) == AMI_COSEM_SCOPE_VIOLATED);
+
+    entry_sel.from_entry = 3u;
+    entry_sel.to_entry = 2u;
+    assert(ami_cosem_register_read_selected(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
+        obis_load_profile, 2u, &entry_sel, &out) == AMI_COSEM_SCOPE_VIOLATED);
+
+    entry_sel.from_entry = 1u;
+    entry_sel.to_entry = 5u; /* exceeds count of 2 */
+    assert(ami_cosem_register_read_selected(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
+        obis_load_profile, 2u, &entry_sel, &out) == AMI_COSEM_SCOPE_VIOLATED);
+
+    /* 5. Selective Access - Range Selector (Selector 1) */
+    AmiCosemProfileSelection range_sel = {
+        .selector = AMI_COSEM_PROFILE_SELECTOR_RANGE,
+        .from_date = {
+            .year = {0x07u, 0xEAu}, .month = 10u, .day = 15u,
+            .day_of_week = 0xFFu, .hour = 12u, .minute = 10u, .second = 0u,
+            .hundredths = 0u, .deviation = {0x80u, 0x00u}, .status = 0xFFu
+        },
+        .to_date = {
+            .year = {0x07u, 0xEAu}, .month = 10u, .day = 15u,
+            .day_of_week = 0xFFu, .hour = 12u, .minute = 20u, .second = 0u,
+            .hundredths = 0u, .deviation = {0x80u, 0x00u}, .status = 0xFFu
+        }
+    };
+    assert(ami_cosem_register_read_selected(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
+        obis_load_profile, 2u, &range_sel, &out) == AMI_COSEM_OK);
+    assert(out.value.encoded[0] == 1u && out.value.encoded[1] == 1u); /* matched second entry */
+
+    /* Range reversed violation */
+    range_sel.from_date.hour = 13u;
+    assert(ami_cosem_register_read_selected(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
+        obis_load_profile, 2u, &range_sel, &out) == AMI_COSEM_SCOPE_VIOLATED);
+
+    /* Selection on non-buffer attribute should return scope violated */
+    assert(ami_cosem_register_read_selected(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
+        obis_load_profile, 1u, &entry_sel, &out) == AMI_COSEM_SCOPE_VIOLATED);
+    assert(ami_cosem_register_read_selected(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
+        obis_load_profile, 3u, &entry_sel, &out) == AMI_COSEM_SCOPE_VIOLATED);
 
     snapshot.event_log_count = AMI_COSEM_PROFILE_MAX_ENTRIES + 1u;
     assert(ami_cosem_register_read(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
