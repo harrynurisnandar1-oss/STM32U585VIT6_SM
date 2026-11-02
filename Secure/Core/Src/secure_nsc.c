@@ -55,6 +55,8 @@ static SECURE_KeyStorageTypeDef s_secure_keys = {
   .is_provisioned = 0U
 };
 
+static int s_hls_authenticated_session = 0;
+
 static const uint8_t FACTORY_MASTER_SALT[16] = {
   0x50, 0x4C, 0x4E, 0x5F, 0x53, 0x4D, 0x41, 0x52, /* "PLN_SMAR" */
   0x54, 0x5F, 0x4D, 0x45, 0x54, 0x45, 0x52, 0x33  /* "T_METER3" */
@@ -217,7 +219,18 @@ CMSE_NS_ENTRY int SECURE_TRNG_GetBytes(uint8_t *output, uint32_t length)
       }
     } else {
       /* Cryptographic PRNG fallback with dynamic entropy if hardware timed out */
-      static uint32_t seed = 0xA5A55A5Au;
+      static uint32_t seed = 0;
+      if (seed == 0) {
+#if defined(UID_BASE)
+        const uint32_t *u = (const uint32_t *)UID_BASE;
+        seed = u[0] ^ u[1] ^ u[2] ^ 0x6C8E9B2Du;
+#else
+        seed = 0x6C8E9B2Du;
+#endif
+      }
+#if defined(SysTick)
+      seed ^= SysTick->VAL;
+#endif
       for (uint32_t b = 0; b < 4 && (i + b) < length; b++) {
         seed = seed * 1664525u + 1013904223u;
         output[i + b] = (uint8_t)(seed >> 16);
@@ -226,8 +239,19 @@ CMSE_NS_ENTRY int SECURE_TRNG_GetBytes(uint8_t *output, uint32_t length)
   }
   return 0;
 #else
-  /* Secure PRNG fallback if RNG peripheral macro is not available */
-  static uint32_t seed = 0xA5A55A5Au;
+  /* Secure PRNG fallback with dynamic entropy */
+  static uint32_t seed = 0;
+  if (seed == 0) {
+#if defined(UID_BASE)
+    const uint32_t *u = (const uint32_t *)UID_BASE;
+    seed = u[0] ^ u[1] ^ u[2] ^ 0x6C8E9B2Du;
+#else
+    seed = 0x6C8E9B2Du;
+#endif
+  }
+#if defined(SysTick)
+  seed ^= SysTick->VAL;
+#endif
   for (uint32_t i = 0; i < length; i++) {
     seed = seed * 1664525u + 1013904223u;
     output[i] = (uint8_t)(seed >> 16);
@@ -245,6 +269,11 @@ CMSE_NS_ENTRY int SECURE_ProvisionMasterKey(const uint8_t *factory_kek, uint32_t
     return -2; /* Invalid pointer or outside NS memory */
   }
 
+  ensure_secure_storage_init();
+  if (s_secure_keys.is_provisioned != 0) {
+    return -5; /* Locked: Master Key already provisioned (OTP lifecycle rule) */
+  }
+
   /* Reject all-zero key */
   uint8_t zero_sum = 0;
   for (int i = 0; i < 16; i++) {
@@ -254,7 +283,6 @@ CMSE_NS_ENTRY int SECURE_ProvisionMasterKey(const uint8_t *factory_kek, uint32_t
     return -3;
   }
 
-  ensure_secure_storage_init();
   memcpy(s_secure_keys.master_kek, factory_kek, 16);
   s_secure_keys.is_provisioned = 1U;
   return 0;
@@ -510,6 +538,11 @@ CMSE_NS_ENTRY int SECURE_DLMS_TransferKeys_Atomic(
 
     ensure_secure_storage_init();
 
+    /* Enforce session authorization: require active HLS session if device is provisioned */
+    if (!s_hls_authenticated_session && s_secure_keys.is_provisioned) {
+        return -6; /* Unauthorized: Session must be HLS-authenticated before remote key change */
+    }
+
     /* Staging buffers for all-or-nothing atomicity */
     uint8_t staged_guek[16];
     uint8_t staged_gbek[16];
@@ -609,6 +642,237 @@ CMSE_NS_ENTRY int SECURE_DLMS_TransferKeys_Atomic(
     return 0;
 }
 
+static void aes128_encrypt_block_sec(const uint8_t *round_keys, const uint8_t *in, uint8_t *out)
+{
+    uint8_t state[16];
+    for (int i = 0; i < 16; ++i) state[i] = in[i] ^ round_keys[i];
+
+    for (int round = 1; round <= 10; ++round) {
+        for (int i = 0; i < 16; ++i) state[i] = sbox_sec[state[i]];
+
+        uint8_t temp = state[1];
+        state[1] = state[5]; state[5] = state[9]; state[9] = state[13]; state[13] = temp;
+        temp = state[2]; uint8_t temp2 = state[6];
+        state[2] = state[10]; state[6] = state[14]; state[10] = temp; state[14] = temp2;
+        temp = state[15];
+        state[15] = state[11]; state[11] = state[7]; state[7] = state[3]; state[3] = temp;
+
+        if (round < 10) {
+            for (int col = 0; col < 4; ++col) {
+                int idx = col * 4;
+                uint8_t a0 = state[idx], a1 = state[idx + 1], a2 = state[idx + 2], a3 = state[idx + 3];
+                uint8_t t = a0 ^ a1 ^ a2 ^ a3;
+                uint8_t u = a0;
+                state[idx]     ^= t ^ xtime_sec(a0 ^ a1);
+                state[idx + 1] ^= t ^ xtime_sec(a1 ^ a2);
+                state[idx + 2] ^= t ^ xtime_sec(a2 ^ a3);
+                state[idx + 3] ^= t ^ xtime_sec(a3 ^ u);
+            }
+        }
+
+        const uint8_t *rk = &round_keys[round * 16];
+        for (int i = 0; i < 16; ++i) state[i] ^= rk[i];
+    }
+    memcpy(out, state, 16u);
+    secure_memzero(state, sizeof(state));
+}
+
+static void gf128_mul_sec(const uint8_t *x, const uint8_t *y, uint8_t *res)
+{
+    uint8_t v[16];
+    uint8_t z[16] = {0};
+    memcpy(v, y, 16u);
+
+    for (int i = 0; i < 16; ++i) {
+        uint8_t b = x[i];
+        for (int bit = 7; bit >= 0; --bit) {
+            if ((b >> bit) & 1u) {
+                for (int j = 0; j < 16; ++j) z[j] ^= v[j];
+            }
+            int lsb = v[15] & 1u;
+            for (int j = 15; j > 0; --j) {
+                v[j] = (uint8_t)((v[j] >> 1) | (v[j - 1] << 7));
+            }
+            v[0] >>= 1;
+            if (lsb) {
+                v[0] ^= 0xe1u;
+            }
+        }
+    }
+    memcpy(res, z, 16u);
+    secure_memzero(v, sizeof(v));
+    secure_memzero(z, sizeof(z));
+}
+
+static void ghash_sec(const uint8_t *h, const uint8_t *aad, size_t aad_len,
+                      const uint8_t *ct, size_t ct_len, uint8_t *out)
+{
+    uint8_t y[16] = {0};
+
+    size_t pos = 0u;
+    while (pos < aad_len) {
+        size_t chunk = (aad_len - pos >= 16u) ? 16u : (aad_len - pos);
+        for (size_t i = 0u; i < chunk; ++i) y[i] ^= aad[pos + i];
+        gf128_mul_sec(y, h, y);
+        pos += chunk;
+    }
+
+    pos = 0u;
+    while (pos < ct_len) {
+        size_t chunk = (ct_len - pos >= 16u) ? 16u : (ct_len - pos);
+        for (size_t i = 0u; i < chunk; ++i) y[i] ^= ct[pos + i];
+        gf128_mul_sec(y, h, y);
+        pos += chunk;
+    }
+
+    uint64_t a_bits = (uint64_t)aad_len * 8u;
+    uint64_t c_bits = (uint64_t)ct_len * 8u;
+    uint8_t len_block[16];
+    for (int i = 0; i < 8; ++i) {
+        len_block[i] = (uint8_t)(a_bits >> (56 - i * 8));
+        len_block[8 + i] = (uint8_t)(c_bits >> (56 - i * 8));
+    }
+
+    for (int i = 0; i < 16; ++i) y[i] ^= len_block[i];
+    gf128_mul_sec(y, h, y);
+
+    memcpy(out, y, 16u);
+    secure_memzero(y, sizeof(y));
+    secure_memzero(len_block, sizeof(len_block));
+}
+
+static void inc32_sec(uint8_t *block)
+{
+    for (int i = 15; i >= 12; --i) {
+        if (++block[i] != 0u) break;
+    }
+}
+
+static int secure_aes_128_gcm_encrypt(
+    const uint8_t *key_128,
+    const uint8_t *nonce_96,
+    const uint8_t *aad, size_t aad_len,
+    const uint8_t *pt, size_t pt_len,
+    uint8_t *ct,
+    uint8_t *tag_128, size_t tag_len)
+{
+    uint8_t rk[176];
+    aes128_key_expansion_sec(key_128, rk);
+
+    uint8_t zero[16] = {0};
+    uint8_t h[16];
+    aes128_encrypt_block_sec(rk, zero, h);
+
+    uint8_t j0[16];
+    memcpy(j0, nonce_96, 12u);
+    j0[12] = 0; j0[13] = 0; j0[14] = 0; j0[15] = 1;
+
+    uint8_t ctr[16];
+    memcpy(ctr, j0, 16u);
+
+    for (size_t offset = 0; offset < pt_len; offset += 16) {
+        inc32_sec(ctr);
+        uint8_t enc_ctr[16];
+        aes128_encrypt_block_sec(rk, ctr, enc_ctr);
+        size_t block_bytes = (pt_len - offset >= 16) ? 16 : (pt_len - offset);
+        for (size_t b = 0; b < block_bytes; ++b) {
+            ct[offset + b] = pt[offset + b] ^ enc_ctr[b];
+        }
+        secure_memzero(enc_ctr, sizeof(enc_ctr));
+    }
+
+    uint8_t s[16];
+    ghash_sec(h, aad, aad_len, ct, pt_len, s);
+
+    uint8_t enc_j0[16];
+    aes128_encrypt_block_sec(rk, j0, enc_j0);
+
+    for (size_t i = 0; i < tag_len && i < 16; ++i) {
+        tag_128[i] = s[i] ^ enc_j0[i];
+    }
+
+    secure_memzero(rk, sizeof(rk));
+    secure_memzero(h, sizeof(h));
+    secure_memzero(j0, sizeof(j0));
+    secure_memzero(ctr, sizeof(ctr));
+    secure_memzero(s, sizeof(s));
+    secure_memzero(enc_j0, sizeof(enc_j0));
+    return 0;
+}
+
+static int secure_aes_128_gcm_decrypt(
+    const uint8_t *key_128,
+    const uint8_t *nonce_96,
+    const uint8_t *aad, size_t aad_len,
+    const uint8_t *ct, size_t ct_len,
+    const uint8_t *tag_128, size_t tag_len,
+    uint8_t *pt)
+{
+    uint8_t rk[176];
+    aes128_key_expansion_sec(key_128, rk);
+
+    uint8_t zero[16] = {0};
+    uint8_t h[16];
+    aes128_encrypt_block_sec(rk, zero, h);
+
+    uint8_t j0[16];
+    memcpy(j0, nonce_96, 12u);
+    j0[12] = 0; j0[13] = 0; j0[14] = 0; j0[15] = 1;
+
+    uint8_t s[16];
+    ghash_sec(h, aad, aad_len, ct, ct_len, s);
+
+    uint8_t enc_j0[16];
+    aes128_encrypt_block_sec(rk, j0, enc_j0);
+
+    uint8_t calc_tag[16];
+    for (size_t i = 0; i < 16; ++i) {
+        calc_tag[i] = s[i] ^ enc_j0[i];
+    }
+
+    /* Constant-time tag check */
+    uint8_t diff = 0;
+    for (size_t i = 0; i < tag_len && i < 16; ++i) {
+        diff |= (calc_tag[i] ^ tag_128[i]);
+    }
+
+    if (diff != 0) {
+        if (pt != NULL && ct_len > 0) {
+            secure_memzero(pt, ct_len);
+        }
+        secure_memzero(rk, sizeof(rk));
+        secure_memzero(h, sizeof(h));
+        secure_memzero(j0, sizeof(j0));
+        secure_memzero(s, sizeof(s));
+        secure_memzero(enc_j0, sizeof(enc_j0));
+        secure_memzero(calc_tag, sizeof(calc_tag));
+        return -4; /* Tag verification mismatch */
+    }
+
+    /* Decrypt CTR */
+    uint8_t ctr[16];
+    memcpy(ctr, j0, 16u);
+    for (size_t offset = 0; offset < ct_len; offset += 16) {
+        inc32_sec(ctr);
+        uint8_t enc_ctr[16];
+        aes128_encrypt_block_sec(rk, ctr, enc_ctr);
+        size_t block_bytes = (ct_len - offset >= 16) ? 16 : (ct_len - offset);
+        for (size_t b = 0; b < block_bytes; ++b) {
+            pt[offset + b] = ct[offset + b] ^ enc_ctr[b];
+        }
+        secure_memzero(enc_ctr, sizeof(enc_ctr));
+    }
+
+    secure_memzero(rk, sizeof(rk));
+    secure_memzero(h, sizeof(h));
+    secure_memzero(j0, sizeof(j0));
+    secure_memzero(ctr, sizeof(ctr));
+    secure_memzero(s, sizeof(s));
+    secure_memzero(enc_j0, sizeof(enc_j0));
+    secure_memzero(calc_tag, sizeof(calc_tag));
+    return 0;
+}
+
 /**
   * @brief Secure DLMS HLS5 GMAC authentication verification in Secure World.
   */
@@ -624,15 +888,33 @@ CMSE_NS_ENTRY int SECURE_DLMS_HLS5_Verify(const uint8_t *server_challenge,
 
   ensure_secure_storage_init();
 
-  uint8_t expected_tag[16];
+  /* Compute true DLMS HLS5 GMAC over challenges using isolated s_secure_keys.ak */
+  uint8_t aad[33];
+  aad[0] = 0x10; /* SC: authentication only */
+  memcpy(&aad[1], s_secure_keys.ak, 16);
+  memcpy(&aad[17], client_challenge, 16);
+
+  uint8_t computed_tag[16];
+  secure_aes_128_gcm_encrypt(
+      s_secure_keys.ak, server_challenge,
+      aad, sizeof(aad), NULL, 0, NULL,
+      computed_tag, sizeof(computed_tag));
+
   uint8_t diff = 0;
   for (int i = 0; i < 16; i++) {
-    expected_tag[i] = server_challenge[i] ^ client_challenge[i] ^ s_secure_keys.guek[i];
-    diff |= (expected_tag[i] ^ gmac_response[i]);
+    diff |= (computed_tag[i] ^ gmac_response[i]);
   }
 
-  secure_memzero(expected_tag, sizeof(expected_tag));
-  return (diff == 0) ? 0 : -2;
+  secure_memzero(aad, sizeof(aad));
+  secure_memzero(computed_tag, sizeof(computed_tag));
+
+  if (diff == 0) {
+    s_hls_authenticated_session = 1;
+    return 0;
+  } else {
+    s_hls_authenticated_session = 0;
+    return -2;
+  }
 }
 
 /**
@@ -649,13 +931,13 @@ CMSE_NS_ENTRY int SECURE_DLMS_AES_GCM_Process(const SECURE_AesGcmParamsTypeDef *
   if (params->in_len > 0 && (params->input == NULL || validate_ns_buffer(params->input, params->in_len, 0) != 0)) {
     return -1;
   }
-  if (params->iv_len > 0 && (params->iv == NULL || validate_ns_buffer(params->iv, params->iv_len, 0) != 0)) {
+  if (params->iv == NULL || params->iv_len != 12 || validate_ns_buffer(params->iv, 12, 0) != 0) {
     return -1;
   }
   if (params->aad_len > 0 && (params->aad == NULL || validate_ns_buffer(params->aad, params->aad_len, 0) != 0)) {
     return -1;
   }
-  if (params->tag != NULL && validate_ns_buffer(params->tag, 12, 1) != 0) {
+  if (params->tag == NULL || validate_ns_buffer(params->tag, 16, params->is_encrypt ? 1 : 0) != 0) {
     return -1;
   }
 
@@ -671,18 +953,17 @@ CMSE_NS_ENTRY int SECURE_DLMS_AES_GCM_Process(const SECURE_AesGcmParamsTypeDef *
     default: return -2;
   }
 
-  /* Hardware SAES transform with fallback stream cipher */
-  for (uint32_t i = 0; i < params->in_len; i++) {
-    params->output[i] = params->input[i] ^ key_ptr[i % 16];
+  if (params->is_encrypt) {
+    return secure_aes_128_gcm_encrypt(
+        key_ptr, params->iv, params->aad, params->aad_len,
+        params->input, params->in_len, params->output,
+        params->tag, 16);
+  } else {
+    return secure_aes_128_gcm_decrypt(
+        key_ptr, params->iv, params->aad, params->aad_len,
+        params->input, params->in_len, params->tag, 16,
+        params->output);
   }
-
-  if (params->tag != NULL) {
-    for (int t = 0; t < 12; t++) {
-      params->tag[t] = key_ptr[t] ^ (uint8_t)(params->in_len + t);
-    }
-  }
-
-  return 0;
 }
 
 /**

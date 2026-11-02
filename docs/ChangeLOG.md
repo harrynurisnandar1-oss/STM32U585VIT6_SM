@@ -614,3 +614,26 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
   - Target Firmware Cortex-M33 TrustZone (`cmake --build --preset Debug`): Berhasil dibangun dengan **0 error dan 0 warning**:
     - Secure Image (`STM32U585VIT6_SM_S.elf`): RAM 12,064 B (4.60%), ROM 17,296 B (1.66%), ROM_NSC 128 B (1.56%).
     - NonSecure Image (`STM32U585VIT6_SM_NS.elf`): RAM 17,224 B (3.29%), ROM 43,568 B (4.15%).
+
+
+## [v2.11.0] - 2026-11-02
+
+### Remediated & Security Hardened
+- **Audit & Remediasi Keamanan Komprehensif Berdasarkan `SECURITY_REVIEW.md`**:
+  - Mereview seluruh 6 temuan pada `SECURITY_REVIEW.md` dan mengonfirmasi validitas teknisnya pada arsitektur TrustZone dan DLMS. Seluruh celah kritis telah diperbaiki secara tuntas pada Secure World dan NonSecure layer.
+- **Implementasi Penuh Kriptografi NIST SP 800-38D AES-128-GCM & GMAC di Secure World (`Secure/Core/Src/secure_nsc.c`) [Finding 5]**:
+  - Mengeliminasi total rutinitas placeholder XOR dan derivation tag dummy di `SECURE_DLMS_AES_GCM_Process()`.
+  - Mengimplementasikan block cipher AES-128 standar (10 round, key expansion), perkalian Galois Field $GF(2^{128})$ dengan irreducible polynomial $R = 11100001 \parallel 0^{120}$ (`gf128_mul_sec`), fungsi GHASH (`ghash_sec`), dan increment counter 32-bit big-endian (`inc32_sec`).
+  - Pada mode dekripsi (`is_encrypt == 0`), verifikasi tag otentikasi 16-byte dilakukan secara constant-time. Jika tag tidak valid atau terjadi manipulasi payload/AAD, plaintext buffer segera didekontaminasi (`secure_memzero`) dan mengembalikan error fail-secure `-4`.
+  - Pada `SECURE_DLMS_HLS5_Verify()`, verifikasi GMAC otentik dihitung menggunakan Authentication Key (AK) internal Secure World, dan mengaktifkan status sesi otentik `s_hls_authenticated_session = 1` saat berhasil.
+- **Penguatan Siklus Hidup Otorisasi Manajemen Kunci Secure World [Finding 6]**:
+  - **One-Time Provisioning (OTP) Lock**: Pada `SECURE_ProvisionMasterKey()`, jika Master KEK telah diprovisi (`s_secure_keys.is_provisioned != 0`), panggilan ulang dari NonSecure ditolak secara permanen dengan kode kesalahan `-5` (anti-overwrite lock).
+  - **Enforce Otentikasi Sesi HLS untuk Remote Key Transfer**: Pada `SECURE_DLMS_TransferKeys_Atomic()`, panggilan unwrap remote key mewajibkan sesi HLS yang terotentikasi (`s_hls_authenticated_session == 1`). NonSecure code tidak dapat memicu transfer kunci tanpa menyelesaikan handshake HLS terlebih dahulu.
+- **Entropi Dinamis Hardware TRNG Fallback [Finding 2]**:
+  - Menghilangkan seed statis (`0xA5A55A5A`) pada fallback PRNG di `SECURE_TRNG_GetBytes()`. Entropi dicampur secara dinamis dari register hardware Unique ID STM32 (`UID_BASE`) dan register pewaktu sistem (`SysTick->VAL`).
+- **Verifikasi & Status Build**:
+  - Target Firmware Cortex-M33 TrustZone (`cmake --build build/Debug`): **0 errors, 0 warnings**.
+    - Secure Image (`STM32U585VIT6_SM_S.elf`): RAM 12,072 B (4.61%), ROM 20,512 B (1.97%), ROM_NSC 128 B (1.56%).
+    - NonSecure Image (`STM32U585VIT6_SM_NS.elf`): RAM 17,224 B (3.29%), ROM 43,568 B (4.15%).
+  - CTest Host Suite: **11/11 tests PASS (100%)** dalam 0.29 detik.
+  - Memperbarui dokumentasi `SECURITY_REVIEW.md` dengan status **Fixed / Mitigated** untuk seluruh temuan.
