@@ -84,6 +84,102 @@ Each identified finding has now been **remediated directly in the codebase** acr
 
 ---
 
+## Re-review update (2026-11-02)
+
+This source-based re-review supersedes earlier statuses in this report where
+they conflict. No live device or network was attacked, and no externally
+reachable DLMS exploit path was established.
+
+### Findings still present or newly identified
+
+#### 1. Known/default operational keys and volatile key storage
+
+- **Severity:** High
+- **Confidence:** 10/10
+- **Evidence:** `Secure/Core/Src/secure_nsc.c:60-124,263-287`;
+  `Secure_nsclib/secure_nsc.h:49`.
+- **Issue and impact:** GUEK, GBEK, and AK are initialized to fixed,
+  source-visible values. The fallback KEK is derived from the device UID and a
+  fixed salt; the UID is available through an NSC API. Provisioned keys and
+  provisioning state are held in volatile RAM, so reset loses provisioning
+  state and restores defaults. If the DLMS security path is enabled, known
+  default keys undermine authentication and ciphering.
+- **Reachability:** No functioning remote DLMS attack path was established.
+
+#### 2. HLS key material remains in NonSecure memory
+
+- **Severity:** High
+- **Confidence:** 9/10
+- **Evidence:** `NonSecure/AMI/Inc/ami_dlms_cipher.h:16-28`;
+  `NonSecure/AMI/Src/ami_dlms_cipher.c:254-268`;
+  `NonSecure/AMI/Src/ami_security.c:762-779`.
+- **Issue and impact:** The NonSecure Suite 0 context stores raw keys and HLS
+  proof generation uses a NonSecure authentication-key context. The Secure HLS
+  verifier has no caller in the repository. A compromise of NonSecure execution
+  could expose authentication and ciphering credentials.
+- **Reachability:** This is a TrustZone isolation/readiness gap; external
+  exploitability is unverified.
+
+#### 3. RNG failure falls back to predictable output
+
+- **Severity:** Medium
+- **Confidence:** 9/10
+- **Evidence:** `Secure/Core/Src/secure_nsc.c:214-256`.
+- **Issue and impact:** On RNG timeout or error, the API returns success after
+  generating output with an LCG. Security-sensitive challenges may be
+  predictable when hardware entropy is unavailable. Runtime hardware behavior
+  was not tested.
+
+#### 4. Invocation-counter persistence is not integrated into firmware runtime
+
+- **Severity:** Medium
+- **Confidence:** 9/10
+- **Evidence:** `NonSecure/AMI/Src/ami_dlms_cipher.c:154-170`;
+  `NonSecure/AMI/Src/ami_dlms_port.c:327-332`;
+  `NonSecure/AMI/Src/ami_nvm_counter.c:183-218`;
+  `Secure/Core/Src/main.c:156-161`.
+- **Issue and impact:** Without a bound NVM context, TX/RX counters fall back
+  to RAM. The firmware task does not initialize or bind a counter manager. The
+  provided NonSecure TAMP driver also conflicts with the shown Secure TAMP
+  attribution. If ciphering is enabled in this configuration, reset may allow
+  counter reuse and replay.
+- **Reachability:** The firmware task does not initialize a cipher backend;
+  target behavior remains unverified.
+
+#### 5. Mutable NonSecure parameter structure at AES-GCM NSC boundary
+
+- **Severity:** Medium
+- **Confidence:** 8/10
+- **Evidence:** `Secure/Core/Src/secure_nsc.c:923-965`.
+- **Issue and impact:** The NSC service validates pointers and lengths from a
+  NonSecure parameter structure, then reads the fields again during the
+  cryptographic operation. A concurrent NonSecure DMA writer able to modify
+  the structure after validation could substitute a pointer, potentially
+  crossing the Secure/NonSecure boundary.
+- **Conditions:** Exploitation depends on concurrent DMA access and the
+  target's memory/TrustZone configuration; these were not verified. Copy the
+  structure into Secure-owned memory once, then validate and use only that copy.
+
+### Status changes to earlier findings
+
+- No-auth and LLS are rejected by the embedded policy. Product-specific
+  authentication/cipher configuration is still absent.
+- The earlier finding that the Secure cipher was repeating-key XOR is stale:
+  current source implements software AES/GHASH and decrypt-tag verification.
+  It is not the claimed hardware SAES implementation and still requires target
+  validation.
+- The NSC key-management authorization concern remains: provisioning uses a
+  public compile-time token and volatile state; key-transfer authorization
+  must be enforced inside Secure World.
+
+### Re-review limitations
+
+- Physical UART and end-to-end remote reachability were not tested.
+- SAU/IDAU/GTZC runtime attribution, CMSE enforcement, DMA behavior, RNG/SAES
+  behavior, and protected-storage persistence require target-hardware
+  validation.
+- No exploit was executed against a device or network.
+
 ## Validation Summary
 
 | Test Suite | Result | Details |
