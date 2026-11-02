@@ -1,0 +1,6 @@
+services:
+  stm32u585vit6sm:
+    image: stm32u585vit6sm
+    build:
+      context: .
+      dockerfile: ./Dockerfile
