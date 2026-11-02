@@ -586,3 +586,31 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
     - NonSecure image (`STM32U585VIT6_SM_NS.elf`): RAM 17,224 B (3.29%), ROM 43,568 B (4.15%).
 
 
+## [v2.10.0] - 2026-11-02
+
+### Added
+- **Provisi Pabrik Master Key (KEK) Unik Per-Device di Secure Storage (`Secure_nsclib/secure_nsc.h`, `Secure/Core/Src/secure_nsc.c`)**:
+  - **Penyimpanan Terisolasi Secure World TrustZone**: Struktur data internal `SECURE_KeyStorageTypeDef` (`master_kek`, `guek`, `gbek`, `ak`, `is_provisioned`) diisolasi secara permanen di domain Secure World tanpa adanya getter fungsi eksposur plaintext ke NonSecure World.
+  - **Derivasi Master Key Hardware-Unik Otomatis**: Ketika perangkat beroperasi sebelum provisi pabrik eksplisit (`!is_provisioned`), Secure World secara deterministik membaca 96-bit Unique Device ID (UID) STM32U585 dari register `UID_BASE` (`0x0BFA0700`), mendiversifikasikannya dengan `FACTORY_MASTER_SALT`, dan menghasilkan 128-bit Master KEK yang unik per silikon chip meter.
+  - **Gateway Provisi Pabrik Terproteksi (`SECURE_ProvisionMasterKey`)**: Provisi Master Key pabrik terlindungi oleh token otentikasi `SECURE_FACTORY_PROVISION_TOKEN` (`0x504C4E31` 'PLN1'). Melakukan validasi keamanan pointer NonSecure menggunakan ARM CMSE (`validate_ns_buffer`), menolak kunci lemah (all-zero), dan menandai status terprovisi secara permanen.
+  - **Interface Query Status & Pembacaan UID**: Menyediakan NSC API `SECURE_IsMasterKeyProvisioned()` dan `SECURE_GetDeviceUniqueId()`.
+- **Remote Key Transfer RFC 3394 AES Key Wrap Atomik di Secure World (`Secure/Core/Src/secure_nsc.c`, `NonSecure/AMI/Inc/ami_security.h`, `NonSecure/AMI/Src/ami_security.c`, `NonSecure/AMI/Src/ami_dlms_cipher.c`)**:
+  - **Engine Kriptografi RFC 3394 / NIST SP 800-38F Key Wrap & Key Unwrap (KW)**:
+    - Implementasi pembalikan cipher AES-128 standar (*Inverse Cipher*: `InvSubBytes`, `InvShiftRows`, `InvMixColumns`, `InvAddRoundKey`) pada domain Secure dan NonSecure host test.
+    - Verifikasi integritas waktu konstan terhadap Initial Value standar (`0xA6A6A6A6A6A6A6A6`).
+    - Lulus 100% verifikasi Known Answer Test (KAT) NIST SP 800-38F Appendix 4.1.
+  - **Penegakan Atomisitas Penuh (*Strict Atomic Key Transfer* via `SECURE_DLMS_TransferKeys_Atomic`)**:
+    - Menerima batch kunci terbungkus 24-byte (GUEK, GBEK, AK, atau Master KEK baru) dari HES/NonSecure.
+    - Setiap kunci di-unwrap ke staging buffer internal Secure World menggunakan KEK perangkat unik.
+    - **All-or-Nothing Atomicity**: Jika terdapat satu saja kunci dalam batch yang mengalami kegagalan verifikasi integritas RFC 3394 (data rusak, salah kunci KEK, atau manipulasi bit), seluruh proses transfer dibatalkan seketika (*immediate rollback*), memori staging segera di-zeroize, dan kunci operasional aktif dipertahankan 100% tanpa perubahan.
+    - Kunci operasional baru hanya di-commit ke Secure Storage bila SELURUH kunci dalam batch terverifikasi valid.
+    - Plaintext kunci rahasia tidak pernah keluar atau terekspos ke domain NonSecure.
+- **Pengujian Unit & Verifikasi Holistik (`tests/test_ami_key_transfer.c`, `tests/CMakeLists.txt`)**:
+  - `test_rfc3394_kat`: Memverifikasi kesesuaian enkripsi pembungkusan dan pembongkaran terhadap vektor uji resmi NIST SP 800-38F Appendix 4.1.
+  - `test_rfc3394_tamper_integrity`: Memvalidasi penolakan mutlak dan kegagalan integritas pada setiap mutasi bit dari 24-byte wrapped key.
+  - `test_suite0_atomic_key_transfer_success`: Memvalidasi keberhasilan pembaruan batch GUEK dan AK.
+  - `test_suite0_atomic_key_transfer_rollback_on_failure`: Memvalidasi kegagalan salah satu kunci membatalkan pembaruan seluruh batch secara atomik tanpa merusak kunci lama.
+  - CTest Host: **11/11 tests PASSing (100%)**.
+  - Target Firmware Cortex-M33 TrustZone (`cmake --build --preset Debug`): Berhasil dibangun dengan **0 error dan 0 warning**:
+    - Secure Image (`STM32U585VIT6_SM_S.elf`): RAM 12,064 B (4.60%), ROM 17,296 B (1.66%), ROM_NSC 128 B (1.56%).
+    - NonSecure Image (`STM32U585VIT6_SM_NS.elf`): RAM 17,224 B (3.29%), ROM 43,568 B (4.15%).

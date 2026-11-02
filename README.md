@@ -19,7 +19,7 @@ Fokus pekerjaan E2 adalah menyediakan komunikasi meter melalui DLMS/COSEM dan me
   - Mutual 4-pass authentication HLS 5 (GMAC) OID `2.16.756.5.8.2.5` dengan constant-time comparison dan zeroization memori kerja (`secure_zeroize`).
   - Isolasi API raw-key: Firmware NonSecure hanya mengenal referensi aman `AmiKeyHandle`.
 - **Driver Metrologi ADE9000:** Pemetaan register SPI 3-Fasa (RMS, Daya Aktif/Reaktif, Energi, Periode/Frekuensi, Status) dan feeder snapshot otomatis ke register DLMS/COSEM.
-- **Verifikasi Host & Docker:** 9/9 suite CTest host lulus 100% serta automated Docker containerized test runner (Alpine 23 MB, 0 CVE) dengan simulasi client Python E2E.
+- **Verifikasi Host & Docker:** 11/11 suite CTest host lulus 100% serta automated Docker containerized test runner (Alpine 23 MB, 0 CVE) dengan simulasi client Python E2E.
 
 ### Batas Tanggung Jawab dan Status Integrasi
 
@@ -46,17 +46,18 @@ Tabel berikut merangkum status implementasi sistem Smart Meter 3-Fasa berdasarka
 | **Keamanan APDU** | DLMS Security Suite 0 Ciphered APDU Engine (`0xC8`, `0xC9`, `0xCB`) | **SUDAH** | Terverifikasi di `NonSecure/AMI/Src/ami_dlms_cipher.c` & `test_ami_dlms_cipher.c` |
 | **Keamanan APDU** | Anti-Replay RX Counter Monotonik & Monotonic TX Counter Allocation | **SUDAH** | Menolak replay frame seketika (`AMI_DLMS_APDU_COUNTER_REJECTED`) |
 | **Metrologi Driver** | Driver Metrologi ADE9000 SPI Register Map & Feeder Snapshot | **SUDAH** | Terverifikasi di `NonSecure/AMI/Src/ami_ade9000.c` & `test_ami_ade9000.c` |
-| **TrustZone Gateway** | Gerbang NonSecure Callable (NSC) `CMSE_NS_ENTRY` stubs di Secure World | **SUDAH** | Dideklarasikan di `Secure_nsclib/secure_nsc.h` & `Secure/Core/Src/secure_nsc.c` |
-| **Testing & Simulasi** | CTest Host Native Unit Tests (10/10 suite 100% Passed) | **SUDAH** | Menjalankan pengujian regresi deterministik via Ninja |
+| **Hardware TrustZone** | Konfigurasi SAU, GTZC (TZSC/MPCBB/TZIC), dan isolasi peripheral kripto | **SUDAH** | Terkonfigurasi di `partition_stm32u585xx.h`, `Secure/Core/Src/main.c`, `stm32u5xx_it.c` |
+| **TrustZone Gateway** | Gerbang NonSecure Callable (NSC) `CMSE_NS_ENTRY` & pointer range check | **SUDAH** | Divalidasi via `cmse_check_address_range` di `Secure/Core/Src/secure_nsc.c` |
+| **Key Management** | Provisi pabrik Master Key (KEK) unik per-device (UID) di Secure Storage | **SUDAH** | Terisolasi di Secure World via `SECURE_ProvisionMasterKey` & derivasi UID register |
+| **Key Management** | Remote Key Transfer RFC 3394 AES Key Wrap atomik di Secure World | **SUDAH** | Atomic update batch (GUEK, GBEK, AK) all-or-nothing rollback di `secure_nsc.c` |
+| **Testing & Simulasi** | CTest Host Native Unit Tests (11/11 suite 100% Passed) | **SUDAH** | Menjalankan pengujian regresi deterministik via Ninja |
 | **Testing & Simulasi** | Simulator TCP Host (`gurux_simulator.exe` port 4059) & E2E Docker Runner | **SUDAH** | Docker Compose terpusat di `docker_test/` (Alpine 23 MB, 0 CVE) |
 | **Testing & Simulasi** | Profil Workspace Gurux DLMSDirector XML (`STM32U585VIT6_SM.gxc`) | **SUDAH** | Tersinkronisasi dengan seluruh parameter objek PLN |
+| **Anti-Replay NVM** | Monotonic Invocation Counter persisten & wear-leveling NVM/TAMP Backup | **SUDAH** | Terverifikasi di `NonSecure/AMI/Src/ami_nvm_counter.c` & `test_ami_nvm_counter.c` |
+| **Anti-Replay NVM** | Penanganan saturasi Invocation Counter (`0xFFFFFFFF` fail-closed) | **SUDAH** | Teruji via `test_nvm_counter_saturation_handling` (menolak alokasi saat mencapai batas uint32) |
 |---|---|---|---|
 | **Hardware TrustZone** | Implementasi driver hardware SAES/AES-GCM di Secure World (`Secure/`) | **BELUM** | Menghubungkan fungsi NSC ke peripheral SAES hardware STM32U5 |
-| **Key Management** | Provisi pabrik Master Key (KEK) unik per-device di Secure Storage/OTP | **BELUM** | Standar SPLN D5.002:2024 mewajibkan KEK terlindungi di Secure World |
-| **Key Management** | Remote Key Transfer RFC 3394 AES Key Wrap atomik di Secure World | **BELUM** | Eksekusi unwrap dan rotasi kunci GUEK/AK di dalam TrustZone Secure |
 | **Hardware Security** | Integrasi Hardware TRNG fisik STM32U5 (NIST SP 800-90B / AIS-31) | **BELUM** | Menghasilkan Server Challenge 16-byte berbasis entropi acak fisik |
-| **Anti-Replay NVM** | Monotonic Invocation Counter persisten & wear-leveling NVM/TAMP Backup | **SUDAH** | Terverifikasi di NonSecure/AMI/Src/ami_nvm_counter.c & 	est_ami_nvm_counter.c |
-| **Anti-Replay NVM** | Penanganan saturasi Invocation Counter (`0xFFFFFFFF` fail-closed) | **BELUM** | Wajib menghentikan enkripsi & memicu rotasi kunci bila IC habis |
 | **Anti-Brute-Force** | Progressive exponential backoff / lockout setelah N kali gagal HLS | **BELUM** | Mencegah serangan brute-force dictionary attack pada port komunikasi |
 | **Hardware Driver** | Integrasi physical UART/Optical Probe DMA Circular Buffer | **BELUM** | `ami_dlms_hardware_uart_tx()` masih berupa stub non-hardware |
 | **Metrologi ADE9000** | Task FreeRTOS akuisisi register energi/tegangan riil via SPI ADE9000 | **BELUM** | Saat ini data tegangan/arus masih diisi oleh test sample bank |
@@ -84,18 +85,19 @@ Tabel berikut merangkum status implementasi sistem Smart Meter 3-Fasa berdasarka
 #### Phase 2 — Integrasi Awal Target & Driver Metrologi
 - Implementasi layer abstraksi port (`ami_dlms_port.c`) non-blocking untuk UART/DMA buffer.
 - Driver metrologi ADE9000 (`ami_ade9000.c`) untuk pembacaan register daya/energi.
-- Gerbang NonSecure Callable (NSC) TrustZone ARM Cortex-M33 disiapkan di `secure_nsc.c`.
-- Penegakan kebijakan fail-closed pada firmware target (blokir No-Auth dan LLS).
+- Gerbang NonSecure Callable (NSC) TrustZone ARM Cortex-M33 dengan validasi `cmse_check_address_range()` di `secure_nsc.c`.
+- Konfigurasi partisi hardware Security Attribution Unit (SAU) dan GTZC (TZSC/MPCBB/TZIC) di Secure World.
+- Implementasi persisten Invocation Counter & Wear-Leveling Anti-Replay NVM Engine (`ami_nvm_counter.c`) dengan dukungan hardware TAMP Backup Register.
+- Provisi Master Key (KEK) unik per-device (UID) dan Remote Key Transfer atomik RFC 3394 AES Key Wrap di Secure World.
+- Penegakan kebijakan fail-closed pada firmware target (blokir No-Auth, LLS, dan wrap-around counter `0xFFFFFFFF`).
 
 ---
 
 ### Spin 2 — Pelengkapan Fitur Produksi & Kesiapan Sertifikasi (Tahap Selanjutnya)
 
-#### Phase 3 — Integrasi Hardware TrustZone & Keamanan Produksi
+#### Phase 3 — Integrasi Hardware Kripto & Fitur Lanjutan Produksi
 - Menghubungkan fungsi NSC ke akselerator hardware SAES/AES-GCM dan TRNG STM32U5 di Secure World.
-- Provisi Master Key (KEK) unik per-device pada Secure Flash / OTP.
-- Implementasi unwrap RFC 3394 AES Key Wrap untuk remote key transfer atomik di Secure World.
-- Implementasi algoritma wear-leveling flash internal untuk persistensi Invocation Counter anti-replay.
+- Mekanisme progressive exponential backoff / lockout setelah $N$ kali kegagalan otentikasi HLS.
 - Integrasi driver fisik UART/Optical Probe DMA dengan FreeRTOS worker task.
 
 #### Phase 4 — Sertifikasi, Conformance, dan Handoff
@@ -118,7 +120,7 @@ cmake --build tests/build --parallel
 ctest --test-dir tests/build --output-on-failure
 ```
 
-*Seluruh 9 test suite (`AmiCosemTest`, `AmiSecurityTest`, `AmiDlmsAssociationTest`, `AmiFirmwareAuthPolicyTest`, `AmiDlmsApduTest`, `AmiDlmsHdlcTest`, `AmiDlmsPortTest`, `AmiAde9000Test`, `AmiDlmsCipherTest`) akan dieksekusi.*
+*Seluruh 11 test suite (`AmiCosemTest`, `AmiSecurityTest`, `AmiDlmsAssociationTest`, `AmiFirmwareAuthPolicyTest`, `AmiDlmsApduTest`, `AmiDlmsHdlcTest`, `AmiDlmsPortTest`, `AmiAde9000Test`, `AmiDlmsCipherTest`, `AmiNvmCounterTest`, `AmiKeyTransferTest`) akan dieksekusi.*
 
 ### 2. Menjalankan Simulator Host untuk Gurux DLMSDirector
 

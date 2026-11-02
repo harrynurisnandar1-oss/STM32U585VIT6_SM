@@ -104,3 +104,16 @@ add_executable(test_ami_nvm_counter
     "${AMI_SRC}/ami_security.c")
 target_include_directories(test_ami_nvm_counter PRIVATE "${AMI_INC}")
 add_test(NAME AmiNvmCounterTest COMMAND test_ami_nvm_counter)
+
+add_executable(test_ami_key_transfer
+    test_ami_key_transfer.c
+    "${AMI_SRC}/ami_dlms_cipher.c"
+    "${AMI_SRC}/ami_nvm_counter.c"
+    "${AMI_SRC}/ami_dlms_port.c"
+    "${AMI_SRC}/ami_dlms_hdlc.c"
+    "${AMI_SRC}/ami_dlms_association.c"
+    "${AMI_SRC}/ami_dlms_apdu.c"
+    "${AMI_SRC}/ami_cosem_model.c"
+    "${AMI_SRC}/ami_security.c")
+target_include_directories(test_ami_key_transfer PRIVATE "${AMI_INC}")
+add_test(NAME AmiKeyTransferTest COMMAND test_ami_key_transfer)
