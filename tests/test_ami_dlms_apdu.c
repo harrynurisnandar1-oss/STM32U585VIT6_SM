@@ -177,6 +177,73 @@ static void test_association_ln_object_list(void)
     assert(found_association && found_voltage_l1);
 }
 
+static void test_association_view_objects_are_readable(void)
+{
+    typedef struct {
+        uint16_t class_id;
+        uint8_t logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH];
+    } ExpectedObject;
+
+    static const ExpectedObject objects[] = {
+        {15u, {0u, 0u, 40u, 0u, 0u, 255u}},
+        {8u,  {0u, 0u, 1u, 0u, 0u, 255u}},
+        {3u,  {1u, 0u, 32u, 7u, 0u, 255u}},
+        {3u,  {1u, 0u, 52u, 7u, 0u, 255u}},
+        {3u,  {1u, 0u, 72u, 7u, 0u, 255u}},
+        {3u,  {1u, 0u, 31u, 7u, 0u, 255u}},
+        {3u,  {1u, 0u, 51u, 7u, 0u, 255u}},
+        {3u,  {1u, 0u, 71u, 7u, 0u, 255u}},
+        {3u,  {1u, 0u, 1u, 8u, 0u, 255u}},
+        {3u,  {1u, 0u, 2u, 8u, 0u, 255u}},
+        {7u,  {0u, 0u, 99u, 98u, 0u, 255u}},
+        {7u,  {1u, 0u, 98u, 1u, 0u, 255u}}
+    };
+    AmiDlmsAssociation association = {.state = AMI_DLMS_ASSOC_ASSOCIATED};
+    AmiCosemRegisterSnapshot snapshot = {
+        .phase_voltage_millivolts = {230000u, 231000u, 229000u},
+        .phase_current_milliamps = {1000u, 1100u, 900u},
+        .active_import_wh = 1234u,
+        .active_export_wh = 12u,
+        .valid_mask = AMI_COSEM_VALID_CLOCK |
+                      AMI_COSEM_VALID_VOLTAGE_A |
+                      AMI_COSEM_VALID_VOLTAGE_B |
+                      AMI_COSEM_VALID_VOLTAGE_C |
+                      AMI_COSEM_VALID_CURRENT_A |
+                      AMI_COSEM_VALID_CURRENT_B |
+                      AMI_COSEM_VALID_CURRENT_C |
+                      AMI_COSEM_VALID_ACTIVE_IMPORT |
+                      AMI_COSEM_VALID_ACTIVE_EXPORT |
+                      AMI_COSEM_VALID_EVENT_LOG |
+                      AMI_COSEM_VALID_BILLING_PROFILE
+    };
+
+    snapshot.event_log_count = 1u;
+    snapshot.event_log[0].event_code = 1u;
+    snapshot.billing_history_count = 1u;
+    snapshot.billing_history[0].active_import_wh = 1234u;
+
+    for (size_t i = 0u; i < sizeof(objects) / sizeof(objects[0]); ++i) {
+        const uint8_t request[] = {
+            0xC0u, 0x01u, (uint8_t)(0x40u + i),
+            (uint8_t)(objects[i].class_id >> 8),
+            (uint8_t)objects[i].class_id,
+            objects[i].logical_name[0], objects[i].logical_name[1],
+            objects[i].logical_name[2], objects[i].logical_name[3],
+            objects[i].logical_name[4], objects[i].logical_name[5],
+            0x02u, 0x00u
+        };
+        uint8_t response[AMI_COSEM_AXDR_ENCODED_MAX];
+        size_t response_length = 0u;
+
+        assert(ami_dlms_process_get_request(&association, &snapshot, request,
+            sizeof(request), response, sizeof(response), &response_length) ==
+            AMI_DLMS_APDU_OK);
+        assert(response_length > 5u);
+        assert(response[0] == 0xC4u && response[1] == 0x01u);
+        assert(response[2] == request[2] && response[3] == 0u);
+    }
+}
+
 static void test_profile_entry_selective_access(void)
 {
     AmiDlmsAssociation association = {.state = AMI_DLMS_ASSOC_ASSOCIATED};
@@ -376,6 +443,7 @@ int main(void)
     test_voltage_get_request_response();
     test_unknown_obis_returns_access_error();
     test_association_ln_object_list();
+    test_association_view_objects_are_readable();
     test_profile_entry_selective_access();
     test_profile_clock_range_selective_access();
     test_hls_requires_ciphered_apdu_and_returns_ciphered_response();

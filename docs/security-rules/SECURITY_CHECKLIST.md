@@ -1,4 +1,4 @@
-﻿# Security Checklist (DLMS/COSEM IEC 62056 & STM32U5 TrustZone AMI Smart Meter)
+# Security Checklist (DLMS/COSEM IEC 62056 & STM32U5 TrustZone AMI Smart Meter)
 
 Use this checklist for architecture design reviews, implementation verification, and release candidates. Record evidence, owner, and review date for each item. `Open` is the initial status for this repository; the existence of a code path or host test is not sufficient evidence of target security.
 
@@ -6,7 +6,7 @@ Use this checklist for architecture design reviews, implementation verification,
 
 ## 1. Product Profile, Conformance & Threat Model
 
-- [ ] Approved DLMS/COSEM and SPLN/utility profile, controlled standards editions (IEC 62056 Green/Blue Book), cipher suite (Security Suite 0/1/2), system-title rules, OBIS map, and conformance settings are recorded.
+- [ ] Product/security owner approves the DLMS/COSEM and SPLN/utility profile, controlled standards editions, cipher suite, system-title rules, OBIS map, and conformance settings. *(E2-selected draft is recorded in `docs/PROTOCOL_PROFILE.md`: LN, client SAP 16 with HLS5-GMAC/Suite 0, server 1/1, and the 12-object host view. Formal approval remains open.)*
 - [ ] Threat model risks have owners, mitigations, residual-risk approval, and documented deployment assumptions.
 - [ ] Production communication interfaces, client identities, physical access assumptions, and service/maintenance modes are documented.
 - [x] COSEM access-control matrix covers every exposed object, attribute, and method. *(Implemented via `association_view[]` in `ami_dlms_apdu.c`)*
@@ -18,10 +18,13 @@ Use this checklist for architecture design reviews, implementation verification,
 ## 2. Authentication, Session Management & Anti-Abuse
 
 - [ ] Production uses an explicit authentication allow-list per client SAP; no-auth is strictly forbidden on Management Association (SAP 1) and maintenance profiles.
-- [ ] Legacy `ami_dlms_process_aarq()` development entry point is absent from or blocked in production builds.
-- [ ] LLS (Low-Level Security) is disabled on observable/untrusted links unless formally approved with compensating channel protection.
-- [x] HLS mechanism, proof, challenge size, CSPRNG, and test vectors match the approved product profile. *(16-byte challenge exchange, HLS5 GMAC verification, constant-time proof comparison in `ami_dlms_association.c`)*
-- [ ] Legacy/insecure HLS mechanisms (HLS 3 MD5 / HLS 4 SHA-1) are explicitly disabled in release builds.
+- [ ] Selected E2 firmware profile admits only HLS5-GMAC on client SAP 16 and validates the expected server address; legacy HLS and unauthenticated/LLS associations are rejected.
+- [x] Firmware DLMS port rejects associations when no authentication policy is configured; the legacy no-auth `ami_dlms_process_aarq()` entry point is host-only.
+- [ ] Legacy/insecure authentication remains disabled by explicit production policy for all restricted client SAPs.
+- [x] Firmware association code rejects no-auth and LLS regardless of the configured callbacks; host-only builds retain these modes for tests/simulator.
+- [x] LLS (Low-Level Security) is disabled on all firmware links until a formally approved protected-link exception is implemented.
+- [ ] HLS mechanism, proof, challenge size, CSPRNG, and test vectors match the approved product profile. *(Firmware policy now admits only HLS5 with an exactly 16-byte client challenge; constant-time proof comparison exists, but production HLS crypto/key service is not integrated.)*
+- [x] Firmware association policy admits only the configured HLS5-GMAC OID; HLS 3 MD5 / HLS 4 SHA-1 are rejected. *(Regression coverage in `test_ami_firmware_auth_policy.c`; Secure-world HLS5 implementation remains open.)*
 - [ ] Association is bound to validated peer SAPs and negotiated parameters; unexpected AARQ cannot silently reset an active session.
 - [x] Authentication failures, session timeout, release, link reset, and device reset clear ephemeral state and enforce bounded retry behavior. *(Cleared via `ami_dlms_association_reset()` in `ami_dlms_association.c`)*
 - [x] No plaintext GET/SET/ACTION is accepted where the negotiated security policy requires ciphering. *(Enforced via `AMI_DLMS_APDU_CIPHER_REQUIRED` in `ami_dlms_apdu.c`)*
@@ -33,7 +36,8 @@ Use this checklist for architecture design reviews, implementation verification,
 ## 3. Cryptography, Key Hierarchy & Invocation Counter
 
 - [ ] Production Secure-world backend implements approved encryption/decryption and HLS operations; test/fake backends cannot be linked into release images.
-- [x] Keys are provisioned securely, stored only in protected storage, addressed by constrained handles, and never returned to NonSecure code. *(Abstracted via `AmiKeyHandle` in `ami_security.h`)*
+- [ ] Manufacturing provisions a unique per-device KEK into protected Secure-world storage; remote wrapped-key installation unwraps and atomically persists keys without exposing plaintext to NonSecure code. *(Remote key transfer is selected in `docs/PROTOCOL_PROFILE.md`; production provisioning/storage is not implemented.)*
+- [ ] Key-transfer authorization verifies both authenticated peer identity and the approved SAP/authorization policy; successful HLS5 authentication alone does not permit key replacement.
 - [ ] Distinct key hierarchy enforced: Master Key / Key Encrypting Key (KEK), Global Unicast Encryption Key (GUEK / DEK), and Authentication Key (AK).
 - [ ] Class ID 64 (`Security Setup`) is bound per Application Association; low-privilege clients (Reader/Public) cannot view, modify, or activate Management credentials.
 - [ ] Wrapped key transfer (method 1 of Security Setup) validates all entries, unwraps only in Secure world per NIST SP 800-38F (AES Key Wrap), and installs the batch atomically.
@@ -82,7 +86,7 @@ Use this checklist for architecture design reviews, implementation verification,
 
 ## 7. Verification, Conformance & Release Evidence
 
-- [x] Host unit tests pass, including negative cases for malformed input, authentication failure, replay, tampered tags, access denial, and buffer exhaustion. *(6/6 test suites green in CTest)*
+- [x] Host unit tests pass, including negative cases for malformed input, authentication failure, replay, tampered tags, access denial, and buffer exhaustion. *(7/7 test suites green in CTest)*
 - [x] Automated containerized Docker test runner verified with 100% pass rate across all unit tests and End-to-End DLMS/COSEM HDLC-over-TCP integration test (via `docker compose up --build`).
 - [ ] Parsers have fuzz/property tests with sanitizers or equivalent host instrumentation; findings are triaged and fixed.
 - [ ] Hardware tests verify TrustZone isolation, Secure crypto vectors, UART/HDLC operation, reset behavior, power-loss counter durability, and recovery.

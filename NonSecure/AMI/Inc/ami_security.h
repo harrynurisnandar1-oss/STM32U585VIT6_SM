@@ -77,19 +77,20 @@ AmiSecStatus ami_sec_aead_decrypt(const AmiSecBackend *backend,
                                  const uint8_t *tag, size_t tag_len,
                                  uint8_t *plaintext);
 
-/* ========================================================================= */
-/* Standalone AES-128-GCM & GMAC Primitives (NIST SP 800-38D Standard KAT)   */
-/* ========================================================================= */
-
 #define AMI_AES_128_KEY_BYTES           16u
 #define AMI_GCM_NONCE_BYTES             12u
 #define AMI_GCM_TAG_BYTES               16u
+
+#if !defined(STM32U585xx) && !defined(USE_HAL_DRIVER)
+/* ========================================================================= */
+/* Standalone AES-128-GCM & GMAC Primitives (NIST SP 800-38D Standard KAT)   */
+/* ========================================================================= */
 
 #define AMI_DLMS_HLS5_GMAC_OID_LEN      7u
 #define AMI_DLMS_HLS5_SC_AUTH_ONLY      0x10u
 #define AMI_DLMS_HLS5_PROOF_LEN         21u  /* SC (1B) + IC (4B) + Tag (16B) */
 
-/* NIST SP 800-38D AES-128-GCM authenticated encryption. */
+/* Raw-key primitives and adapters are only available in host builds. */
 AmiSecStatus ami_sec_aes_128_gcm_encrypt(
     const uint8_t *key_128,
     const uint8_t *nonce_96, size_t nonce_len,
@@ -154,6 +155,7 @@ int ami_sec_hls5_gmac_proof_callback(
 AmiSecStatus ami_sec_init_software_backend(
     AmiSecBackend *backend,
     const uint8_t *key_128);
+#endif
 
 #ifdef __cplusplus
 }

@@ -382,3 +382,54 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 ### Added
 - **Sinkronisasi Katalog Objek SPLN D3.006:2021 pada Profil Gurux (`STM32U585VIT6_SM.gxc`)**:
   - Memetakan dan menyinkronkan 276 objek OBIS pascabayar standar PLN ke dalam file workspace Gurux DLMSDirector XML, meliputi meter identification, instantaneous measurement, billing profiles, event logs, tamper logs, dan disconnect control (breaker).
+
+## [v2.5.2] - 2026-10-31
+
+### Protocol and data-model baseline
+- **Mendefinisikan baseline E2 untuk Phase 1 (`docs/PROTOCOL_PROFILE.md`)**:
+  - Mencatat profil host yang benar-benar diimplementasikan: Logical Name referencing, raw HDLC-over-TCP pada simulator, layanan GET dan subset selective access, kebijakan read-only, serta perbedaan autentikasi simulator dan firmware.
+  - Mendokumentasikan 12 objek yang saat ini diumumkan dalam Association View dan membedakannya dari katalog OBIS yang lebih luas.
+  - Menyatakan secara eksplisit bahwa dokumen ini adalah baseline pengembangan, bukan profil produksi yang disetujui atau klaim conformance penuh.
+- **Menambah regresi keterpaduan Association View (`tests/test_ami_dlms_apdu.c`)**:
+  - Memastikan semua objek yang diumumkan saat ini dapat menjawab GET attribute 2 dengan snapshot uji.
+  - Memperjelas cakupan Phase 1: baseline host protokol/data model terbatas telah tercatat dan diuji; persetujuan profil produk dan validasi target masih diperlukan.
+- **Memperbarui panduan Phase 1 (`README.md`, `tests/test_note.md`)**:
+  - Menautkan baseline protokol/data model dan membedakan hasil host dari firmware, data ADE9000, dan metrologi.
+- **Mencatat profil target E2 yang dipilih (`docs/PROTOCOL_PROFILE.md`, `README.md`)**:
+  - LN referencing; client SAP 16 saja dengan HLS5-GMAC dan Suite 0; server physical/logical 1/1; layanan GET dan selective access yang sudah diimplementasikan.
+  - No-Auth/LLS tetap ditolak untuk firmware. HLS5 pada SAP 16 berarti tidak ada asosiasi public tanpa autentikasi dan memerlukan persetujuan produk/security formal.
+  - Key update jarak jauh ditetapkan memakai RFC 3394 wrapped keys di bawah KEK per-device yang diprovisikan saat manufaktur. Key-transfer memerlukan otorisasi identitas peer/SAP tambahan; tidak dibuka pada Association View saat ini.
+- **Membatasi firmware ke HLS5 dan alamat HDLC target (`ami_dlms_association.c`, `ami_dlms_port.c`)**:
+  - Firmware menolak HLS selain HLS5-GMAC, challenge client selain 16 byte, serta No-Auth/LLS.
+  - Firmware menolak HLS lawas meskipun konfigurasi callback meminta OID mekanisme tersebut.
+  - Frame firmware hanya diproses untuk server address `1` dan client SAP `16`; host simulator tidak berubah.
+- **Menambah regresi profil keamanan dan peer (`tests/test_ami_firmware_auth_policy.c`, `tests/test_ami_port.c`)**:
+  - Menguji penolakan No-Auth, LLS, HLS3/MD5, HLS4/SHA-1, dan ukuran challenge yang salah; jalur HLS5 dengan challenge 16-byte masuk ke status `AUTH_PENDING` dengan callback test.
+  - Menguji validasi alamat peer untuk profil firmware.
+- **Mencatat gate provisioning produksi**:
+  - Secure-world saat ini belum menyediakan layanan HLS5/Suite 0, CSPRNG yang tervalidasi, KEK per-device, atomic key storage/remote key transfer, otorisasi peer, atau counter invocation persisten.
+  - Karena Phase 1 disepakati mewajibkan backend dan provisioning produksi, Phase 1 tetap belum selesai sampai gate pada `docs/PROTOCOL_PROFILE.md` diimplementasikan dan diuji di STM32U585 target.
+
+### Security hardening
+- **Membatasi API kriptografi berbasis raw key hanya untuk pengujian host (`NonSecure/AMI/Inc/ami_security.h`, `NonSecure/AMI/Src/ami_security.c`)**:
+  - API AES-128-GCM/GMAC, kalkulasi/verifikasi HLS 5 yang menerima key bytes, konteks HLS yang menyimpan authentication key, serta software backend berbasis pointer key hanya tersedia pada build host; API tersebut dikeluarkan dari build firmware STM32 (`STM32U585xx` atau `USE_HAL_DRIVER`).
+- **Mempertahankan API tersebut di host tests (`tests/CMakeLists.txt`)**:
+  - Tidak ada perubahan pada source test atau konfigurasi CMake host; test vectors dan test adapter tetap berfungsi seperti sebelumnya.
+- **Menerapkan default autentikasi fail-closed pada firmware (`ami_dlms_port.c`, `ami_dlms_association.c`)**:
+  - AARQ pada firmware diproses dengan policy yang dikonfigurasi. Jika policy belum dipasang, struktur policy bernilai nol dan menolak no-auth maupun mekanisme lain yang tidak dikonfigurasi.
+  - Helper legacy no-auth `ami_dlms_process_aarq()` hanya disediakan pada build host/non-firmware, sehingga tidak dapat digunakan oleh firmware.
+- **Menolak autentikasi no-auth dan LLS pada seluruh build firmware (`ami_dlms_association.c`, `ami_dlms_port.c`)**:
+  - Jalur asosiasi firmware tidak menerima no-auth meskipun `allow_no_auth` diminta dalam konfigurasi; host tests dan simulator tetap mempertahankan perilaku yang lama.
+  - `ami_dlms_port_set_security()` mengembalikan `AMI_DLMS_PORT_SECURITY_POLICY_REJECTED` apabila konfigurasi firmware mengizinkan no-auth atau memasang callback LLS. Policy aktif tidak berubah saat konfigurasi ditolak.
+  - LLS dinonaktifkan pada semua link firmware sampai pengecualian link terlindungi disetujui dan dirancang secara eksplisit.
+- **Menambahkan tes kebijakan autentikasi firmware (`tests/test_ami_firmware_auth_policy.c`)**:
+  - Target tes dikompilasi dengan macro firmware STM32 dan memastikan AARQ no-auth serta LLS ditolak walaupun policy/callback tersebut diberikan.
+- **Memperjelas status key protection (`docs/security-rules/SECURITY_CHECKLIST.md`, `SECURITY-REVIEW.md`)**:
+  - Checklist kini menandai provisioning dan penyimpanan production key di Secure world sebagai belum selesai; keberadaan tipe `AmiKeyHandle` saja bukan bukti secure storage.
+  - Security review mencatat bahwa pembatasan raw-key API mengurangi risiko paparan dari jalur tersebut di NonSecure firmware, tetapi Secure NSC key storage/provisioning dan layanan HLS berbasis key handle belum diimplementasikan.
+
+### Verification
+- Build firmware NonSecure berhasil; pemeriksaan object memastikan simbol API AES/HLS raw-key dan software backend tidak dikompilasi ke image.
+- Seluruh suite CTest lulus; test policy firmware memastikan no-auth dan LLS ditolak, sementara test host lama tetap berjalan tanpa perubahan.
+- Build NonSecure berhasil setelah penegakan HLS5-only dan peer address profile; CTest 7/7 lulus, termasuk penolakan HLS lawas serta pemeriksaan client SAP/server address.
+- Perubahan ini **bukan** implementasi Secure-world key store dan belum membuktikan isolasi key pada hardware target.

@@ -64,5 +64,5 @@ The application shall:
 
 ## Acceptance criteria
 
-A release is security-eligible only when all deployment checklist items in `SECURITY-CHEKLIST.md` are evidenced as complete, the threat model risks have owners and mitigations, and the product security profile has been approved. Passing host unit tests alone does not establish device, TrustZone, cryptographic, or standards conformance.
+A release is security-eligible only when all deployment checklist items in `SECURITY_CHECKLIST.md` are evidenced as complete, the threat model risks have owners and mitigations, and the product security profile has been approved. Passing host unit tests alone does not establish device, TrustZone, cryptographic, or standards conformance.
 

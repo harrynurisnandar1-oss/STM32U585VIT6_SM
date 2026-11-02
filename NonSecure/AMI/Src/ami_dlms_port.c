@@ -8,6 +8,13 @@
 #include "cmsis_os2.h"
 #endif
 
+int ami_dlms_port_peer_matches_firmware_profile(const HdlcFrame *frame)
+{
+    return frame != NULL &&
+           frame->destination_sap == 1u &&
+           frame->source_sap == 16u;
+}
+
 static AmiDlmsPortStatus dispatch_i_frame(AmiDlmsPortContext *ctx, const HdlcFrame *frame)
 {
     uint8_t apdu_response[AMI_HDLC_MAX_INFO_LENGTH];
@@ -32,9 +39,19 @@ static AmiDlmsPortStatus dispatch_i_frame(AmiDlmsPortContext *ctx, const HdlcFra
                                                       apdu_response, sizeof(apdu_response),
                                                       &apdu_resp_len);
         } else {
+#if defined(STM32U585xx) || defined(USE_HAL_DRIVER)
+            /* A zeroed policy rejects every auth mode until firmware configures one. */
+            (void)ami_dlms_process_aarq_with_security(&ctx->association,
+                                                      &ctx->security,
+                                                      apdu, apdu_len,
+                                                      apdu_response, sizeof(apdu_response),
+                                                      &apdu_resp_len);
+#else
+            /* Preserve the legacy no-auth path for host tests and simulator only. */
             (void)ami_dlms_process_aarq(&ctx->association, apdu, apdu_len,
                                             apdu_response, sizeof(apdu_response),
                                             &apdu_resp_len);
+#endif
         }
         if (apdu_resp_len == 0u) {
             /* If no AARE was generated (e.g. unsolicited AARQ during active session or fatal error),
@@ -122,6 +139,12 @@ static AmiDlmsPortStatus dispatch_frame(AmiDlmsPortContext *ctx, const HdlcFrame
     size_t wire_len = 0u;
     AmiHdlcStatus status;
 
+#if defined(STM32U585xx) || defined(USE_HAL_DRIVER)
+    if (!ami_dlms_port_peer_matches_firmware_profile(frame)) {
+        return AMI_DLMS_PORT_PEER_REJECTED;
+    }
+#endif
+
     if (frame->type == AMI_HDLC_FRAME_SNRM || frame->type == AMI_HDLC_FRAME_DISC) {
         ami_dlms_association_reset(&ctx->association);
         status = ami_dlms_hdlc_build_frame(&ctx->hdlc, frame, NULL, 0u,
@@ -168,10 +191,16 @@ void ami_dlms_port_init(AmiDlmsPortContext *ctx,
     ctx->user_data = user_data;
 }
 
-void ami_dlms_port_set_security(AmiDlmsPortContext *ctx,
-                                const AmiDlmsAssociationSecurity *security)
+AmiDlmsPortStatus ami_dlms_port_set_security(AmiDlmsPortContext *ctx,
+                                             const AmiDlmsAssociationSecurity *security)
 {
-    if (ctx == NULL) return;
+    if (ctx == NULL) return AMI_DLMS_PORT_INVALID_PARAM;
+#if defined(STM32U585xx) || defined(USE_HAL_DRIVER)
+    if (security != NULL &&
+        (security->allow_no_auth != 0u || security->verify_lls != NULL)) {
+        return AMI_DLMS_PORT_SECURITY_POLICY_REJECTED;
+    }
+#endif
     if (security != NULL) {
         ctx->security = *security;
         ctx->use_custom_security = 1;
@@ -179,6 +208,7 @@ void ami_dlms_port_set_security(AmiDlmsPortContext *ctx,
         memset(&ctx->security, 0, sizeof(ctx->security));
         ctx->use_custom_security = 0;
     }
+    return AMI_DLMS_PORT_OK;
 }
 
 AmiDlmsPortStatus ami_dlms_port_process_byte(AmiDlmsPortContext *ctx, uint8_t byte)
@@ -325,4 +355,3 @@ void ami_dlms_uart_rx_buffer_isr(const uint8_t *data, size_t length)
 }
 
 #endif
-

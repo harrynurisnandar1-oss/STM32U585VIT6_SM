@@ -28,6 +28,13 @@ add_executable(test_ami_dlms_association
 target_include_directories(test_ami_dlms_association PRIVATE "${AMI_INC}")
 add_test(NAME AmiDlmsAssociationTest COMMAND test_ami_dlms_association)
 
+add_executable(test_ami_firmware_auth_policy
+    test_ami_firmware_auth_policy.c
+    "${AMI_SRC}/ami_dlms_association.c")
+target_include_directories(test_ami_firmware_auth_policy PRIVATE "${AMI_INC}")
+target_compile_definitions(test_ami_firmware_auth_policy PRIVATE STM32U585xx)
+add_test(NAME AmiFirmwareAuthPolicyTest COMMAND test_ami_firmware_auth_policy)
+
 add_executable(test_ami_dlms_apdu
     test_ami_dlms_apdu.c
     "${AMI_SRC}/ami_dlms_apdu.c"

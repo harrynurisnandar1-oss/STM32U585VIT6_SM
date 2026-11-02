@@ -214,10 +214,16 @@ static void test_port_active_session_and_security(void)
 
 int main(void)
 {
+    HdlcFrame peer_frame = {
+        .destination_sap = 1u,
+        .source_sap = 16u
+    };
+    assert(ami_dlms_port_peer_matches_firmware_profile(&peer_frame) == 1);
+    peer_frame.source_sap = 1u;
+    assert(ami_dlms_port_peer_matches_firmware_profile(&peer_frame) == 0);
     test_port_snrm_and_disc_lifecycle();
     test_port_aarq_and_get_request();
     test_port_active_session_and_security();
     printf("DLMS Port tests passed.\n");
     return 0;
 }
-

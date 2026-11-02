@@ -17,7 +17,9 @@ typedef enum {
     AMI_DLMS_PORT_INCOMPLETE,
     AMI_DLMS_PORT_FRAME_ERROR,
     AMI_DLMS_PORT_TX_ERROR,
-    AMI_DLMS_PORT_INVALID_PARAM
+    AMI_DLMS_PORT_INVALID_PARAM,
+    AMI_DLMS_PORT_SECURITY_POLICY_REJECTED,
+    AMI_DLMS_PORT_PEER_REJECTED
 } AmiDlmsPortStatus;
 
 /**
@@ -53,10 +55,15 @@ void ami_dlms_port_init(AmiDlmsPortContext *ctx,
                         void *user_data);
 
 /**
+ * @brief Check the selected firmware HDLC peer and server addresses.
+ */
+int ami_dlms_port_peer_matches_firmware_profile(const HdlcFrame *frame);
+
+/**
  * @brief Configure security policy for the port association.
  */
-void ami_dlms_port_set_security(AmiDlmsPortContext *ctx,
-                                const AmiDlmsAssociationSecurity *security);
+AmiDlmsPortStatus ami_dlms_port_set_security(AmiDlmsPortContext *ctx,
+                                             const AmiDlmsAssociationSecurity *security);
 
 /**
  * @brief Process a single byte received from physical UART / transport.
@@ -93,4 +100,3 @@ void ami_dlms_uart_rx_buffer_isr(const uint8_t *data, size_t length);
 #endif
 
 #endif /* AMI_DLMS_PORT_H */
-

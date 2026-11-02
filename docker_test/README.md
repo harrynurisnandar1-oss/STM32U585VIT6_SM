@@ -1,69 +1,36 @@
-# Docker Automated Test Environment for AMI Smart Meter (Phase 2)
+# Docker Host Test Harness
 
-Direktori ini menyediakan lingkungan pengujian terisolasi berbasis **Docker** untuk memverifikasi logika komunikasi protokol DLMS/COSEM, HDLC framing, dan lapisan abstraksi hardware/porting (Phase 2) secara deterministik pada sistem operasi Linux tanpa bergantung pada toolchain atau OS host.
+Direktori ini menjalankan host tests dan uji end-to-end simulator dalam container. Tujuannya adalah menguji logika protokol secara berulang tanpa board atau toolchain STM32.
 
-Folder ini terpisah dari folder `tests/` agar tidak mengubah maupun menimpa pengujian native host yang sudah ada.
+## Cakupan
 
----
+Docker memakai konfigurasi CMake terpisah di direktori ini. Runner menjalankan enam executable test: port, COSEM, security, association, APDU, dan HDLC; setelah itu runner menjalankan client E2E terhadap `gurux_simulator`. Test kebijakan autentikasi firmware yang ada di suite native `tests/` belum dimasukkan ke Docker harness.
 
-## Cakupan Pengujian di Docker
+E2E simulator menguji pertukaran protokol menggunakan data contoh. Ini bukan uji CTT penuh dan tidak menguji akurasi metrologi, UART fisik, timing board, atau keamanan produksi Secure-world.
 
-1. **Unit Testing CTest (6 Test Suites)**:
-   - `AmiDlmsPortTest`: Pengujian *porting layer* (`ami_dlms_port.c`), validasi parsing stream byte UART, dispatching frame SNRM/DISC, dan respon AARQ/GET.
-   - `AmiCosemTest`: Pengujian pemodelan data objek COSEM (Class 3, Class 8, Class 7 Profile Generic).
-   - `AmiSecurityTest`: Pengujian batas kriptografi dan sanitasi memori.
-   - `AmiDlmsAssociationTest`: Pengujian state machine asosiasi DLMS AARQ/AARE.
-   - `AmiDlmsApduTest`: Pengujian xDLMS GET/SET/Action requests dan ciphered APDU.
-   - `AmiDlmsHdlcTest`: Pengujian HDLC framing (Type 3 `0xA0`, CRC-16 CCITT HCS/FCS, dan addressing).
+Simulator pengembangan menggunakan No-Auth. Firmware target menolak No-Auth dan LLS, sehingga hasil simulator tidak boleh dianggap sebagai hasil autentikasi firmware.
 
-2. **End-to-End (E2E) DLMS Client Simulation (`test_dlms_e2e_client.py`)**:
-   - Menjalankan TCP simulator (`gurux_simulator`) pada port `4059`.
-   - Menjalankan automated client script yang mensimulasikan software eksternal (seperti Gurux DLMSDirector):
-     - Pertukaran handshake HDLC `SNRM` -> `UA`.
-     - Inisiasi asosiasi DLMS `AARQ` (No-Auth) -> `AARE`.
-     - Pembacaan register Tegangan Fasa R (`1.0.32.7.0.255`, Class 3) -> verifikasi data 230V.
-     - Pembacaan Jam Meter (*Clock* `0.0.1.0.0.255`, Class 8).
-     - Pemutusan koneksi bersih `DISC` -> `UA`.
+## Menjalankan
 
----
+Dari root repository:
 
-## Cara Menjalankan
+```powershell
+docker build -t ami-smart-meter-test -f docker_test/Dockerfile .
+docker run --rm ami-smart-meter-test
+```
 
-### Cara 1: Menggunakan Script Otomatis (Windows PowerShell / CMD)
-
-Jalankan script batch dari folder `docker_test/`:
+Atau gunakan script Windows:
 
 ```powershell
 .\docker_test\run_docker_tests.bat
 ```
 
-### Cara 2: Menggunakan Docker CLI Manual
+Atau Docker Compose:
 
-Dari root direktori repositori:
-
-```bash
-# 1. Build image Docker
-docker build -t ami-smart-meter-test -f docker_test/Dockerfile .
-
-# 2. Jalankan container
-docker run --rm ami-smart-meter-test
+```powershell
+docker compose -f docker_test/docker-compose.yml up --build
 ```
 
-### Cara 3: Menggunakan Docker Compose
+## Batas tanggung jawab
 
-Dari folder `docker_test/`:
-
-```bash
-docker compose up --build
-```
-
----
-
-## Arsitektur Porting Hardware (Phase 2 Readiness)
-
-Lapisan abstraksi hardware disiapkan di [`NonSecure/AMI/Inc/ami_dlms_port.h`](../NonSecure/AMI/Inc/ami_dlms_port.h) dan [`NonSecure/AMI/Src/ami_dlms_port.c`](../NonSecure/AMI/Src/ami_dlms_port.c):
-
-- **FreeRTOS Integration**: Menyediakan FreeRTOS StreamBuffer dan task dedicated (`AmiDlmsTask`) yang siap dihubungkan langsung ke peripheral UART fisik saat PCB tiba.
-- **Interrupt Service Routine (ISR)**: Fungsi aman interupsi `ami_dlms_uart_rx_isr()` / `ami_dlms_uart_rx_buffer_isr()` untuk menerima data dari UART DMA atau RX interrupt tanpa overhead blocking.
-- **Hardware Agnostic**: Memungkinkan testing 100% pada simulator dan container Docker sebelum di-flash ke mikrokontroler STM32U585.
-
+Container menguji kode host dan data sintetis. Validasi pengukuran/kalibrasi dan driver UART pada perangkat dilakukan melalui integrasi hardware terpisah. Untuk menjalankan Gurux DLMSDirector dan memahami CTT, lihat [panduan test](../tests/test_note.md).
