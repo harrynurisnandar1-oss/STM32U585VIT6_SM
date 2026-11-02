@@ -508,3 +508,81 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
   - `test_load_profile_apdu_selective_access`: Memvalidasi pemrosesan APDU xDLMS `GET-Request-Normal` berparameter selective access terhadap objek Load Profile melalui pipeline asosiasi DLMS.
   - Verifikasi CTest: **9/9 tests PASSing (100%)**.
   - Verifikasi Cross-Compilation Firmware ARM Cortex-M33 TrustZone: Berhasil dibangun dengan **0 error dan 0 warning**.
+
+## [v2.8.0] - 2026-11-02
+
+### Added
+- **Konfigurasi Hardware Security Attribution Unit (SAU) STM32U585 (`Secure/Core/Inc/partition_stm32u585xx.h`)**:
+  - Mengaktifkan SAU secara eksplisit (`SAU_INIT_CTRL_ENABLE = 1`) dengan kebijakan *Secure-by-Default* (`SAU_INIT_CTRL_ALLNS = 0`).
+  - Pemetaan partisi alamat memori fisik SAU:
+    - Region 0: Non-Secure Callable (NSC) Veneers (`0x0C0FE000` - `0x0C0FFFFF`, `NSC = 1`).
+    - Region 1: Non-Secure Flash Bank 2 (`0x08100000` - `0x081FFFFF`, `NSC = 0`).
+    - Region 2: Non-Secure SRAM3 (`0x20040000` - `0x200BFFFF`, 512 KB, `NSC = 0`).
+    - Region 3: Non-Secure Peripherals (`0x40000000` - `0x4FFFFFFF`, `NSC = 0`).
+    - Region 4: Non-Secure External Memory / OctoSPI (`0x60000000` - `0x9FFFFFFF`, `NSC = 0`).
+    - Region 5: System Memory Bootloader ROM (`0x0BF90000` - `0x0BFA8FFF`, `NSC = 0`).
+  - Penegakan isolasi System Control Block (SCB AIRCR):
+    - `SYSRESETREQS = 1`: Reset sistem hanya dapat dieksekusi dari Secure World (mencegah eksploitasi reset dari NonSecure).
+    - `PRIS = 1`: Memprioritaskan penanganan exception Secure di atas Non-Secure exception.
+    - `BFHFNMINS = 0`: HardFault, NMI, dan BusFault ditangani langsung di domain Secure.
+  - Konfigurasi ITNS (Interrupt Target Non-Secure) pada NVIC:
+    - Mengisolasi interrupt perangkat keras kritis ke Secure World: `GTZC_IRQn`, `SAES_IRQn`, `TAMP_IRQn`, `RTC_S_IRQn`, `FLASH_S_IRQn`, `RCC_S_IRQn`, `RNG_IRQn`, `HASH_IRQn`, `PKA_IRQn`.
+    - Mengarahkan interrupt komunikasi (USART, SPI, EXTI) ke Non-Secure World.
+- **Konfigurasi Global TrustZone Controller (GTZC) (`Secure/Core/Src/main.c`)**:
+  - Konfigurasi TZSC (TrustZone Security Controller) mengunci peripheral kriptografi ke domain Secure:
+    - `GTZC_PERIPH_SAES` (Secure AES Engine)
+    - `GTZC_PERIPH_RNG` (Hardware True Random Number Generator)
+    - `GTZC_PERIPH_TAMP` (Tamper & Backup Registers)
+    - `GTZC_PERIPH_RTC` (Real-Time Clock)
+    - `GTZC_PERIPH_PKA` (Public Key Accelerator)
+    - `GTZC_PERIPH_HASH` (SHA-256 Hash Accelerator)
+  - Penguncian konfigurasi MPCBB3 pada SRAM3 (`HAL_GTZC_MPCBB_Lock(SRAM3_BASE)`) untuk mencegah modifikasi atribut RAM saat runtime.
+  - Pengaktifan TrustZone Interrupt Controller (`HAL_GTZC_TZIC_EnableIT`) untuk menangkap upaya akses ilegal (Illegal Access Event) ke peripheral atau memori Secure.
+  - Penguncian register konfigurasi TZSC1 (`HAL_GTZC_TZSC_Lock(GTZC_TZSC1)`).
+- **Penanganan Exception Hardware SecureFault & GTZC Tamper (`Secure/Core/Src/stm32u5xx_it.c`, `Secure/Core/Inc/stm32u5xx_it.h`)**:
+  - Implementasi `SecureFault_Handler()` dengan pembacaan dan pembersihan status register `SCB->SFSR`, pembersihan memori sensitif (*fail-secure zeroization*), pemanggilan callback terdaftar, dan lockdown.
+  - Implementasi `GTZC_IRQHandler()` dan `HAL_GTZC_TZIC_Callback()` untuk merespons pelanggaran akses ilegal hardware secara real-time.
+- **Pengamanan Gerbang Non-Secure Callable (NSC) (`Secure/Core/Src/secure_nsc.c`)**:
+  - Validasi batas memori pointer NonSecure menggunakan ARM CMSE intrinsic `cmse_check_address_range()` pada seluruh API gateway NSC (`output`, `input`, `iv`, `aad`, `tag`). Mencegah serangan *Confused Deputy* jika NonSecure mencoba menyusupkan alamat Secure RAM.
+  - Inisialisasi dan clocking hardware True Random Number Generator (RNG) dari register peripheral dengan health check timeout.
+  - Pembersihan memori kerja stack secara waktu konstan (`secure_memzero`).
+- **Verifikasi**:
+  - Kompilasi target firmware Cortex-M33 TrustZone (`cmake --build --preset Debug`) sukses 100% tanpa error dan tanpa warning:
+    - Secure Image (`STM32U585VIT6_SM_S.elf`): RAM 11,984 B (4.57%), ROM 12,392 B (1.19%), ROM_NSC 96 B (1.17%).
+    - NonSecure Image (`STM32U585VIT6_SM_NS.elf`): RAM 17,224 B (3.29%), ROM 43,568 B (4.15%).
+  - CTest host test suite: **9/9 tests PASSing (100%)**.
+
+## [v2.9.0] - 2026-11-02
+
+### Added
+- **Persistensi Non-Volatile Memory (NVM) untuk Invocation Counter & Mekanisme Anti-Replay (`NonSecure/AMI/Inc/ami_nvm_counter.h`, `NonSecure/AMI/Src/ami_nvm_counter.c`)**:
+  - Rekayasa struktur data `AmiNvmCounterRecord` (24-byte) dengan Magic `0x414D4943` ('AMIC'), `version` (1), `tx_invocation_counter` (lease bound), `rx_invocation_counter` (high-water mark), `reboot_count` (pelacak siklus restart), dan integritas data berbasis CRC-32 (IEEE 802.3).
+  - **Penjaminan Keunikan Nonce (*Nonce Uniqueness Guarantee*) per NIST SP 800-38D & IEC 62056-5-3**:
+    - Pada setiap proses boot/reboot atau pemulihan brown-out, sistem secara otomatis melompat di atas batas lease sesi sebelumnya (`persisted_tx_limit = old_persisted_limit + tx_window_step`) dan langsung meng-commit record baru ke NVM sebelum APDU pertama ditransmisikan.
+    - Menghilangkan secara mutlak risiko tabrakan nonce (*AES-128-GCM nonce collision / nonce reuse*) meskipun smart meter mengalami mati daya mendadak di tengah transmisi data.
+  - **Mitigasi Keausan Memori Flash (*Flash Wear Mitigation / Lease Window Allocation*)**:
+    - Menerapkan alokasi lease window terkonfigurasi (`tx_window_step`, default 100).
+    - TX Invocation Counter bertambah di memori volatile tanpa memicu operasi write Flash pada setiap paket APDU.
+    - Penulisan ke NVM hanya dilakukan saat counter runtime menyentuh batas lease yang dialokasikan atau saat pemanggilan eksplisit `ami_nvm_counter_flush()`.
+  - **Penegakan Anti-Replay Monotonik Keras (*Strict Anti-Replay Enforcement*)**:
+    - Memvalidasi APDU masuk (`in_rx_ic > last_rx_counter`) dan menolak keras frame replay (counter duplikat, counter mundur, atau nilai 0).
+    - Menyimpan high-water mark penerimaan secara berkala (`rx_window_step`) dan mempertahankan status tersebut melintasi siklus reboot.
+  - **Abstraksi Driver Penyimpanan Fleksibel (*Storage Driver Abstraction*)**:
+    - `ami_nvm_create_ram_driver`: Driver berbasis RAM untuk mock test simulasi host dan CI/CD pipeline.
+    - `ami_nvm_create_tamp_backup_driver`: Driver perangkat keras STM32 TAMP Backup Registers (`TAMP->BKP0R` s.d. `BKP4R`) berdaya baterai VBAT, beroperasi tanpa batasan siklus keausan Flash (zero wear endurance) dan waktu akses single-cycle.
+- **Integrasi DLMS Security Suite 0 (`NonSecure/AMI/Inc/ami_dlms_cipher.h`, `NonSecure/AMI/Src/ami_dlms_cipher.c`)**:
+  - Penambahan pointer kontekstual `AmiNvmCounterContext *nvm_counter` pada struct `AmiDlmsSecuritySuite0Context`.
+  - Fungsi pengikatan `ami_dlms_cipher_suite0_bind_nvm()`.
+  - Callback `suite0_accept_rx_counter_cb` dan `suite0_next_tx_counter_cb` mendelegasikan verifikasi anti-replay dan alokasi nonce TX langsung ke subsystem NVM saat context dihubungkan.
+- **Penambahan Pengujian Unit & Verifikasi CTest (`tests/test_ami_nvm_counter.c`, `tests/CMakeLists.txt`)**:
+  - `test_nvm_counter_fresh_init`: Memvalidasi inisialisasi pada memori kosong/terkorupsi, format record baru, kalkulasi CRC-32, dan commit initial lease.
+  - `test_nvm_counter_monotonic_and_lease_window`: Memvalidasi kenaikan counter TX yang strictly monotonic, nol penulisan storage dalam rentang lease, dan ekspansi lease otomatis saat batas tercapai.
+  - `test_nvm_counter_reboot_and_nonce_uniqueness`: Mensimulasikan pemadaman listrik mendadak dan reboot, membuktikan counter TX baru selalu strictly greater dari counter manapun pada sesi sebelumnya.
+  - `test_nvm_counter_anti_replay`: Memvalidasi penolakan tegas APDU duplikat, mundur, atau 0, serta threshold commit RX.
+  - `test_nvm_counter_reboot_preserves_anti_replay`: Memvalidasi kekebalan anti-replay yang bertahan melintasi reboot.
+  - `test_nvm_suite0_cipher_binding`: Memvalidasi integrasi end-to-end antara Suite 0 cipher backend dan subsystem NVM counter.
+  - Hasil CTest: **10/10 tests PASSing (100%)**.
+  - Hasil Cross-Compilation Firmware ARM Cortex-M33 TrustZone: Berhasil dibangun dengan **0 error dan 0 warning**.
+    - NonSecure image (`STM32U585VIT6_SM_NS.elf`): RAM 17,224 B (3.29%), ROM 43,568 B (4.15%).
+
+

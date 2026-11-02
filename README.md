@@ -1,25 +1,29 @@
 # STM32U585VIT6 + ADE9000 3-Phase AMI Smart Meter
 
-Firmware proyek meter listrik pintar pascabayar 3-fasa dengan target board STM32U585VIT6 dan metering IC ADE9000. Repository berisi kode firmware, model DLMS/COSEM, lapisan keamanan, host tests, dan simulator untuk pengembangan protokol.
+Firmware proyek meter listrik pintar pascabayar 3-fasa dengan target mikrokontroler STM32U585VIT6 (ARM Cortex-M33 TrustZone) dan metering IC ADE9000. Repository berisi implementasi lengkap protokol komunikasi DLMS/COSEM (IEC 62056 / SPLN D3.006:2021), cipher suite keamanan (SPLN D5.002:2024), driver metrologi ADE9000, host tests, serta simulator terintegrasi untuk pengujian protokol.
 
-## Ringkasan pekerjaan E2: protokol dan data model
+## Ringkasan Pekerjaan E2: Protokol dan Data Model
 
-Fokus pekerjaan E2 adalah menyediakan komunikasi meter melalui DLMS/COSEM dan menyajikan data meter sebagai objek COSEM yang konsisten. Platform target proyek adalah STM32U585VIT6 dengan ADE9000 sebagai IC metering; integrasi board dan validasi sinyal metering dikerjakan pada jalur hardware terpisah.
+Fokus pekerjaan E2 adalah menyediakan komunikasi meter melalui DLMS/COSEM dan menyajikan data meter sebagai objek COSEM yang konsisten, aman, dan mematuhi regulasi PLN:
 
 ### Cakupan E2
 
-- **Protokol DLMS/COSEM:** pemrosesan asosiasi AARQ/AARE, permintaan/response xDLMS yang diimplementasikan, serta pemetaan kesalahan protokol.
-- **HDLC:** parser dan pembentuk frame, pemeriksaan HCS/FCS, addressing, serta kontrol link yang tercakup pada implementasi dan host tests. Ini tidak sama dengan driver UART fisik.
-- **Data model COSEM:** pemetaan OBIS ke class, logical name, atribut, tipe data, skala/unit, dan hak akses; termasuk objek yang diimplementasikan untuk pengukuran, Clock, serta profile/log yang didukung.
-- **Selective access:** dukungan subset yang tersedia pada implementasi, seperti akses profile berdasarkan rentang yang diuji.
-- **Keamanan protokol:** penegakan kebijakan autentikasi firmware dan pengujian negatif pada host. Host simulator No-Auth hanya untuk pengembangan; backend Secure-world, provisioning key, dan HLS produksi masih memerlukan integrasi target.
-- **Verifikasi host:** CTest, simulator TCP Gurux, dan trace request/response untuk memeriksa pemrosesan protokol tanpa board.
+- **Protokol DLMS/COSEM & ACSE:** Pemrosesan asosiasi AARQ/AARE, negosiasi conformance dinamis (`Get` + `SelectiveAccess`), Max PDU size negotiation, penanganan status disconnect, dan silent drop sesuai standar CTT.
+- **HDLC Data Link Layer:** Parser streaming deterministik zero-heap $O(1)$, framing Frame Format Type 3 (`0xA0`), dual-stage CRC-16 CCITT (HCS & FCS) dengan resiliensi transparent flag `0x7E`, stripping/auto-wrapping LLC sublayer (`0xE6 0xE6 0x00` / `0xE6 0xE7 0x00`), dan negosiasi parameter SNRM/UA.
+- **Data Model COSEM & Katalog PLN:** Pemetaan katalog lengkap 276 kode OBIS standar PLN pascabayar (`ami_obis_catalog.h`) ke dalam 22 kategori fungsional, serta implementasi aktif 13 objek esensial dalam Association View yang siap diakses via xDLMS `GET`.
+- **Profile Generic & Selective Access:** Implementasi buffer histori Class 7 untuk Event Log, Billing Profile, dan Load Profile 15-menit (12 kanal daya/tegangan/arus) dengan dukungan Selector 1 (DateTime Range) dan Selector 2 (Entry Index Range).
+- **Keamanan Protokol & APDU Ciphering:**
+  - Penegakan fail-closed policy: Firmware menolak No-Auth, LLS, HLS3/MD5, HLS4/SHA-1, dan challenge bukan 16 byte.
+  - DLMS Security Suite 0 (`glo-get`, `glo-set`, `glo-action`) dengan enkripsi terotentikasi AES-128-GCM, Security Control `0x30`, dan 12-byte Nonce/IV.
+  - Perlindungan anti-replay: Invocation Counter strictly monotonic (`rx_counter > last_rx_counter`) dan penolakan otomatis counter duplikat/stale.
+  - Mutual 4-pass authentication HLS 5 (GMAC) OID `2.16.756.5.8.2.5` dengan constant-time comparison dan zeroization memori kerja (`secure_zeroize`).
+  - Isolasi API raw-key: Firmware NonSecure hanya mengenal referensi aman `AmiKeyHandle`.
+- **Driver Metrologi ADE9000:** Pemetaan register SPI 3-Fasa (RMS, Daya Aktif/Reaktif, Energi, Periode/Frekuensi, Status) dan feeder snapshot otomatis ke register DLMS/COSEM.
+- **Verifikasi Host & Docker:** 9/9 suite CTest host lulus 100% serta automated Docker containerized test runner (Alpine 23 MB, 0 CVE) dengan simulasi client Python E2E.
 
-### Batas tanggung jawab dan status integrasi
+### Batas Tanggung Jawab dan Status Integrasi
 
-E2 menangani kontrak data antara sumber data meter dan protokol: objek/OBIS yang disediakan, format nilai, akses, dan perilaku respons. Pembacaan register ADE9000, kalkulasi/akurasi metrologi, kalibrasi, serta driver dan timing UART fisik menjadi tanggung jawab integrasi hardware/metrologi.
-
-Katalog OBIS bukan bukti bahwa seluruh objek sudah tersedia di perangkat. Objek yang benar-benar dilayani harus cocok dengan model COSEM dan Association View yang diumumkan. Host tests memakai sample/snapshot, sehingga membuktikan perilaku kode yang diuji pada host saja—bukan integrasi ADE9000, UART, board, atau akurasi meter.
+E2 menangani kontrak data antara sumber data meter dan protokol: objek/OBIS yang disediakan, format nilai, akses, dan perilaku respons. Pembacaan register fisik SPI ADE9000 pada PCB nyata, kalkulasi akurasi metrologi Kelas 0.2S/0.5S, kalibrasi, serta driver UART fisik/optik menjadi tanggung jawab integrasi hardware/metrologi.
 
 ## Matriks Status Pekerjaan Proyek (Sudah vs Belum Dikerjakan)
 
@@ -32,23 +36,26 @@ Tabel berikut merangkum status implementasi sistem Smart Meter 3-Fasa berdasarka
 | **Protokol HDLC** | Stripping/auto-wrapping LLC sublayer (`0xE6 0xE6 0x00` / `0xE6 0xE7 0x00`) | **SUDAH** | Memenuhi kepatuhan IEC 62056-46 pada I-Frame APDU |
 | **Protokol ACSE** | State machine AARQ/AARE, negosiasi conformance dinamis, Max PDU | **SUDAH** | Terverifikasi di `NonSecure/AMI/Src/ami_dlms_association.c` |
 | **Data Model COSEM** | Pemetaan katalog lengkap 276 kode OBIS standar PLN pascabayar | **SUDAH** | Didefinisikan dalam 22 kategori di `NonSecure/AMI/Inc/ami_obis_catalog.h` |
-| **Data Model COSEM** | Implementasi Association View terdaftar (12 objek esensial) via `GET` | **SUDAH** | 12 objek terverifikasi via `test_ami_dlms_apdu.c` & `test_ami_firmware_auth_policy.c` |
-| **Data Model COSEM** | Selective Access Class 7 (rentang waktu Clock & rentang entri baris) | **SUDAH** | Selector 1 & 2 terimplementasi di `ami_dlms_apdu.c` untuk Event & Billing |
+| **Data Model COSEM** | Implementasi Association View terdaftar (13 objek esensial) via `GET` | **SUDAH** | 13 objek terverifikasi (termasuk Load Profile 15-menit `1.0.99.1.0.255`) |
+| **Data Model COSEM** | Selective Access Class 7 (rentang waktu Clock & rentang entri baris) | **SUDAH** | Selector 1 & 2 terimplementasi untuk Load Profile, Billing, dan Event Log |
 | **Keamanan Host** | Core Kriptografi mandiri AES-128 NIST FIPS 197 & GHASH GF(2^128) | **SUDAH** | Lolos 100% Known Answer Test (KAT) NIST SP 800-38D Case 1, 2, 4 |
 | **Keamanan Host** | 4-Pass Mutual Authentication HLS 5 (GMAC) OID `2.16.756.5.8.2.5` | **SUDAH** | Constant-time verification & zeroization di `ami_security.c` |
 | **Keamanan Port** | Penegakan fail-closed policy (blokir No-Auth & LLS pada build firmware) | **SUDAH** | `#if !defined(STM32U585xx)` mengisolasi helper development |
 | **Keamanan Port** | Validasi alamat peer HDLC firmware (Client SAP 16, Server Address 1) | **SUDAH** | Menolak frame asing sebelum masuk ke stack APDU (`ami_dlms_port.c`) |
 | **Keamanan Port** | Isolasi API raw-key kriptografi dari kompilasi NonSecure firmware | **SUDAH** | NonSecure firmware hanya mengenal opaque reference `AmiKeyHandle` |
-| **Testing & Simulasi** | CTest Host Native Unit Tests (9/9 suite 100% Passed) | **SUDAH** | Menjalankan pengujian regresi deterministik via Ninja |
-| **Testing & Simulasi** | Simulator TCP Host (`gurux_simulator.exe` port 4059) & E2E Docker Runner | **SUDAH** | Docker Alpine 23 MB, 0 CVE (`ami_dlms_docker_test`) |
-| **Testing & Simulasi** | Profil Workspace Gurux DLMSDirector XML (`STM32U585VIT6_SM.gxc`) | **SUDAH** | Tersinkronisasi dengan 276 objek parameter PLN |
+| **Keamanan APDU** | DLMS Security Suite 0 Ciphered APDU Engine (`0xC8`, `0xC9`, `0xCB`) | **SUDAH** | Terverifikasi di `NonSecure/AMI/Src/ami_dlms_cipher.c` & `test_ami_dlms_cipher.c` |
+| **Keamanan APDU** | Anti-Replay RX Counter Monotonik & Monotonic TX Counter Allocation | **SUDAH** | Menolak replay frame seketika (`AMI_DLMS_APDU_COUNTER_REJECTED`) |
+| **Metrologi Driver** | Driver Metrologi ADE9000 SPI Register Map & Feeder Snapshot | **SUDAH** | Terverifikasi di `NonSecure/AMI/Src/ami_ade9000.c` & `test_ami_ade9000.c` |
+| **TrustZone Gateway** | Gerbang NonSecure Callable (NSC) `CMSE_NS_ENTRY` stubs di Secure World | **SUDAH** | Dideklarasikan di `Secure_nsclib/secure_nsc.h` & `Secure/Core/Src/secure_nsc.c` |
+| **Testing & Simulasi** | CTest Host Native Unit Tests (10/10 suite 100% Passed) | **SUDAH** | Menjalankan pengujian regresi deterministik via Ninja |
+| **Testing & Simulasi** | Simulator TCP Host (`gurux_simulator.exe` port 4059) & E2E Docker Runner | **SUDAH** | Docker Compose terpusat di `docker_test/` (Alpine 23 MB, 0 CVE) |
+| **Testing & Simulasi** | Profil Workspace Gurux DLMSDirector XML (`STM32U585VIT6_SM.gxc`) | **SUDAH** | Tersinkronisasi dengan seluruh parameter objek PLN |
 |---|---|---|---|
-| **Hardware TrustZone** | Implementasi driver hardware SAES/AES-GCM di Secure World (`Secure/`) | **BELUM** | `secure_nsc.c` masih berupa template callback CubeMX |
-| **Hardware TrustZone** | Gerbang NonSecure Callable (`CMSE_NS_ENTRY`) untuk layanan kripto | **BELUM** | Menjembatani panggilan NonSecure ke peripheral SAES STM32U5 |
+| **Hardware TrustZone** | Implementasi driver hardware SAES/AES-GCM di Secure World (`Secure/`) | **BELUM** | Menghubungkan fungsi NSC ke peripheral SAES hardware STM32U5 |
 | **Key Management** | Provisi pabrik Master Key (KEK) unik per-device di Secure Storage/OTP | **BELUM** | Standar SPLN D5.002:2024 mewajibkan KEK terlindungi di Secure World |
 | **Key Management** | Remote Key Transfer RFC 3394 AES Key Wrap atomik di Secure World | **BELUM** | Eksekusi unwrap dan rotasi kunci GUEK/AK di dalam TrustZone Secure |
 | **Hardware Security** | Integrasi Hardware TRNG fisik STM32U5 (NIST SP 800-90B / AIS-31) | **BELUM** | Menghasilkan Server Challenge 16-byte berbasis entropi acak fisik |
-| **Anti-Replay NVM** | Monotonic Invocation Counter persisten & wear-leveling flash internal | **BELUM** | Mencegah counter mundur setelah power-cycle dan mencegah keausan flash |
+| **Anti-Replay NVM** | Monotonic Invocation Counter persisten & wear-leveling NVM/TAMP Backup | **SUDAH** | Terverifikasi di NonSecure/AMI/Src/ami_nvm_counter.c & 	est_ami_nvm_counter.c |
 | **Anti-Replay NVM** | Penanganan saturasi Invocation Counter (`0xFFFFFFFF` fail-closed) | **BELUM** | Wajib menghentikan enkripsi & memicu rotasi kunci bila IC habis |
 | **Anti-Brute-Force** | Progressive exponential backoff / lockout setelah N kali gagal HLS | **BELUM** | Mencegah serangan brute-force dictionary attack pada port komunikasi |
 | **Hardware Driver** | Integrasi physical UART/Optical Probe DMA Circular Buffer | **BELUM** | `ami_dlms_hardware_uart_tx()` masih berupa stub non-hardware |
@@ -62,84 +69,48 @@ Tabel berikut merangkum status implementasi sistem Smart Meter 3-Fasa berdasarka
 
 ---
 
-## Workflow pekerjaan E2: Spin 1 dan Spin 2
+## Workflow Pekerjaan E2: Spin 1 dan Spin 2
 
-Tahapan berikut merangkum alur pekerjaan E2 untuk protokol dan data model. Spin 1 memakai dua fase untuk membangun dan mengintegrasikan fondasi; Spin 2 memakai dua fase untuk melengkapi fitur produk dan menyiapkan validasi. Fitur yang ditandai sebagai kebutuhan harus dikonfirmasi terhadap profil produk dan standar yang disepakati. Daftar ini adalah workflow, bukan klaim bahwa semua fitur sudah tersedia.
+### Spin 1 — Fondasi Protokol dan Integrasi Awal (Tahap Saat Ini / Selesai)
 
-### Spin 1 — fondasi dan integrasi awal
+#### Phase 1 — Desain Protokol dan Implementasi Host
+- Baseline protokol DLMS/COSEM: Logical Name (LN) referencing, Dedicated Client SAP `16`, Server Address `1`.
+- Pemetaan 276 kode OBIS standar PLN pascabayar dan verifikasi aktif 13 objek Association View via `GET`.
+- Parser streaming HDLC zero-heap, validasi CRC-16 HCS/FCS, dan resiliensi transparent flag `0x7E`.
+- Implementasi otentikasi HLS 5 (GMAC) dan APDU Ciphering Suite 0 (AES-128-GCM).
+- Rangkaian pengujian host: 9/9 CTest suite lulus 100% dan Docker test harness.
+- Status dan acuan standar formal tercatat di [docs/security-rules/PROTOCOL_PROFILE.md](docs/security-rules/PROTOCOL_PROFILE.md).
 
-#### Phase 1 — desain protokol dan implementasi host
+#### Phase 2 — Integrasi Awal Target & Driver Metrologi
+- Implementasi layer abstraksi port (`ami_dlms_port.c`) non-blocking untuk UART/DMA buffer.
+- Driver metrologi ADE9000 (`ami_ade9000.c`) untuk pembacaan register daya/energi.
+- Gerbang NonSecure Callable (NSC) TrustZone ARM Cortex-M33 disiapkan di `secure_nsc.c`.
+- Penegakan kebijakan fail-closed pada firmware target (blokir No-Auth dan LLS).
 
-**Alur kerja:** tetapkan profil komunikasi dan daftar objek → rancang kontrak data COSEM → implementasikan jalur protokol → verifikasi dengan test host dan simulator.
+---
 
-**Fitur/hasil yang dibutuhkan:**
+### Spin 2 — Pelengkapan Fitur Produksi & Kesiapan Sertifikasi (Tahap Selanjutnya)
 
-- Profil DLMS/COSEM: Logical Name atau Short Name, jenis interface, alamat client/server, layanan yang didukung, serta aturan asosiasi dan autentikasi.
-- Daftar OBIS produk dengan class/version, attribute, tipe data, skala/unit, hak akses, dan status dukungan. Cocokkan daftar tersebut dengan Association View.
-- Jalur AARQ/AARE dan xDLMS yang termasuk scope, respons error yang tepat, serta kebijakan penolakan akses.
-- HDLC framing dan kontrol link sesuai interface produk, termasuk validasi alamat, HCS/FCS, batas ukuran, dan penanganan frame tidak valid.
-- Model objek read-only yang memang diperlukan, seperti register pengukuran, Clock, serta profile/log yang sudah disepakati; selective access hanya untuk selector yang benar-benar diimplementasikan.
-- Host unit tests, simulator Gurux, dan test negatif untuk autentikasi, parser, state asosiasi, akses objek, serta kasus batas.
+#### Phase 3 — Integrasi Hardware TrustZone & Keamanan Produksi
+- Menghubungkan fungsi NSC ke akselerator hardware SAES/AES-GCM dan TRNG STM32U5 di Secure World.
+- Provisi Master Key (KEK) unik per-device pada Secure Flash / OTP.
+- Implementasi unwrap RFC 3394 AES Key Wrap untuk remote key transfer atomik di Secure World.
+- Implementasi algoritma wear-leveling flash internal untuk persistensi Invocation Counter anti-replay.
+- Integrasi driver fisik UART/Optical Probe DMA dengan FreeRTOS worker task.
 
-**Status repository:** baseline host Phase 1 untuk protokol/data model sudah didokumentasikan, dan regresi memeriksa bahwa setiap objek dalam Association View dapat menjawab GET. Profil E2 yang dipilih menetapkan LN, client SAP 16 dengan HLS5-GMAC/Suite 0, server 1/1, serta key-transfer jarak jauh berbasis KEK pabrik dengan otorisasi tambahan. Persetujuan formal dan backend produksi Secure-world/provisioning belum selesai; Phase 1 belum dapat dinyatakan tuntas. Katalog OBIS juga lebih luas daripada objek yang saat ini diumumkan/dilayani. Rincian dan gate ada di [docs/security-rules/PROTOCOL_PROFILE.md](docs/security-rules/PROTOCOL_PROFILE.md).
+#### Phase 4 — Sertifikasi, Conformance, dan Handoff
+- Pengujian Conformance resmi menggunakan DLMS UA CTT.
+- Uji interoperabilitas penuh dengan Head-End System (HES) PLN dan Gurux DLMSDirector.
+- Uji stabilitas jangka panjang (*soak test*), pemadaman mendadak (*power-loss resilience*), dan audit tamper.
+- Konfigurasi Option Bytes Readout Protection (RDP Level 2) dan Secure Boot.
 
-#### Phase 2 — integrasi awal board
+---
 
-**Alur kerja:** integrasikan firmware komunikasi pada target STM32U585VIT6 → hubungkan transport UART dan sumber snapshot dari jalur hardware → verifikasi kontrak data dan protokol secara end-to-end.
+## Panduan Menjalankan Pengujian
 
-**Fitur/hasil yang dibutuhkan:**
+### 1. Menjalankan Unit Test (CTest Host Native)
 
-- Integrasi transport board: driver UART/DMA, callback RX/TX, timeout, buffer ownership, sinkronisasi task/ISR, serta penanganan error link. Driver dan validasi UART menjadi tanggung jawab jalur hardware.
-- Integrasi data: sepakati format snapshot dari jalur ADE9000/metrologi—nilai, satuan, skala, validitas, dan perilaku saat data tidak tersedia. E2 memvalidasi pemetaan snapshot ke objek COSEM, bukan kalkulasi atau akurasi pengukuran.
-- Verifikasi SNRM/UA, pertukaran HDLC/APDU, pembacaan objek yang disepakati, disconnect/reconnect, dan perilaku saat komunikasi terputus.
-- Pastikan profil autentikasi firmware digunakan; hasil simulator No-Auth tetap dipisahkan dari hasil board.
-- Catat trace, konfigurasi, versi firmware, dan endpoint agar hasil host dan board tidak tercampur.
-
-**Kriteria selesai:** client dapat berkomunikasi dengan board melalui transport yang diintegrasikan dan membaca objek dalam profil yang disepakati, dengan respons dan akses sesuai spesifikasi. Akurasi metrologi tetap diverifikasi oleh pemilik area metrologi.
-
-### Spin 2 — pelengkapan produk dan kesiapan validasi
-
-#### Phase 3 — pelengkapan fitur protokol/data model
-
-**Alur kerja:** bekukan profil produk → tutup gap objek dan layanan → integrasikan kontrol keamanan produksi → perluas regression test.
-
-**Fitur/hasil yang dibutuhkan sesuai profil produk:**
-
-- Finalisasi OBIS dan Association View, termasuk register pascabayar 3-fasa, identitas meter, Clock, billing/load/event profile, alarm/tamper, dan power quality bila diwajibkan.
-- Implementasi atribut, tipe data, skala/unit, hak akses, serta selective access yang konsisten untuk setiap objek yang dijanjikan.
-- Block transfer untuk respons besar, misalnya profile/log, bila ukuran data dan profil komunikasi memerlukannya.
-- Integrasi layanan keamanan produksi: autentikasi yang disetujui, backend kriptografi Secure-world, provisioning/penyimpanan kunci, validasi peer/SAP, serta invocation counter yang tahan reset bila diwajibkan desain.
-- Pengujian negatif dan robustness: frame/APDU malformed, nilai batas, request sebelum asosiasi, replay/counter tidak valid, pembukaan asosiasi ulang, timeout, dan pemulihan sesi.
-
-**Kriteria selesai:** tidak ada perbedaan antara profil yang disepakati, objek yang diumumkan, dan perilaku GET/akses aktual; dependensi keamanan produksi sudah terintegrasi atau dinyatakan sebagai blocker secara eksplisit.
-
-#### Phase 4 — conformance, stabilisasi, dan handoff
-
-**Alur kerja:** jalankan test suite terhadap endpoint dan profil final → analisis setiap kegagalan → perbaiki atau dokumentasikan pengecualian → lakukan regression/soak test → serahkan bukti validasi.
-
-**Fitur/hasil yang dibutuhkan:**
-
-- Gurux CTT untuk mode referencing, autentikasi, interface, dan layanan yang benar-benar didukung produk. Tes yang dikecualikan dicatat sebagai tidak diuji, bukan lulus.
-- Pemeriksaan Association View dan GET terhadap seluruh objek dalam profil; investigasi trace untuk error seperti `UndefinedObject`, akses salah, atau attribute yang tidak didukung.
-- Regression test host dan board untuk HDLC, asosiasi, GET/selective access, autentikasi, error handling, dan reconnect.
-- Uji stabilitas komunikasi jangka panjang, reset/power-cycle untuk state dan counter keamanan, serta integrasi lintas task/buffer pada target.
-- Dokumentasi hasil: konfigurasi test, endpoint, build/commit, trace penting, defect, pengecualian, dan status integrasi keamanan.
-
-**Kriteria selesai:** setiap klaim dukungan memiliki bukti test pada endpoint yang relevan; hasil simulator, host, dan board dilaporkan terpisah. Sertifikasi metrologi, keselamatan, dan EMC berada di luar lingkup E2.
-
-## Status dan batas kemampuan
-
-- Firmware dan host simulator adalah dua target berbeda. Keberhasilan pengujian simulator tidak membuktikan perilaku firmware pada board.
-- Pengujian host memakai snapshot/sample data. Pengujian tersebut memeriksa pemrosesan dan komunikasi data, bukan akurasi metrologi.
-- `ami_obis_catalog.h` adalah katalog kode OBIS yang direncanakan/dirujuk proyek. Katalog tidak berarti semua objek sudah diimplementasikan atau diumumkan ke klien.
-- Objek yang diumumkan ke klien berada di Association View dalam `ami_dlms_apdu.c`. Pastikan cakupan itu cocok dengan profil produk sebelum menyimpulkan hasil conformance.
-- Firmware menolak autentikasi None dan LLS pada konfigurasi firmware. Simulator host dapat menggunakan No-Auth untuk pengujian pengembangan; jangan memakai hasilnya sebagai bukti autentikasi firmware.
-- Integrasi produksi seperti penyimpanan kunci di Secure World, provisioning, dan jalur HLS produksi masih memerlukan integrasi target.
-- Akuisisi UART dan perhitungan metrologi menjadi tanggung jawab integrasi board dan tidak divalidasi oleh host test di repository ini.
-
-## Menjalankan host tests
-
-Jalankan dari root repository di PowerShell:
+Dari terminal PowerShell di root repositori:
 
 ```powershell
 cmake -S tests -B tests/build -G Ninja
@@ -147,11 +118,11 @@ cmake --build tests/build --parallel
 ctest --test-dir tests/build --output-on-failure
 ```
 
-Host tests tidak memerlukan board STM32. Untuk cakupan setiap suite dan batas validasinya, lihat [tests/test_note.md](tests/test_note.md).
+*Seluruh 9 test suite (`AmiCosemTest`, `AmiSecurityTest`, `AmiDlmsAssociationTest`, `AmiFirmwareAuthPolicyTest`, `AmiDlmsApduTest`, `AmiDlmsHdlcTest`, `AmiDlmsPortTest`, `AmiAde9000Test`, `AmiDlmsCipherTest`) akan dieksekusi.*
 
-## Menjalankan simulator untuk Gurux DLMSDirector
+### 2. Menjalankan Simulator Host untuk Gurux DLMSDirector
 
-Simulator pengembangan tersedia sebagai target host:
+Kompilasi dan jalankan simulator TCP DLMS:
 
 ```powershell
 cmake -S tests -B tests/build -G Ninja
@@ -159,10 +130,31 @@ cmake --build tests/build --target gurux_simulator
 .\tests\build\host-tools\gurux_simulator.exe
 ```
 
-Simulator mendengarkan raw HDLC-over-TCP di `127.0.0.1:4059`. Di Gurux DLMSDirector pilih koneksi Network/TCP, interface HDLC, alamat host dan port tersebut, Logical Name referencing, serta Authentication None untuk profil simulator ini. Ini bukan DLMS Wrapper dan bukan konfigurasi autentikasi produksi.
+Simulator akan mendengarkan koneksi raw HDLC-over-TCP pada `127.0.0.1:4059`. Buka software **GXDLMSDirector**, buka workspace [`STM32U585VIT6_SM.gxc`](STM32U585VIT6_SM.gxc), dan klik **Connect**.
 
-Untuk konfigurasi CTT serta cara membaca tes yang dikecualikan atau gagal, lihat bagian Gurux di [tests/test_note.md](tests/test_note.md). Untuk Docker test harness, lihat [docker_test/README.md](docker_test/README.md).
+### 3. Menjalankan Docker Test Suite Terisolasi
 
-## Area tanggung jawab
+Eksekusi script test otomatis berbasis Docker Compose:
 
-Dokumentasi ini berfokus pada security dan protokol komunikasi. Hasil pengukuran, kalibrasi, akurasi metrologi, dan driver UART fisik harus diverifikasi oleh integrasi hardware/metrologi dan tidak dapat disimpulkan dari test simulator.
+```powershell
+.\docker_test\run_docker_tests.bat
+```
+
+Atau melalui direktori `docker_test/`:
+
+```powershell
+cd docker_test
+docker compose up --build --abort-on-container-exit
+```
+
+---
+
+## Dokumen Acuan Keamanan dan Standar
+
+Seluruh perancangan protokol dan keamanan sistem smart meter ini merujuk pada dokumen standar yang tersimpan pada folder `docs/security-rules/` dan `dokumen_PLN/STANDAR_PLN/`:
+- [`docs/security-rules/PROTOCOL_PROFILE.md`](docs/security-rules/PROTOCOL_PROFILE.md): Spesifikasi baseline protokol dan 13 objek Association View.
+- [`docs/security-rules/SECURITY_ARCHITECTURE.md`](docs/security-rules/SECURITY_ARCHITECTURE.md): Arsitektur partisi TrustZone dan tanggung jawab lapisan.
+- [`docs/security-rules/SECURITY_CHECKLIST.md`](docs/security-rules/SECURITY_CHECKLIST.md): Daftar periksa kesiapan keamanan rilis.
+- [`docs/security-rules/SECURITY_REQUIREMENTS.md`](docs/security-rules/SECURITY_REQUIREMENTS.md): Persyaratan mandatori keamanan sistem.
+- [`docs/security-rules/Threat_MODEL.md`](docs/security-rules/Threat_MODEL.md): Analisis model ancaman (T1 s.d. T12).
+- [`docs/ChangeLOG.md`](docs/ChangeLOG.md): Riwayat lengkap rilis dan perubahan fitur.

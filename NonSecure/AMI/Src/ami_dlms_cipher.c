@@ -134,7 +134,15 @@ static int suite0_accept_rx_counter_cb(void *user, uint32_t invocation_counter)
     AmiDlmsSecuritySuite0Context *ctx = (AmiDlmsSecuritySuite0Context *)user;
     if (ctx == NULL) return 0;
 
-    /* Anti-replay: counter must be strictly monotonically increasing */
+    if (ctx->nvm_counter != NULL) {
+        int accepted = ami_nvm_counter_accept_rx(ctx->nvm_counter, invocation_counter);
+        if (accepted) {
+            ctx->last_rx_counter = ctx->nvm_counter->last_rx_counter;
+        }
+        return accepted;
+    }
+
+    /* Fallback RAM-only check if NVM is not bound */
     if (invocation_counter <= ctx->last_rx_counter) {
         return 0; /* Replay detected -> Reject! */
     }
@@ -148,6 +156,15 @@ static int suite0_next_tx_counter_cb(void *user, uint32_t *invocation_counter)
     AmiDlmsSecuritySuite0Context *ctx = (AmiDlmsSecuritySuite0Context *)user;
     if (ctx == NULL || invocation_counter == NULL) return 0;
 
+    if (ctx->nvm_counter != NULL) {
+        int ok = ami_nvm_counter_next_tx(ctx->nvm_counter, invocation_counter);
+        if (ok) {
+            ctx->current_tx_counter = *invocation_counter;
+        }
+        return ok;
+    }
+
+    /* Fallback RAM-only increment if NVM is not bound */
     ctx->current_tx_counter++;
     *invocation_counter = ctx->current_tx_counter;
     return 1;
@@ -299,5 +316,17 @@ int ami_dlms_cipher_suite0_build_glo_request(
 #endif
 
     *out_len = total_wire_len;
+    return 0;
+}
+
+int ami_dlms_cipher_suite0_bind_nvm(AmiDlmsSecuritySuite0Context *ctx,
+                                    AmiNvmCounterContext *nvm)
+{
+    if (ctx == NULL || nvm == NULL || !nvm->is_initialized) {
+        return -1;
+    }
+    ctx->nvm_counter = nvm;
+    ctx->current_tx_counter = nvm->current_tx_counter;
+    ctx->last_rx_counter = nvm->last_rx_counter;
     return 0;
 }

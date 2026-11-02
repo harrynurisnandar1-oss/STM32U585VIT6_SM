@@ -154,7 +154,13 @@ static void MX_GTZC_S_Init(void)
   /* USER CODE BEGIN GTZC_S_Init 1 */
 
   /* USER CODE END GTZC_S_Init 1 */
-  if (HAL_GTZC_TZSC_ConfigPeriphAttributes(GTZC_PERIPH_SAES, GTZC_TZSC_PERIPH_SEC|GTZC_TZSC_PERIPH_NPRIV) != HAL_OK)
+  /* Configure Secure hardware security & cryptographic peripherals */
+  if (HAL_GTZC_TZSC_ConfigPeriphAttributes(GTZC_PERIPH_SAES, GTZC_TZSC_PERIPH_SEC|GTZC_TZSC_PERIPH_NPRIV) != HAL_OK ||
+      HAL_GTZC_TZSC_ConfigPeriphAttributes(GTZC_PERIPH_RNG,  GTZC_TZSC_PERIPH_SEC|GTZC_TZSC_PERIPH_NPRIV) != HAL_OK ||
+      HAL_GTZC_TZSC_ConfigPeriphAttributes(GTZC_PERIPH_TAMP, GTZC_TZSC_PERIPH_SEC|GTZC_TZSC_PERIPH_NPRIV) != HAL_OK ||
+      HAL_GTZC_TZSC_ConfigPeriphAttributes(GTZC_PERIPH_RTC,  GTZC_TZSC_PERIPH_SEC|GTZC_TZSC_PERIPH_NPRIV) != HAL_OK ||
+      HAL_GTZC_TZSC_ConfigPeriphAttributes(GTZC_PERIPH_PKA,  GTZC_TZSC_PERIPH_SEC|GTZC_TZSC_PERIPH_NPRIV) != HAL_OK ||
+      HAL_GTZC_TZSC_ConfigPeriphAttributes(GTZC_PERIPH_HASH, GTZC_TZSC_PERIPH_SEC|GTZC_TZSC_PERIPH_NPRIV) != HAL_OK)
   {
     Error_Handler();
   }
@@ -230,7 +236,29 @@ static void MX_GTZC_S_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN GTZC_S_Init 2 */
+  /* Lock MPCBB configuration to prevent NonSecure runtime tampering */
+  if (HAL_GTZC_MPCBB_Lock(SRAM3_BASE) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
+  /* Enable TrustZone Interrupt Controller (TZIC) for illegal access detection */
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_SAES);
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_RNG);
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_TAMP);
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_RTC);
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_PKA);
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_HASH);
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_SRAM1);
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_SRAM2);
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_MPCBB3_REG);
+
+  /* Enable GTZC IRQ in NVIC with highest priority (0) */
+  HAL_NVIC_SetPriority(GTZC_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(GTZC_IRQn);
+
+  /* Lock TZSC register configuration against runtime tampering */
+  HAL_GTZC_TZSC_Lock(GTZC_TZSC1);
   /* USER CODE END GTZC_S_Init 2 */
 
 }

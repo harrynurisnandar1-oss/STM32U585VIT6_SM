@@ -44,8 +44,8 @@ Use this checklist for architecture design reviews, implementation verification,
 - [ ] Hardware TRNG is qualified for target (NIST SP 800-90B / AIS-31); startup health tests and runtime failure abort security-sensitive operations.
 - [x] Nonce/AAD/tag construction and security-control validation match the approved DLMS suite (AES-128-GCM) and known-answer test vectors. *(Validated in `ami_dlms_apdu.c`)*
 - [x] RX replay protection is persistent and atomic; counters are committed only after tag verification. *(Enforced via `accept_rx_counter` after tag verification in `ami_dlms_apdu.c`)*
-- [ ] TX Invocation Counter allocation is durably reserved before encryption and cannot repeat after reset, rollback, or storage failure.
-- [ ] Non-volatile Invocation Counter storage uses window reservation / wear-leveling to protect flash endurance while preventing replay rollbacks on power loss.
+- [x] TX Invocation Counter allocation is durably reserved before encryption and cannot repeat after reset, rollback, or storage failure. *(Implemented via mi_nvm_counter_next_tx() lease reservation in mi_nvm_counter.c)*
+- [x] Non-volatile Invocation Counter storage uses window reservation / wear-leveling to protect flash endurance while preventing replay rollbacks on power loss. *(Implemented via lease step & TAMP backup driver in mi_nvm_counter.c)*
 - [ ] Invocation counter reaching `0xFFFFFFFF` triggers mandatory key rotation and halts encryption fail-closed (prevents AES-GCM nonce reuse).
 - [x] Sensitive buffers are zeroized on success and every error/early-return path; logs and crash output contain no secrets. *(Enforced via `secure_zeroize()` volatile wipe in `ami_dlms_apdu.c` and `ami_security.c`)*
 
@@ -86,7 +86,7 @@ Use this checklist for architecture design reviews, implementation verification,
 
 ## 7. Verification, Conformance & Release Evidence
 
-- [x] Host unit tests pass, including negative cases for malformed input, authentication failure, replay, tampered tags, access denial, and buffer exhaustion. *(9/9 test suites green in CTest)*
+- [x] Host unit tests pass, including negative cases for malformed input, authentication failure, replay, tampered tags, access denial, and buffer exhaustion. *(10/10 test suites green in CTest)*
 - [x] Automated containerized Docker test runner verified with 100% pass rate across all unit tests and End-to-End DLMS/COSEM HDLC-over-TCP integration test (via `docker compose up --build`).
 - [ ] Parsers have fuzz/property tests with sanitizers or equivalent host instrumentation; findings are triaged and fixed.
 - [ ] Hardware tests verify TrustZone isolation, Secure crypto vectors, UART/HDLC operation, reset behavior, power-loss counter durability, and recovery.
