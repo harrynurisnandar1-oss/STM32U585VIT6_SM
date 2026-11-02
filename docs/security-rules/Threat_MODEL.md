@@ -81,4 +81,3 @@ Send otherwise valid frames with an unexpected destination SAP, unexpected sourc
 3. Integrate HDLC transport with strict address, sequence, negotiated-size, timeout, and per-session checks.
 4. Verify TrustZone attribution, Secure boot, signed update, rollback protection, debug lifecycle, and key provisioning on the actual MCU.
 5. Add parser fuzzing, negative protocol tests, power-failure tests, concurrency checks, and target hardware verification before release.
-
