@@ -386,7 +386,7 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 ## [v2.5.2] - 2026-10-31
 
 ### Protocol and data-model baseline
-- **Mendefinisikan baseline E2 untuk Phase 1 (`docs/PROTOCOL_PROFILE.md`)**:
+- **Mendefinisikan baseline E2 untuk Phase 1 (`docs/security-rules/PROTOCOL_PROFILE.md`)**:
   - Mencatat profil host yang benar-benar diimplementasikan: Logical Name referencing, raw HDLC-over-TCP pada simulator, layanan GET dan subset selective access, kebijakan read-only, serta perbedaan autentikasi simulator dan firmware.
   - Mendokumentasikan 12 objek yang saat ini diumumkan dalam Association View dan membedakannya dari katalog OBIS yang lebih luas.
   - Menyatakan secara eksplisit bahwa dokumen ini adalah baseline pengembangan, bukan profil produksi yang disetujui atau klaim conformance penuh.
@@ -395,7 +395,7 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
   - Memperjelas cakupan Phase 1: baseline host protokol/data model terbatas telah tercatat dan diuji; persetujuan profil produk dan validasi target masih diperlukan.
 - **Memperbarui panduan Phase 1 (`README.md`, `tests/test_note.md`)**:
   - Menautkan baseline protokol/data model dan membedakan hasil host dari firmware, data ADE9000, dan metrologi.
-- **Mencatat profil target E2 yang dipilih (`docs/PROTOCOL_PROFILE.md`, `README.md`)**:
+- **Mencatat profil target E2 yang dipilih (`docs/security-rules/PROTOCOL_PROFILE.md`, `README.md`)**:
   - LN referencing; client SAP 16 saja dengan HLS5-GMAC dan Suite 0; server physical/logical 1/1; layanan GET dan selective access yang sudah diimplementasikan.
   - No-Auth/LLS tetap ditolak untuk firmware. HLS5 pada SAP 16 berarti tidak ada asosiasi public tanpa autentikasi dan memerlukan persetujuan produk/security formal.
   - Key update jarak jauh ditetapkan memakai RFC 3394 wrapped keys di bawah KEK per-device yang diprovisikan saat manufaktur. Key-transfer memerlukan otorisasi identitas peer/SAP tambahan; tidak dibuka pada Association View saat ini.
@@ -408,7 +408,7 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
   - Menguji validasi alamat peer untuk profil firmware.
 - **Mencatat gate provisioning produksi**:
   - Secure-world saat ini belum menyediakan layanan HLS5/Suite 0, CSPRNG yang tervalidasi, KEK per-device, atomic key storage/remote key transfer, otorisasi peer, atau counter invocation persisten.
-  - Karena Phase 1 disepakati mewajibkan backend dan provisioning produksi, Phase 1 tetap belum selesai sampai gate pada `docs/PROTOCOL_PROFILE.md` diimplementasikan dan diuji di STM32U585 target.
+  - Karena Phase 1 disepakati mewajibkan backend dan provisioning produksi, Phase 1 tetap belum selesai sampai gate pada `docs/security-rules/PROTOCOL_PROFILE.md` diimplementasikan dan diuji di STM32U585 target.
 
 ### Security hardening
 - **Membatasi API kriptografi berbasis raw key hanya untuk pengujian host (`NonSecure/AMI/Inc/ami_security.h`, `NonSecure/AMI/Src/ami_security.c`)**:

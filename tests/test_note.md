@@ -20,7 +20,7 @@ ctest --test-dir tests/build -R AmiDlmsApduTest --output-on-failure
 
 Daftar suite ditentukan di `tests/CMakeLists.txt`. Suite host mencakup model COSEM, security, association, firmware authentication policy, APDU, HDLC, dan port. Hasil CTest hanya membuktikan perilaku yang dicakup test tersebut pada build host; hasilnya bukan validasi hardware, UART, metrologi, sertifikasi, atau seluruh conformance IEC 62056.
 
-`AmiDlmsApduTest` juga memeriksa bahwa seluruh objek yang diumumkan melalui Association View saat ini berhasil menjawab GET attribute 2 menggunakan snapshot pengujian. Baseline objek/protokol yang dites didokumentasikan di [docs/PROTOCOL_PROFILE.md](../docs/PROTOCOL_PROFILE.md).
+`AmiDlmsApduTest` juga memeriksa bahwa seluruh objek yang diumumkan melalui Association View saat ini berhasil menjawab GET attribute 2 menggunakan snapshot pengujian. Baseline objek/protokol yang dites didokumentasikan di [docs/PROTOCOL_PROFILE.md](../docs/security-rules/PROTOCOL_PROFILE.md).
 
 ## Simulator Gurux
 
@@ -47,7 +47,7 @@ Alamat client/server harus mengikuti profil koneksi simulator. Jika koneksi gaga
 
 **Penting:** simulator host yang memakai No-Auth berbeda dari firmware. Firmware dikonfigurasi untuk menolak No-Auth dan LLS. Hasil CTT dengan `Authentication level: None` terhadap simulator tidak membuktikan kebijakan autentikasi firmware. Uji firmware memerlukan profil autentikasi yang didukung oleh integrasi target.
 
-Firmware policy test juga memastikan hanya OID HLS5-GMAC dengan challenge client 16-byte yang diterima; No-Auth, LLS, HLS3/MD5, HLS4/SHA-1, dan challenge dengan panjang lain ditolak. Test ini memverifikasi policy, bukan implementasi crypto Secure-world, provisioning key, atau keamanan produksi. Profil target dan status gate tercatat di [docs/PROTOCOL_PROFILE.md](../docs/PROTOCOL_PROFILE.md).
+Firmware policy test juga memastikan hanya OID HLS5-GMAC dengan challenge client 16-byte yang diterima; No-Auth, LLS, HLS3/MD5, HLS4/SHA-1, dan challenge dengan panjang lain ditolak. Test ini memverifikasi policy, bukan implementasi crypto Secure-world, provisioning key, atau keamanan produksi. Profil target dan status gate tercatat di [docs/PROTOCOL_PROFILE.md](../docs/security-rules/PROTOCOL_PROFILE.md).
 
 ## OBIS: katalog, model, dan Association View
 

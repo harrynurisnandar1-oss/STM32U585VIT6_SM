@@ -40,7 +40,7 @@ Tahapan berikut merangkum alur pekerjaan E2 untuk protokol dan data model. Spin 
 - Model objek read-only yang memang diperlukan, seperti register pengukuran, Clock, serta profile/log yang sudah disepakati; selective access hanya untuk selector yang benar-benar diimplementasikan.
 - Host unit tests, simulator Gurux, dan test negatif untuk autentikasi, parser, state asosiasi, akses objek, serta kasus batas.
 
-**Status repository:** baseline host Phase 1 untuk protokol/data model sudah didokumentasikan, dan regresi memeriksa bahwa setiap objek dalam Association View dapat menjawab GET. Profil E2 yang dipilih menetapkan LN, client SAP 16 dengan HLS5-GMAC/Suite 0, server 1/1, serta key-transfer jarak jauh berbasis KEK pabrik dengan otorisasi tambahan. Persetujuan formal dan backend produksi Secure-world/provisioning belum selesai; Phase 1 belum dapat dinyatakan tuntas. Katalog OBIS juga lebih luas daripada objek yang saat ini diumumkan/dilayani. Rincian dan gate ada di [docs/PROTOCOL_PROFILE.md](docs/PROTOCOL_PROFILE.md).
+**Status repository:** baseline host Phase 1 untuk protokol/data model sudah didokumentasikan, dan regresi memeriksa bahwa setiap objek dalam Association View dapat menjawab GET. Profil E2 yang dipilih menetapkan LN, client SAP 16 dengan HLS5-GMAC/Suite 0, server 1/1, serta key-transfer jarak jauh berbasis KEK pabrik dengan otorisasi tambahan. Persetujuan formal dan backend produksi Secure-world/provisioning belum selesai; Phase 1 belum dapat dinyatakan tuntas. Katalog OBIS juga lebih luas daripada objek yang saat ini diumumkan/dilayani. Rincian dan gate ada di [docs/security-rules/PROTOCOL_PROFILE.md](docs/security-rules/PROTOCOL_PROFILE.md).
 
 #### Phase 2 — integrasi awal board
 

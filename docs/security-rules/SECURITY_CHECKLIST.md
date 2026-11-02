@@ -6,7 +6,7 @@ Use this checklist for architecture design reviews, implementation verification,
 
 ## 1. Product Profile, Conformance & Threat Model
 
-- [ ] Product/security owner approves the DLMS/COSEM and SPLN/utility profile, controlled standards editions, cipher suite, system-title rules, OBIS map, and conformance settings. *(E2-selected draft is recorded in `docs/PROTOCOL_PROFILE.md`: LN, client SAP 16 with HLS5-GMAC/Suite 0, server 1/1, and the 12-object host view. Formal approval remains open.)*
+- [ ] Product/security owner approves the DLMS/COSEM and SPLN/utility profile, controlled standards editions, cipher suite, system-title rules, OBIS map, and conformance settings. *(E2-selected draft is recorded in `docs/security-rules/PROTOCOL_PROFILE.md`: LN, client SAP 16 with HLS5-GMAC/Suite 0, server 1/1, and the 12-object host view. Formal approval remains open.)*
 - [ ] Threat model risks have owners, mitigations, residual-risk approval, and documented deployment assumptions.
 - [ ] Production communication interfaces, client identities, physical access assumptions, and service/maintenance modes are documented.
 - [x] COSEM access-control matrix covers every exposed object, attribute, and method. *(Implemented via `association_view[]` in `ami_dlms_apdu.c`)*
@@ -36,7 +36,7 @@ Use this checklist for architecture design reviews, implementation verification,
 ## 3. Cryptography, Key Hierarchy & Invocation Counter
 
 - [ ] Production Secure-world backend implements approved encryption/decryption and HLS operations; test/fake backends cannot be linked into release images.
-- [ ] Manufacturing provisions a unique per-device KEK into protected Secure-world storage; remote wrapped-key installation unwraps and atomically persists keys without exposing plaintext to NonSecure code. *(Remote key transfer is selected in `docs/PROTOCOL_PROFILE.md`; production provisioning/storage is not implemented.)*
+- [ ] Manufacturing provisions a unique per-device KEK into protected Secure-world storage; remote wrapped-key installation unwraps and atomically persists keys without exposing plaintext to NonSecure code. *(Remote key transfer is selected in `docs/security-rules/PROTOCOL_PROFILE.md`; production provisioning/storage is not implemented.)*
 - [ ] Key-transfer authorization verifies both authenticated peer identity and the approved SAP/authorization policy; successful HLS5 authentication alone does not permit key replacement.
 - [ ] Distinct key hierarchy enforced: Master Key / Key Encrypting Key (KEK), Global Unicast Encryption Key (GUEK / DEK), and Authentication Key (AK).
 - [ ] Class ID 64 (`Security Setup`) is bound per Application Association; low-privilege clients (Reader/Public) cannot view, modify, or activate Management credentials.
