@@ -21,6 +21,47 @@ E2 menangani kontrak data antara sumber data meter dan protokol: objek/OBIS yang
 
 Katalog OBIS bukan bukti bahwa seluruh objek sudah tersedia di perangkat. Objek yang benar-benar dilayani harus cocok dengan model COSEM dan Association View yang diumumkan. Host tests memakai sample/snapshot, sehingga membuktikan perilaku kode yang diuji pada host saja—bukan integrasi ADE9000, UART, board, atau akurasi meter.
 
+## Matriks Status Pekerjaan Proyek (Sudah vs Belum Dikerjakan)
+
+Tabel berikut merangkum status implementasi sistem Smart Meter 3-Fasa berdasarkan pembagian fase pengembangan **Spin 1 (Prototipe / Purwarupa)** dan **Spin 2 (Target Hardware Produksi & Sertifikasi)** sesuai standar **SPLN D3.006:2021**, **SPLN D5.002:2024**, dan **IEC 62056**:
+
+| Area / Komponen | Item Pekerjaan | Status | Catatan / Lokasi Implementasi |
+|---|---|:---:|---|
+| **Protokol HDLC** | HDLC Framing Type 3 (`0xA0`), parsing streaming O(1), addressing multi-octet | **SUDAH** | Terverifikasi di `NonSecure/AMI/Src/ami_dlms_hdlc.c` & `test_ami_dlms_hdlc.c` |
+| **Protokol HDLC** | Dual-stage CRC-16 (HCS & FCS) dan resiliensi transparent flag `0x7E` | **SUDAH** | Teruji via frame riil Gurux dengan checksum berakhiran `0x7E 0x0A 0x7E` |
+| **Protokol HDLC** | Stripping/auto-wrapping LLC sublayer (`0xE6 0xE6 0x00` / `0xE6 0xE7 0x00`) | **SUDAH** | Memenuhi kepatuhan IEC 62056-46 pada I-Frame APDU |
+| **Protokol ACSE** | State machine AARQ/AARE, negosiasi conformance dinamis, Max PDU | **SUDAH** | Terverifikasi di `NonSecure/AMI/Src/ami_dlms_association.c` |
+| **Data Model COSEM** | Pemetaan katalog lengkap 276 kode OBIS standar PLN pascabayar | **SUDAH** | Didefinisikan dalam 22 kategori di `NonSecure/AMI/Inc/ami_obis_catalog.h` |
+| **Data Model COSEM** | Implementasi Association View terdaftar (12 objek esensial) via `GET` | **SUDAH** | 12 objek terverifikasi via `test_ami_dlms_apdu.c` & `test_ami_firmware_auth_policy.c` |
+| **Data Model COSEM** | Selective Access Class 7 (rentang waktu Clock & rentang entri baris) | **SUDAH** | Selector 1 & 2 terimplementasi di `ami_dlms_apdu.c` untuk Event & Billing |
+| **Keamanan Host** | Core Kriptografi mandiri AES-128 NIST FIPS 197 & GHASH GF(2^128) | **SUDAH** | Lolos 100% Known Answer Test (KAT) NIST SP 800-38D Case 1, 2, 4 |
+| **Keamanan Host** | 4-Pass Mutual Authentication HLS 5 (GMAC) OID `2.16.756.5.8.2.5` | **SUDAH** | Constant-time verification & zeroization di `ami_security.c` |
+| **Keamanan Port** | Penegakan fail-closed policy (blokir No-Auth & LLS pada build firmware) | **SUDAH** | `#if !defined(STM32U585xx)` mengisolasi helper development |
+| **Keamanan Port** | Validasi alamat peer HDLC firmware (Client SAP 16, Server Address 1) | **SUDAH** | Menolak frame asing sebelum masuk ke stack APDU (`ami_dlms_port.c`) |
+| **Keamanan Port** | Isolasi API raw-key kriptografi dari kompilasi NonSecure firmware | **SUDAH** | NonSecure firmware hanya mengenal opaque reference `AmiKeyHandle` |
+| **Testing & Simulasi** | CTest Host Native Unit Tests (7/7 suite 100% Passed) | **SUDAH** | Menjalankan pengujian regresi deterministik via Ninja |
+| **Testing & Simulasi** | Simulator TCP Host (`gurux_simulator.exe` port 4059) & E2E Docker Runner | **SUDAH** | Docker Alpine 23 MB, 0 CVE (`ami_dlms_docker_test`) |
+| **Testing & Simulasi** | Profil Workspace Gurux DLMSDirector XML (`STM32U585VIT6_SM.gxc`) | **SUDAH** | Tersinkronisasi dengan 276 objek parameter PLN |
+|---|---|---|---|
+| **Hardware TrustZone** | Implementasi driver hardware SAES/AES-GCM di Secure World (`Secure/`) | **BELUM** | `secure_nsc.c` masih berupa template callback CubeMX |
+| **Hardware TrustZone** | Gerbang NonSecure Callable (`CMSE_NS_ENTRY`) untuk layanan kripto | **BELUM** | Menjembatani panggilan NonSecure ke peripheral SAES STM32U5 |
+| **Key Management** | Provisi pabrik Master Key (KEK) unik per-device di Secure Storage/OTP | **BELUM** | Standar SPLN D5.002:2024 mewajibkan KEK terlindungi di Secure World |
+| **Key Management** | Remote Key Transfer RFC 3394 AES Key Wrap atomik di Secure World | **BELUM** | Eksekusi unwrap dan rotasi kunci GUEK/AK di dalam TrustZone Secure |
+| **Hardware Security** | Integrasi Hardware TRNG fisik STM32U5 (NIST SP 800-90B / AIS-31) | **BELUM** | Menghasilkan Server Challenge 16-byte berbasis entropi acak fisik |
+| **Anti-Replay NVM** | Monotonic Invocation Counter persisten & wear-leveling flash internal | **BELUM** | Mencegah counter mundur setelah power-cycle dan mencegah keausan flash |
+| **Anti-Replay NVM** | Penanganan saturasi Invocation Counter (`0xFFFFFFFF` fail-closed) | **BELUM** | Wajib menghentikan enkripsi & memicu rotasi kunci bila IC habis |
+| **Anti-Brute-Force** | Progressive exponential backoff / lockout setelah N kali gagal HLS | **BELUM** | Mencegah serangan brute-force dictionary attack pada port komunikasi |
+| **Hardware Driver** | Integrasi physical UART/Optical Probe DMA Circular Buffer | **BELUM** | `ami_dlms_hardware_uart_tx()` masih berupa stub non-hardware |
+| **Metrologi ADE9000** | Task FreeRTOS akuisisi register energi/tegangan riil via SPI ADE9000 | **BELUM** | Saat ini data tegangan/arus masih diisi oleh test sample bank |
+| **Data Model Lanjutan** | Ekspansi objek Association View (seluruh 276 OBIS katalog PLN) | **BELUM** | Memetakan sisa OBIS (multi-tarif, THD, daya semu, limiter) ke snapshot |
+| **Kontrol Beban** | Eksekusi fisik Disconnect Control Breaker (Class 70) via GPIO Latching Relay | **BELUM** | Method `remote_disconnect/reconnect` belum memicu GPIO koil relay |
+| **Protokol Lanjutan** | General Block Transfer untuk unduhan data profil historis berukuran besar | **BELUM** | Diperlukan jika paket data melebihi Max PDU buffer (Class 7 log) |
+| **Keamanan Boot** | Secure Boot (SBSFU/MCUboot) & Verifikasi Digital Signature FOTA | **BELUM** | Memvalidasi integritas dan rollback counter sebelum eksekusi image |
+| **Keamanan Fisik** | Penguncian Readout Protection (RDP Level 1/2) & penonaktifan JTAG/SWD | **BELUM** | Mencegah dumping firmware dan memori kunci melalui debugger fisik |
+| **Sertifikasi** | Uji formal DLMS User Association Conformance Test Tool (CTT) & HES PLN | **BELUM** | Sertifikasi kepatuhan penuh standar utilitas sebelum komersialisasi |
+
+---
+
 ## Workflow pekerjaan E2: Spin 1 dan Spin 2
 
 Tahapan berikut merangkum alur pekerjaan E2 untuk protokol dan data model. Spin 1 memakai dua fase untuk membangun dan mengintegrasikan fondasi; Spin 2 memakai dua fase untuk melengkapi fitur produk dan menyiapkan validasi. Fitur yang ditandai sebagai kebutuhan harus dikonfirmasi terhadap profil produk dan standar yang disepakati. Daftar ini adalah workflow, bukan klaim bahwa semua fitur sudah tersedia.
