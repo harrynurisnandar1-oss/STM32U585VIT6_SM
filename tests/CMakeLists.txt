@@ -71,3 +71,22 @@ add_executable(test_ami_port
     "${AMI_SRC}/ami_cosem_model.c")
 target_include_directories(test_ami_port PRIVATE "${AMI_INC}")
 add_test(NAME AmiDlmsPortTest COMMAND test_ami_port)
+
+add_executable(test_ami_ade9000
+    test_ami_ade9000.c
+    "${AMI_SRC}/ami_ade9000.c"
+    "${AMI_SRC}/ami_cosem_model.c")
+target_include_directories(test_ami_ade9000 PRIVATE "${AMI_INC}")
+add_test(NAME AmiAde9000Test COMMAND test_ami_ade9000)
+
+add_executable(test_ami_dlms_cipher
+    test_ami_dlms_cipher.c
+    "${AMI_SRC}/ami_dlms_cipher.c"
+    "${AMI_SRC}/ami_dlms_port.c"
+    "${AMI_SRC}/ami_dlms_hdlc.c"
+    "${AMI_SRC}/ami_dlms_association.c"
+    "${AMI_SRC}/ami_dlms_apdu.c"
+    "${AMI_SRC}/ami_cosem_model.c"
+    "${AMI_SRC}/ami_security.c")
+target_include_directories(test_ami_dlms_cipher PRIVATE "${AMI_INC}")
+add_test(NAME AmiDlmsCipherTest COMMAND test_ami_dlms_cipher)

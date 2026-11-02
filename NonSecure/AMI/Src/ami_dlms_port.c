@@ -107,6 +107,30 @@ static AmiDlmsPortStatus dispatch_i_frame(AmiDlmsPortContext *ctx, const HdlcFra
         apdu_response[3] = 0x01u;
         apdu_response[4] = 0x03u;
         apdu_resp_len = 5u;
+    } else if (apdu[0] == 0xC8u || apdu[0] == 0xC9u || apdu[0] == 0xCBu) {
+        /* Ciphered APDUs (Security Suite 0): glo-get (0xC8), glo-set (0xC9), glo-action (0xCB) */
+        if (ctx->cipher_backend == NULL) {
+            apdu_response[0] = 0xD8u;
+            apdu_response[1] = 0x00u;
+            apdu_response[2] = 0x02u;
+            apdu_resp_len = 3u;
+        } else {
+            if (ctx->snapshot_provider != NULL) {
+                (void)ctx->snapshot_provider(&ctx->snapshot, ctx->user_data);
+            }
+            AmiDlmsApduStatus cipher_st = ami_dlms_process_ciphered_request(
+                &ctx->association,
+                &ctx->snapshot,
+                ctx->cipher_backend,
+                apdu, apdu_len,
+                ctx->cipher_workspace, sizeof(ctx->cipher_workspace),
+                apdu_response, sizeof(apdu_response),
+                &apdu_resp_len);
+
+            if (cipher_st != AMI_DLMS_APDU_OK && apdu_resp_len == 0u) {
+                return AMI_DLMS_PORT_FRAME_ERROR;
+            }
+        }
     } else {
         /* Unsupported service on LN meter */
         apdu_response[0] = 0xD8u;
@@ -209,6 +233,14 @@ AmiDlmsPortStatus ami_dlms_port_set_security(AmiDlmsPortContext *ctx,
         ctx->use_custom_security = 0;
     }
     return AMI_DLMS_PORT_OK;
+}
+
+void ami_dlms_port_set_cipher_backend(AmiDlmsPortContext *ctx,
+                                      const AmiDlmsCipherBackend *cipher)
+{
+    if (ctx != NULL) {
+        ctx->cipher_backend = cipher;
+    }
 }
 
 AmiDlmsPortStatus ami_dlms_port_process_byte(AmiDlmsPortContext *ctx, uint8_t byte)

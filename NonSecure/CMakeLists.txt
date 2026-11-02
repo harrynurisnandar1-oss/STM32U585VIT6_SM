@@ -64,6 +64,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_dlms_apdu.c
     ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_dlms_hdlc.c
     ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_dlms_port.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_ade9000.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_dlms_cipher.c
 )
 
 # Link directories setup

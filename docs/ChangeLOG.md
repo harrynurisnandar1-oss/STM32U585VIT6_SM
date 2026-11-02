@@ -433,3 +433,37 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 - Seluruh suite CTest lulus; test policy firmware memastikan no-auth dan LLS ditolak, sementara test host lama tetap berjalan tanpa perubahan.
 - Build NonSecure berhasil setelah penegakan HLS5-only dan peer address profile; CTest 7/7 lulus, termasuk penolakan HLS lawas serta pemeriksaan client SAP/server address.
 - Perubahan ini **bukan** implementasi Secure-world key store dan belum membuktikan isolasi key pada hardware target.
+
+## [v2.6.0] - 2026-11-02
+
+### Added
+- **DLMS Security Suite 0 Ciphered APDU Engine (`NonSecure/AMI/Inc/ami_dlms_cipher.h`, `NonSecure/AMI/Src/ami_dlms_cipher.c`)**:
+  - Implementasi enkripsi dan dekripsi terotentikasi AES-128-GCM sesuai standar DLMS/COSEM Green Book (IEC 62056-5-3 / SPLN D5.002:2024).
+  - Menangani konversi dan pemrosesan `glo-get-request` (`0xC8`) ke `glo-get-response` (`0xCC`), `glo-set-request` (`0xC9`) ke `glo-set-response` (`0xCD`), dan `glo-action-request` (`0xCB`) ke `glo-action-response` (`0xCE` / `0xCF`).
+  - Verifikasi Security Control byte (`SC = 0x30`, Suite 0 Auth + Encrypt).
+  - Pembentukan 12-byte Nonce / IV: `System Title (8 bytes) || Invocation Counter (4 bytes Big Endian)`.
+  - Pembentukan 17-byte AAD: `Security Control (1 byte) || Authentication Key (16 bytes)`.
+  - Verifikasi tag autentikasi 16-byte GCM dengan perbandingan waktu-konstan (`constant_time_memcmp`) dan pembersihan memori kerja (`secure_zeroize`) saat terjadi kegagalan autentikasi.
+- **Mekanisme Persistensi Invocation Counter & Anti-Replay**:
+  - Penegakan kenaikan strictly monotonic untuk Invocation Counter yang diterima (`rx_counter > last_rx_counter`).
+  - Penolakan otomatis counter duplikat, bernilai nol, atau counter yang diputar ulang dengan status `AMI_DLMS_APDU_COUNTER_REJECTED`.
+  - Alokasi counter transmisi server (`tx_counter`) secara monotonik per respons terenkripsi.
+- **Integrasi Cipher pada Port DLMS (`NonSecure/AMI/Inc/ami_dlms_port.h`, `NonSecure/AMI/Src/ami_dlms_port.c`)**:
+  - Penambahan API `ami_dlms_port_set_cipher_backend()` untuk menghubungkan backend cipher eksternal maupun TrustZone ke pipeline pemrosesan HDLC.
+  - Perutean otomatis frame APDU `0xC8`, `0xC9`, dan `0xCB` yang masuk melalui `ami_dlms_process_ciphered_request()`.
+- **Suite Uji CTest untuk DLMS Cipher (`tests/test_ami_dlms_cipher.c`)**:
+  - `test_cipher_suite0_glo_get_roundtrip`: Pengujian end-to-end enkripsi, pengiriman, dan dekripsi respons Tegangan Fase A (`1.0.32.7.0.255`).
+  - `test_cipher_suite0_anti_replay_invocation_counter`: Memvalidasi penerimaan counter baru dan penolakan counter lama/replay.
+  - `test_cipher_suite0_tag_tampering`: Memvalidasi penolakan kriptografi dan zeroization buffer saat tag dirusak 1 bit.
+  - `test_cipher_suite0_port_integration`: Memvalidasi framing HDLC yang membawa payload APDU terenkripsi.
+- **Gerbang NonSecure Callable (NSC) TrustZone ARM Cortex-M33 (`Secure_nsclib/secure_nsc.h`, `Secure/Core/Src/secure_nsc.c`)**:
+  - Implementasi gateway `CMSE_NS_ENTRY`: `SECURE_TRNG_GetBytes()`, `SECURE_DLMS_HLS5_Verify()`, dan `SECURE_DLMS_AES_GCM_Process()`.
+  - Passing parameter berbasis struct pointer yang mematuhi konvensi register ARM AAPCS (`r0-r3`).
+- **Driver Metrologi AFE ADE9000 & Feeder Snapshot (`NonSecure/AMI/Inc/ami_ade9000.h`, `NonSecure/AMI/Src/ami_ade9000.c`, `tests/test_ami_ade9000.c`)**:
+  - Pemetaan register SPI 3-Fasa (RMS Tegangan/Arus, Daya Aktif/Reaktif, Energi, Frekuensi/Periode, Status).
+  - Snapshot feeder yang mengonversi dan mengisi `AmiCosemRegisterSnapshot` untuk pembacaan real-time register DLMS/COSEM.
+
+### Removed
+- **Modul Token STS Prabayar (`ami_sts_token.h`, `ami_sts_token.c`, `test_ami_sts_token.c`, `SECURE_KEY_STS`)**:
+  - Membersihkan seluruh decoder token prabayar, parser STS 20-digit, pengurangan kredit, dan buku besar kredit.
+  - Menegaskan kembali arsitektur Smart Meter AMI 3-Phase **Pascabayar (Postpaid)** sesuai mandat SPLN D3.006:2021 dan batas area kerja E2 Protocol Data & Security.

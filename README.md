@@ -39,7 +39,7 @@ Tabel berikut merangkum status implementasi sistem Smart Meter 3-Fasa berdasarka
 | **Keamanan Port** | Penegakan fail-closed policy (blokir No-Auth & LLS pada build firmware) | **SUDAH** | `#if !defined(STM32U585xx)` mengisolasi helper development |
 | **Keamanan Port** | Validasi alamat peer HDLC firmware (Client SAP 16, Server Address 1) | **SUDAH** | Menolak frame asing sebelum masuk ke stack APDU (`ami_dlms_port.c`) |
 | **Keamanan Port** | Isolasi API raw-key kriptografi dari kompilasi NonSecure firmware | **SUDAH** | NonSecure firmware hanya mengenal opaque reference `AmiKeyHandle` |
-| **Testing & Simulasi** | CTest Host Native Unit Tests (7/7 suite 100% Passed) | **SUDAH** | Menjalankan pengujian regresi deterministik via Ninja |
+| **Testing & Simulasi** | CTest Host Native Unit Tests (9/9 suite 100% Passed) | **SUDAH** | Menjalankan pengujian regresi deterministik via Ninja |
 | **Testing & Simulasi** | Simulator TCP Host (`gurux_simulator.exe` port 4059) & E2E Docker Runner | **SUDAH** | Docker Alpine 23 MB, 0 CVE (`ami_dlms_docker_test`) |
 | **Testing & Simulasi** | Profil Workspace Gurux DLMSDirector XML (`STM32U585VIT6_SM.gxc`) | **SUDAH** | Tersinkronisasi dengan 276 objek parameter PLN |
 |---|---|---|---|

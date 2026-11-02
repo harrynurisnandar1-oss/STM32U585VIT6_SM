@@ -18,7 +18,7 @@ Untuk menjalankan satu suite:
 ctest --test-dir tests/build -R AmiDlmsApduTest --output-on-failure
 ```
 
-Daftar suite ditentukan di `tests/CMakeLists.txt`. Suite host mencakup model COSEM, security, association, firmware authentication policy, APDU, HDLC, dan port. Hasil CTest hanya membuktikan perilaku yang dicakup test tersebut pada build host; hasilnya bukan validasi hardware, UART, metrologi, sertifikasi, atau seluruh conformance IEC 62056.
+Daftar suite ditentukan di `tests/CMakeLists.txt`. Suite host mencakup model COSEM, security, association, firmware authentication policy, APDU, HDLC, port, driver metrologi ADE9000, serta enkripsi ciphered APDU Security Suite 0 (`AmiDlmsCipherTest`). Hasil CTest hanya membuktikan perilaku yang dicakup test tersebut pada build host; hasilnya bukan validasi hardware, UART, metrologi, sertifikasi, atau seluruh conformance IEC 62056.
 
 `AmiDlmsApduTest` juga memeriksa bahwa seluruh objek yang diumumkan melalui Association View saat ini berhasil menjawab GET attribute 2 menggunakan snapshot pengujian. Baseline objek/protokol yang dites didokumentasikan di [docs/PROTOCOL_PROFILE.md](../docs/security-rules/PROTOCOL_PROFILE.md).
 

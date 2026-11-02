@@ -39,6 +39,8 @@ typedef struct {
     AmiDlmsAssociation association;
     AmiDlmsAssociationSecurity security;
     int use_custom_security;
+    const AmiDlmsCipherBackend *cipher_backend;
+    uint8_t cipher_workspace[AMI_HDLC_MAX_FRAME_BYTES];
     AmiCosemRegisterSnapshot snapshot;
     AmiDlmsPortTxFunc tx_func;
     AmiDlmsPortSnapshotFunc snapshot_provider;
@@ -53,6 +55,12 @@ void ami_dlms_port_init(AmiDlmsPortContext *ctx,
                         AmiDlmsPortTxFunc tx_func,
                         AmiDlmsPortSnapshotFunc snapshot_provider,
                         void *user_data);
+
+/**
+ * @brief Configure cipher backend for handling encrypted APDUs (glo-get, glo-set, glo-action).
+ */
+void ami_dlms_port_set_cipher_backend(AmiDlmsPortContext *ctx,
+                                      const AmiDlmsCipherBackend *cipher);
 
 /**
  * @brief Check the selected firmware HDLC peer and server addresses.

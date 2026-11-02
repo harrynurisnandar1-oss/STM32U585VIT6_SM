@@ -86,7 +86,7 @@ Use this checklist for architecture design reviews, implementation verification,
 
 ## 7. Verification, Conformance & Release Evidence
 
-- [x] Host unit tests pass, including negative cases for malformed input, authentication failure, replay, tampered tags, access denial, and buffer exhaustion. *(7/7 test suites green in CTest)*
+- [x] Host unit tests pass, including negative cases for malformed input, authentication failure, replay, tampered tags, access denial, and buffer exhaustion. *(9/9 test suites green in CTest)*
 - [x] Automated containerized Docker test runner verified with 100% pass rate across all unit tests and End-to-End DLMS/COSEM HDLC-over-TCP integration test (via `docker compose up --build`).
 - [ ] Parsers have fuzz/property tests with sanitizers or equivalent host instrumentation; findings are triaged and fixed.
 - [ ] Hardware tests verify TrustZone isolation, Secure crypto vectors, UART/HDLC operation, reset behavior, power-loss counter durability, and recovery.
