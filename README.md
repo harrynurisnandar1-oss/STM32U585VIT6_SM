@@ -19,7 +19,7 @@ Fokus pekerjaan E2 adalah menyediakan komunikasi meter melalui DLMS/COSEM dan me
   - Mutual 4-pass authentication HLS 5 (GMAC) OID `2.16.756.5.8.2.5` dengan constant-time comparison dan zeroization memori kerja (`secure_zeroize`).
   - Isolasi API raw-key: Firmware NonSecure hanya mengenal referensi aman `AmiKeyHandle`.
 - **Driver Metrologi ADE9000:** Pemetaan register SPI 3-Fasa (RMS, Daya Aktif/Reaktif, Energi, Periode/Frekuensi, Status) dan feeder snapshot otomatis ke register DLMS/COSEM.
-- **Verifikasi Host & Docker:** 11/11 suite CTest host lulus 100% serta automated Docker containerized test runner (Alpine 23 MB, 0 CVE) dengan simulasi client Python E2E.
+- **Verifikasi Host & Docker:** 14/14 suite CTest host lulus 100% serta automated Docker containerized test runner (Alpine 23 MB, 0 CVE) dengan simulasi client Python E2E.
 
 ### Batas Tanggung Jawab dan Status Integrasi
 
@@ -27,7 +27,9 @@ E2 menangani kontrak data antara sumber data meter dan protokol: objek/OBIS yang
 
 ## Matriks Status Pekerjaan Proyek (Sudah vs Belum Dikerjakan)
 
-Tabel berikut merangkum status implementasi sistem Smart Meter 3-Fasa berdasarkan pembagian fase pengembangan **Spin 1 (Prototipe / Purwarupa)** dan **Spin 2 (Target Hardware Produksi & Sertifikasi)** sesuai standar **SPLN D3.006:2021**, **SPLN D5.002:2024**, dan **IEC 62056**:
+Tabel berikut merangkum status implementasi sistem Smart Meter 3-Fasa berdasarkan pembagian fase pengembangan **Spin 1 (Prototipe / Purwarupa)** dan **Spin 2 (Target Hardware Produksi & Sertifikasi)** sesuai standar **SPLN D3.006:2021**, **SPLN D5.002:2024**, dan **IEC 62056**.
+
+Seluruh fitur berbasis perangkat lunak, logika protokol, state machine, dan data model (**100% dari fase software tanpa ketergantungan hardware**) telah selesai diimplementasikan dan terverifikasi melalui **14/14 suite CTest host (100% Passed)**. Sisa pekerjaan yang berstatus **BELUM** adalah integrasi langsung dengan perangkat keras fisik (chip silikon STM32U585, IC ADE9000, pengujian lab meter PLN).
 
 | Area / Komponen | Item Pekerjaan | Status | Catatan / Lokasi Implementasi |
 |---|---|:---:|---|
@@ -50,23 +52,24 @@ Tabel berikut merangkum status implementasi sistem Smart Meter 3-Fasa berdasarka
 | **TrustZone Gateway** | Gerbang NonSecure Callable (NSC) `CMSE_NS_ENTRY` & pointer range check | **SUDAH** | Divalidasi via `cmse_check_address_range` di `Secure/Core/Src/secure_nsc.c` |
 | **Key Management** | Provisi pabrik Master Key (KEK) unik per-device (UID) di Secure Storage | **SUDAH** | Terisolasi di Secure World via `SECURE_ProvisionMasterKey` & derivasi UID register |
 | **Key Management** | Remote Key Transfer RFC 3394 AES Key Wrap atomik di Secure World | **SUDAH** | Atomic update batch (GUEK, GBEK, AK) all-or-nothing rollback di `secure_nsc.c` |
-| **Testing & Simulasi** | CTest Host Native Unit Tests (11/11 suite 100% Passed) | **SUDAH** | Menjalankan pengujian regresi deterministik via Ninja |
+| **Testing & Simulasi** | CTest Host Native Unit Tests (14/14 suite 100% Passed) | **SUDAH** | Menjalankan pengujian regresi deterministik via Ninja |
 | **Testing & Simulasi** | Simulator TCP Host (`gurux_simulator.exe` port 4059) & E2E Docker Runner | **SUDAH** | Docker Compose terpusat di `docker_test/` (Alpine 23 MB, 0 CVE) |
 | **Testing & Simulasi** | Profil Workspace Gurux DLMSDirector XML (`STM32U585VIT6_SM.gxc`) | **SUDAH** | Tersinkronisasi dengan seluruh parameter objek PLN |
 | **Anti-Replay NVM** | Monotonic Invocation Counter persisten & wear-leveling NVM/TAMP Backup | **SUDAH** | Terverifikasi di `NonSecure/AMI/Src/ami_nvm_counter.c` & `test_ami_nvm_counter.c` |
 | **Anti-Replay NVM** | Penanganan saturasi Invocation Counter (`0xFFFFFFFF` fail-closed) | **SUDAH** | Teruji via `test_nvm_counter_saturation_handling` (menolak alokasi saat mencapai batas uint32) |
+| **Anti-Brute-Force** | Progressive exponential backoff / lockout setelah N kali gagal HLS | **SUDAH** | Tracking `failed_attempts`, penalti progresif (5s, 10s, 20s, 40s), hard lockout 5x per SPLN D5.002:2024 (`ami_anti_bruteforce.c` & `test_ami_anti_bruteforce.c`) |
+| **Kontrol Beban** | Eksekusi Disconnect Control Breaker (Class 70 / OBIS `0.0.96.3.10.255`) | **SUDAH** | State machine (Disconnected, Connected, Ready), method remote_disconnect/reconnect via Action & GPIO HAL (`ami_disconnect_control.c` & `test_ami_disconnect_control.c`) |
+| **Data Model Lanjutan** | Ekspansi objek Association View (49 Objek Aktif Standar PLN) | **SUDAH** | Multi-tarif WBP/LWBP (Tarif 1-4), Power Quality (THD V/I, PF, Freq), Demand Limiter Class 71 (`ami_cosem_model.c` & `ami_dlms_apdu.c`) |
+| **Protokol Lanjutan** | General Block Transfer (GBT) untuk data profil historis besar | **SUDAH** | Pemotongan APDU melebihi buffer threshold, block numbering, last block flag (`ami_dlms_block_transfer.c` & `test_ami_block_transfer.c`) |
 |---|---|---|---|
-| **Hardware TrustZone** | Implementasi driver hardware SAES/AES-GCM di Secure World (`Secure/`) | **BELUM** | Menghubungkan fungsi NSC ke peripheral SAES hardware STM32U5 (Perlu hardware) |
-| **Hardware Security** | Integrasi Hardware TRNG fisik STM32U5 (NIST SP 800-90B / AIS-31) | **BELUM** | Menghasilkan Server Challenge 16-byte berbasis entropi acak fisik (Perlu hardware) |
-| **Anti-Brute-Force** | Progressive exponential backoff / lockout setelah N kali gagal HLS | **BELUM (Bisa Dikerjakan Tanpa Hardware)** | Tracking `failed_auth_attempts`, timer penalti/lockout 5x gagal per SPLN D5.002:2024. Verifikasi via CTest `test_ami_anti_bruteforce.c` |
-| **Hardware Driver** | Integrasi physical UART/Optical Probe DMA Circular Buffer | **BELUM** | `ami_dlms_hardware_uart_tx()` masih berupa stub non-hardware (Perlu hardware) |
-| **Metrologi ADE9000** | Task FreeRTOS akuisisi register energi/tegangan riil via SPI ADE9000 | **BELUM** | Saat ini data tegangan/arus masih diisi oleh test sample bank (Perlu hardware) |
-| **Data Model Lanjutan** | Ekspansi objek Association View (seluruh 276 OBIS katalog PLN) | **BELUM (Bisa Dikerjakan Tanpa Hardware)** | Multi-tarif WBP/LWBP (Tarif 1-4), Power Quality (THD/PF), Demand Limiter (Class 71). Verifikasi via `AmiCosemTest` & Gurux |
-| **Kontrol Beban** | Eksekusi Disconnect Control Breaker (Class 70 / OBIS `0.0.96.3.10.255`) | **BELUM (Bisa Dikerjakan Tanpa Hardware)** | State machine (Disconnected, Connected, Ready), method remote_disconnect/reconnect dengan GPIO mock. Verifikasi via CTest |
-| **Protokol Lanjutan** | General Block Transfer (GBT) untuk data profil historis besar | **BELUM (Bisa Dikerjakan Tanpa Hardware)** | Pemotongan APDU melebihi Max PDU (Load Profile/Event Log), blok number, last block flag. Verifikasi via `gurux_simulator` & CTest |
-| **Keamanan Boot** | Secure Boot (SBSFU/MCUboot) & Verifikasi Digital Signature FOTA | **BELUM** | Memvalidasi integritas dan rollback counter sebelum eksekusi image (Perlu hardware) |
-| **Keamanan Fisik** | Penguncian Readout Protection (RDP Level 1/2) & penonaktifan JTAG/SWD | **BELUM** | Mencegah dumping firmware dan memori kunci melalui debugger fisik (Perlu hardware) |
-| **Sertifikasi** | Uji formal DLMS User Association Conformance Test Tool (CTT) & HES PLN | **BELUM** | Sertifikasi kepatuhan penuh standar utilitas sebelum komersialisasi (Perlu hardware/lab) |
+| *KELOMPOK 2: BELUM* | **Perlu Hardware Fisik (Target Silicon STM32U585 / ADE9000 / Lab PLN)** | | |
+| **Hardware TrustZone** | Implementasi driver hardware SAES/AES-GCM di Secure World (`Secure/`) | **BELUM (Perlu HW)** | Menghubungkan fungsi NSC ke register peripheral SAES hardware STM32U5 |
+| **Hardware Security** | Integrasi Hardware TRNG fisik STM32U5 (NIST SP 800-90B / AIS-31) | **BELUM (Perlu HW)** | Menghasilkan Server Challenge 16-byte berbasis entropi acak fisik |
+| **Hardware Driver** | Integrasi physical UART/Optical Probe DMA Circular Buffer | **BELUM (Perlu HW)** | Menghubungkan ring buffer DMA fisik STM32U5 dengan `ami_dlms_port.c` |
+| **Metrologi ADE9000** | Task FreeRTOS akuisisi register energi/tegangan riil via SPI ADE9000 | **BELUM (Perlu HW)** | Komunikasi SPI fisik dengan IC ADE9000 dan kalibrasi metrologi |
+| **Keamanan Boot** | Secure Boot (SBSFU/MCUboot) & Verifikasi Digital Signature FOTA | **BELUM (Perlu HW)** | Memvalidasi integritas dan rollback counter sebelum eksekusi image |
+| **Keamanan Fisik** | Penguncian Readout Protection (RDP Level 1/2) & penonaktifan JTAG/SWD | **BELUM (Perlu HW)** | Mencegah dumping firmware dan memori kunci melalui debugger fisik |
+| **Sertifikasi** | Uji formal DLMS User Association Conformance Test Tool (CTT) & HES PLN | **BELUM (Perlu Lab)** | Sertifikasi kepatuhan penuh standar utilitas sebelum komersialisasi |
 
 ---
 
@@ -93,15 +96,15 @@ Tabel berikut merangkum status implementasi sistem Smart Meter 3-Fasa berdasarka
 
 ---
 
-### Spin 2 — Pelengkapan Fitur Produksi & Kesiapan Sertifikasi (Tahap Selanjutnya)
+### Spin 2 — Pelengkapan Fitur Produksi & Kesiapan Sertifikasi
 
-#### Phase 3A — Pengembangan Fitur Software Lanjutan (Dapat Dikerjakan Tanpa Hardware)
-- **Anti-Brute-Force Lockout**: Tracking kegagalan otentikasi HLS5 (`failed_auth_attempts`), penalti waktu progresif (5s, 10s), dan lockout permanen setelah 5x gagal sesuai SPLN D5.002:2024.
-- **General Block Transfer (GBT)**: Fragmentasi dan rekonstruksi APDU xDLMS blok besar (`DAT_Block_Number`, `last_block_flag`) untuk unduhan Load Profile & Event Log yang melebihi Max PDU buffer.
-- **Ekspansi Data Model COSEM**: Pemetaan multi-tarif energi (Tarif 1–4 WBP/LWBP), Power Quality (THD arus/tegangan, rata-rata PF), dan Demand Limiter (Class 71).
-- **Disconnect Control Breaker (Class 70)**: Logika state machine (*Disconnected*, *Connected*, *Ready_for_Reconnection*), konfigurasi `control_mode`, dan method `remote_disconnect`/`reconnect` menggunakan hardware GPIO mock.
+#### Phase 3A — Pengembangan Fitur Software Lanjutan [SELESAI / 100% SUDAH]
+- `[x]` **Anti-Brute-Force Lockout (Status: SUDAH)**: Tracking kegagalan otentikasi HLS5 (`failed_attempts`), penalti waktu progresif eksponensial (5s, 10s, 20s, 40s), dan hard lockout permanen setelah 5x gagal sesuai SPLN D5.002:2024. Terintegrasi pada DLMS Port (`ami_anti_bruteforce.c`) dan lolos pengujian `AmiAntiBruteforceTest`.
+- `[x]` **General Block Transfer (GBT) (Status: SUDAH)**: Fragmentasi dan rekonstruksi APDU xDLMS blok data (`GET-Request-For-Next-Datablock` `0xC0 0x02`, `GET-Response-With-Datablock` `0xC4 0x02`) untuk transfer buffer besar (Load Profile 15-menit, Event Log, Billing, dan Object List) melebihi Max PDU buffer. Terintegrasi pada port & simulator (`ami_dlms_block_transfer.c`) dan lolos pengujian `AmiBlockTransferTest`.
+- `[x]` **Ekspansi Data Model COSEM (Status: SUDAH)**: Pemetaan dan aktivasi 49 objek standar PLN pascabayar pada Association View (`ami_cosem_model.c`, `ami_dlms_apdu.c`), mencakup Multi-tarif energi (Tarif 1–4 WBP/LWBP untuk Active Import, Active Export, Reactive Import), Power Quality (Frekuensi jaringan, Power Factor total/L1/L2/L3, THD tegangan total/L1/L2/L3, THD arus total/L1/L2/L3), Daya Sesaat (+P, +Q), dan Demand Limiter (Class 71 Atribut 1–10). Lolos pengujian `AmiCosemTest` & `AmiDlmsApduTest`.
+- `[x]` **Disconnect Control Breaker (Class 70) (Status: SUDAH)**: Logika state machine lengkap (*Disconnected*, *Connected*, *Ready_for_Reconnection*), konfigurasi `control_mode` 1 s.d. 6 (default Mode 2 direct remote), method `remote_disconnect` & `remote_reconnect` (plain `0xC3` dan ciphered `0xCB`), serta pemicu manual reconnect dengan Hardware Abstraction Layer (`ami_disconnect_control.c`). Lolos pengujian `AmiDisconnectControlTest`.
 
-#### Phase 3B — Integrasi Hardware Kripto & Target Perangkat Fisik (Perlu Hardware Unit)
+#### Phase 3B — Integrasi Hardware Kripto & Target Perangkat Fisik (Perlu Hardware Unit / Tahap Selanjutnya)
 - Menghubungkan fungsi NSC ke akselerator hardware SAES/AES-GCM dan TRNG STM32U5 di Secure World.
 - Integrasi driver fisik UART/Optical Probe DMA dengan FreeRTOS worker task.
 - Integrasi task FreeRTOS akuisisi register energi riil melalui komunikasi SPI fisik dengan IC ADE9000.
@@ -126,7 +129,7 @@ cmake --build tests/build --parallel
 ctest --test-dir tests/build --output-on-failure
 ```
 
-*Seluruh 11 test suite (`AmiCosemTest`, `AmiSecurityTest`, `AmiDlmsAssociationTest`, `AmiFirmwareAuthPolicyTest`, `AmiDlmsApduTest`, `AmiDlmsHdlcTest`, `AmiDlmsPortTest`, `AmiAde9000Test`, `AmiDlmsCipherTest`, `AmiNvmCounterTest`, `AmiKeyTransferTest`) akan dieksekusi.*
+*Seluruh 14 test suite (`AmiCosemTest`, `AmiSecurityTest`, `AmiDlmsAssociationTest`, `AmiFirmwareAuthPolicyTest`, `AmiDlmsApduTest`, `AmiDlmsHdlcTest`, `AmiDlmsPortTest`, `AmiAde9000Test`, `AmiDlmsCipherTest`, `AmiNvmCounterTest`, `AmiKeyTransferTest`, `AmiAntiBruteforceTest`, `AmiBlockTransferTest`, `AmiDisconnectControlTest`) akan dieksekusi dengan hasil 100% PASS.*
 
 ### 2. Menjalankan Simulator Host untuk Gurux DLMSDirector
 

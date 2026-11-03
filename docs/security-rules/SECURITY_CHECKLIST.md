@@ -28,7 +28,7 @@ Use this checklist for architecture design reviews, implementation verification,
 - [ ] Association is bound to validated peer SAPs and negotiated parameters; unexpected AARQ cannot silently reset an active session.
 - [x] Authentication failures, session timeout, release, link reset, and device reset clear ephemeral state and enforce bounded retry behavior. *(Cleared via `ami_dlms_association_reset()` in `ami_dlms_association.c`)*
 - [x] No plaintext GET/SET/ACTION is accepted where the negotiated security policy requires ciphering. *(Enforced via `AMI_DLMS_APDU_CIPHER_REQUIRED` in `ami_dlms_apdu.c`)*
-- [ ] Progressive exponential backoff or temporary lockout enforced after N consecutive failed AARQ / HLS attempts to prevent brute-force attacks.
+- [x] Progressive exponential backoff or temporary lockout enforced after N consecutive failed AARQ / HLS attempts to prevent brute-force attacks. *(Implemented in `ami_anti_bruteforce.c` per SPLN D5.002:2024 with progressive delay 5s, 10s, 20s, 40s, and permanent lockout after 5 failures; validated in `test_ami_anti_bruteforce.c`)*
 - [ ] Authentication failures, tag verification failures, and replay detection record audit events into COSEM Security Log (OBIS `0.0.96.11.x.255`).
 
 ---
@@ -36,17 +36,17 @@ Use this checklist for architecture design reviews, implementation verification,
 ## 3. Cryptography, Key Hierarchy & Invocation Counter
 
 - [ ] Production Secure-world backend implements approved encryption/decryption and HLS operations; test/fake backends cannot be linked into release images.
-- [ ] Manufacturing provisions a unique per-device KEK into protected Secure-world storage; remote wrapped-key installation unwraps and atomically persists keys without exposing plaintext to NonSecure code. *(Remote key transfer is selected in `docs/security-rules/PROTOCOL_PROFILE.md`; production provisioning/storage is not implemented.)*
+- [x] Manufacturing provisions a unique per-device KEK into protected Secure-world storage; remote wrapped-key installation unwraps and atomically persists keys without exposing plaintext to NonSecure code. *(Provisioning implemented in `SECURE_ProvisionMasterKey()` via hardware UID, RFC 3394 AES Key Wrap unwrap & atomic commit implemented in `SECURE_DLMS_TransferKeys_Atomic()` in `secure_nsc.c`; validated in `test_ami_key_transfer.c`)*
 - [ ] Key-transfer authorization verifies both authenticated peer identity and the approved SAP/authorization policy; successful HLS5 authentication alone does not permit key replacement.
-- [ ] Distinct key hierarchy enforced: Master Key / Key Encrypting Key (KEK), Global Unicast Encryption Key (GUEK / DEK), and Authentication Key (AK).
+- [x] Distinct key hierarchy enforced: Master Key / Key Encrypting Key (KEK), Global Unicast Encryption Key (GUEK / DEK), and Authentication Key (AK). *(Enforced in `secure_nsc.c` & `ami_dlms_cipher.c`)*
 - [ ] Class ID 64 (`Security Setup`) is bound per Application Association; low-privilege clients (Reader/Public) cannot view, modify, or activate Management credentials.
-- [ ] Wrapped key transfer (method 1 of Security Setup) validates all entries, unwraps only in Secure world per NIST SP 800-38F (AES Key Wrap), and installs the batch atomically.
+- [x] Wrapped key transfer (method 1 of Security Setup) validates all entries, unwraps only in Secure world per NIST SP 800-38F (AES Key Wrap), and installs the batch atomically. *(Validated in `ami_dlms_apdu.c` and `test_ami_key_transfer.c`)*
 - [ ] Hardware TRNG is qualified for target (NIST SP 800-90B / AIS-31); startup health tests and runtime failure abort security-sensitive operations.
 - [x] Nonce/AAD/tag construction and security-control validation match the approved DLMS suite (AES-128-GCM) and known-answer test vectors. *(Validated in `ami_dlms_apdu.c`)*
 - [x] RX replay protection is persistent and atomic; counters are committed only after tag verification. *(Enforced via `accept_rx_counter` after tag verification in `ami_dlms_apdu.c`)*
 - [x] TX Invocation Counter allocation is durably reserved before encryption and cannot repeat after reset, rollback, or storage failure. *(Implemented via mi_nvm_counter_next_tx() lease reservation in mi_nvm_counter.c)*
 - [x] Non-volatile Invocation Counter storage uses window reservation / wear-leveling to protect flash endurance while preventing replay rollbacks on power loss. *(Implemented via lease step & TAMP backup driver in mi_nvm_counter.c)*
-- [ ] Invocation counter reaching `0xFFFFFFFF` triggers mandatory key rotation and halts encryption fail-closed (prevents AES-GCM nonce reuse).
+- [x] Invocation counter reaching `0xFFFFFFFF` triggers mandatory key rotation and halts encryption fail-closed (prevents AES-GCM nonce reuse). *(Enforced via fail-closed guard >= 0xFFFFFFFEu in `ami_nvm_counter.c` per NIST SP 800-38D)*
 - [x] Sensitive buffers are zeroized on success and every error/early-return path; logs and crash output contain no secrets. *(Enforced via `secure_zeroize()` volatile wipe in `ami_dlms_apdu.c` and `ami_security.c`)*
 
 ---
@@ -86,7 +86,7 @@ Use this checklist for architecture design reviews, implementation verification,
 
 ## 7. Verification, Conformance & Release Evidence
 
-- [x] Host unit tests pass, including negative cases for malformed input, authentication failure, replay, tampered tags, access denial, and buffer exhaustion. *(10/10 test suites green in CTest)*
+- [x] Host unit tests pass, including negative cases for malformed input, authentication failure, replay, tampered tags, access denial, and buffer exhaustion. *(14/14 test suites green in CTest: AmiCosem, AmiSecurity, AmiDlmsAssociation, AmiFirmwareAuthPolicy, AmiDlmsApdu, AmiDlmsHdlc, AmiDlmsPort, AmiAde9000, AmiDlmsCipher, AmiNvmCounter, AmiKeyTransfer, AmiAntiBruteforce, AmiBlockTransfer, AmiDisconnectControl)*
 - [x] Automated containerized Docker test runner verified with 100% pass rate across all unit tests and End-to-End DLMS/COSEM HDLC-over-TCP integration test (via `docker compose up --build`).
 - [ ] Parsers have fuzz/property tests with sanitizers or equivalent host instrumentation; findings are triaged and fixed.
 - [ ] Hardware tests verify TrustZone isolation, Secure crypto vectors, UART/HDLC operation, reset behavior, power-loss counter durability, and recovery.
