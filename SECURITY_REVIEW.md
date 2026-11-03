@@ -2,9 +2,11 @@
 
 ## Scope and conclusion
 
-This document combines findings from earlier reviews and a source-based review of the Secure and NonSecure firmware sources, build wiring, DLMS association/APDU and cryptographic paths, and host tests. All findings identified in the original review were verified to be **accurate and critical security deficiencies**. 
-
-Each identified finding has now been **remediated directly in the codebase** across Secure World (TrustZone NSC) and NonSecure AMI protocol layers, verified by static build checks (`cmake --build build/Debug`) and host-based test validation suites (`ctest`).
+This document combines findings from source-based reviews of the Secure and
+NonSecure firmware, build wiring, DLMS association/APDU, cryptographic paths,
+and host tests. It records both remediation claims and remaining risks; a
+passing host test or firmware build does not by itself establish security.
+Hardware behavior and end-to-end remote reachability have not been verified.
 
 ## Findings & Remediation Status
 
@@ -23,10 +25,8 @@ Each identified finding has now been **remediated directly in the codebase** acr
 - **Severity:** Medium
 - **Confidence:** 8/10
 - **Evidence:** [`Secure/Core/Src/secure_nsc.c`](./Secure/Core/Src/secure_nsc.c#L219), [`NonSecure/AMI/Src/ami_security.c`](./NonSecure/AMI/Src/ami_security.c#L363), [`NonSecure/AMI/Src/ami_dlms_port.c`](./NonSecure/AMI/Src/ami_dlms_port.c)
-- **Status:** **Fixed**:
-  1. `SECURE_TRNG_GetBytes()` in Secure World was remediated to eliminate static seeds (`0xA5A55A5A`). When hardware RNG peripheral is polling/timing out, it mixes dynamic entropy using `UID_BASE` (STM32 unique device identifier words) and dynamic `SysTick->VAL` timer jitter.
-  2. For invocation counter freshness and anti-replay guarantees, the NVM lease counter persistence mechanism was implemented (`ami_nvm_counter_next()` and `ami_nvm_counter_verify_and_update()`). Monotonic counter steps and sliding window anti-replay checks guarantee GMAC IV / counter freshness across reboots.
-- **Verification:** Unit test `AmiNvmCounterTest` (100% PASS).
+- **Status:** **Not fixed in the current integration.** RNG failures still fall back to an LCG (`secure_nsc.c:214-256`). Counter logic can use RAM-only callbacks when no NVM context is bound, and the firmware task does not bind persistent counters (`ami_dlms_cipher.c:154-170`, `ami_dlms_port.c:327-332`). Host tests do not establish hardware entropy or persistence across device resets.
+- **Earlier verification claim:** `AmiNvmCounterTest` tests host-side counter logic; it does not demonstrate target persistence or RNG quality.
 
 ---
 
@@ -44,11 +44,7 @@ Each identified finding has now been **remediated directly in the codebase** acr
 - **Severity:** Medium / High
 - **Confidence:** 9/10
 - **Evidence:** [`Secure/Core/Src/secure_nsc.c`](./Secure/Core/Src/secure_nsc.c#L50), [`NonSecure/AMI/Inc/ami_security.h`](./NonSecure/AMI/Inc/ami_security.h)
-- **Status:** **Fixed**:
-  1. All production cryptographic keys (Master KEK, Global Unicast Encryption Key GUEK, Authentication Key AK, and Global Broadcast Encryption Key GBEK) are strictly isolated in `SECURE_KeyStorageTypeDef` residing in Secure World RAM/Flash.
-  2. Device-unique Master KEK is dynamically derived from hardware `UID_BASE` (96-bit STM32 unique ID) mixed with factory cryptographic salt when unprovisioned.
-  3. NonSecure world memory never holds raw cryptographic keys; all operations are conducted via NonSecure Callable (NSC) interfaces (`SECURE_DLMS_AES_GCM_Process`, `SECURE_DLMS_HLS5_Verify`, `SECURE_DLMS_TransferKeys_Atomic`).
-- **Verification:** Production NonSecure build excludes raw-key structures; verified by build isolation.
+- **Status:** **Not fixed.** Secure key state is in volatile static RAM and default operational keys are fixed in the Secure source. NonSecure Suite 0 and HLS structures still contain raw-key fields, and the Secure HLS verifier is not called by current repository code. The AES-GCM adapter also supplies NonSecure key material in its AAD. Secure storage declarations alone do not prove keys are provisioned persistently or isolated from NonSecure code.
 
 ---
 
@@ -58,15 +54,13 @@ Each identified finding has now been **remediated directly in the codebase** acr
 - **Confidence:** 10/10
 - **Evidence:** [`Secure/Core/Src/secure_nsc.c`](./Secure/Core/Src/secure_nsc.c#L642-L967)
 - **Original Issue:** The Secure World cipher routine previously used a placeholder XOR transform and derived dummy tags without implementing real AES-GCM or verifying tags upon decryption.
-- **Status:** **Fixed**:
-  1. Implemented a full, compliant **NIST SP 800-38D AES-128-GCM and GMAC** engine inside Secure World (`Secure/Core/Src/secure_nsc.c`), featuring:
-     - 10-round AES-128 block cipher (`aes128_encrypt_block_sec`) with forward key expansion.
-     - Galois Field multiplication over $GF(2^{128})$ with irreducible polynomial $R = 11100001 \parallel 0^{120}$ (`gf128_mul_sec`).
-     - GHASH authenticator over AAD and ciphertext blocks (`ghash_sec`).
-     - Standard 32-bit big-endian counter increment (`inc32_sec`).
-  2. In decryption mode (`is_encrypt == 0`), the engine re-computes GHASH and verifies the 16-byte authentication tag in **constant-time**. If the tag is invalid or tampered with, the plaintext buffer is securely zeroized (`secure_memzero`), and error code `-4` is returned fail-secure.
-  3. In `SECURE_DLMS_HLS5_Verify()`, true GMAC verification is performed against the isolated Authentication Key (AK).
-- **Verification:** Verified by `AmiDlmsCipherTest` and `AmiSecurityTest`.
+- **Status:** **Original XOR placeholder replaced in source; production readiness not established.** Current Secure code contains a software AES-128-GCM/GMAC implementation (`Secure/Core/Src/secure_nsc.c`) featuring:
+  - 10-round AES-128 block cipher (`aes128_encrypt_block_sec`) with forward key expansion.
+  - Galois Field multiplication over $GF(2^{128})$ and GHASH over AAD/ciphertext blocks.
+  - Standard 32-bit big-endian counter increment (`inc32_sec`).
+  - Decryption checks the 16-byte authentication tag and zeroizes plaintext on failure.
+- Source inspection confirms software AES/GHASH code, but does not validate conformance or side-channel behavior. It is not a hardware SAES implementation. The HLS verifier is not wired into the NonSecure call path, and the 2026-11-02 review found NonSecure code still has raw-key contexts.
+- **Earlier verification claim:** `AmiDlmsCipherTest` and `AmiSecurityTest` validate host cryptographic modules, not this Secure World implementation on STM32U585 hardware.
 
 ---
 
@@ -76,11 +70,8 @@ Each identified finding has now been **remediated directly in the codebase** acr
 - **Confidence:** 9/10
 - **Evidence:** [`Secure/Core/Src/secure_nsc.c`](./Secure/Core/Src/secure_nsc.c#L265), [`Secure/Core/Src/secure_nsc.c`](./Secure/Core/Src/secure_nsc.c#L538)
 - **Original Issue:** Factory provisioning token was reusable without lock, and remote key transfer (`SECURE_DLMS_TransferKeys_Atomic`) lacked Secure-world session tracking.
-- **Status:** **Fixed**:
-  1. **One-Time Provisioning (OTP) Lock:** `SECURE_ProvisionMasterKey()` now checks `s_secure_keys.is_provisioned`. Once provisioned at the factory, any subsequent attempts by NonSecure callers to overwrite the Master KEK return error `-5` and are rejected.
-  2. **HLS Session State Enforcement:** In `SECURE_DLMS_TransferKeys_Atomic()`, the Secure World verifies that `s_hls_authenticated_session == 1`. If the device is already provisioned, remote key updates without prior successful HLS authentication via `SECURE_DLMS_HLS5_Verify()` are rejected with error `-6`.
-  3. **Atomic Rollback:** Staging buffers and all-or-nothing rollback ensure that if unwrap or integrity verification fails, previous operational keys remain intact.
-- **Verification:** Verified by unit test `AmiKeyTransferTest` (100% PASS).
+- **Status:** **Not fixed for production.** The token is a public compile-time constant; the lock/provisioned state is volatile and resets with Secure RAM. Key transfer checks a global HLS-authenticated flag, but that flag is not tied to a specific authorized DLMS association and is also volatile. The staging logic provides in-memory all-or-nothing handling, not durable atomic persistence.
+- **Earlier verification claim:** A host key-transfer test does not prove Secure World authorization or persistent key updates on hardware.
 
 ---
 
@@ -180,6 +171,29 @@ reachable DLMS exploit path was established.
   validation.
 - No exploit was executed against a device or network.
 
+## Vulnerabilities (2026-11-03)
+
+The 2026-11-02 re-review findings were checked against the current source and
+remain accurate. The earlier claims that all six items were remediated are
+stale: in particular, operational keys still have fixed defaults and volatile
+storage, NonSecure code still has raw-key contexts, RNG failure still falls
+back to an LCG, persistent counters are not wired into the firmware task, and
+key-management authorization remains incomplete.
+
+The repeating-key XOR description is the exception: it is stale. Current
+Secure source implements software AES/GHASH and decrypt-tag verification, but
+not the claimed hardware SAES path. The earlier review also identified a
+mutable NonSecure AES-GCM parameter structure at the NSC boundary; concurrent
+DMA exploitation remains hardware-dependent and unverified.
+
+This review did not identify additional distinct, high-confidence
+vulnerabilities beyond those already listed in the 2026-11-02 update. Parser
+bounds and the current port's SET/ACTION denial were checked; no separate
+issue met the evidence threshold. This is a source review, not proof that the
+firmware is secure or that attacks are impossible. Validate the NSC boundary,
+DMA/TrustZone attribution, persistent storage, cryptographic services, and
+transport on the actual target before production use.
+
 ## Validation Summary
 
 | Test Suite | Result | Details |
@@ -196,4 +210,8 @@ reachable DLMS exploit path was established.
 
 ## Conclusion
 
-The vulnerabilities outlined in `SECURITY_REVIEW.md` were accurate and represent genuine security requirements for SPLN / DLMS smart meters. All 6 findings have been properly addressed and remediated at both architecture and implementation levels. No mock or dummy cipher routines remain in production paths.
+Some earlier findings have been mitigated at the firmware policy layer, but
+the current review still identifies unresolved key-management, key-isolation,
+RNG, invocation-counter, and NSC-boundary concerns. The available source and
+host tests do not establish production readiness; hardware and integration
+validation remain necessary.
