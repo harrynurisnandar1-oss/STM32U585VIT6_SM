@@ -48,9 +48,9 @@ Hardware behavior and end-to-end remote reachability have not been verified.
 
 ---
 
-### 5. Secure World cipher service is not AES-GCM
+### 5. Secure World AES-GCM is software-only and not hardware-validated
 
-- **Severity:** High (Critical)
+- **Severity:** Medium (production-readiness gap)
 - **Confidence:** 10/10
 - **Evidence:** [`Secure/Core/Src/secure_nsc.c`](./Secure/Core/Src/secure_nsc.c#L642-L967)
 - **Original Issue:** The Secure World cipher routine previously used a placeholder XOR transform and derived dummy tags without implementing real AES-GCM or verifying tags upon decryption.
@@ -181,25 +181,15 @@ established.
 
 ### Confidentiality
 
-#### C1. SRAM3 used by Secure firmware appears attributed NonSecure
+#### C1. SRAM3 attribution changed in source; hardware verification pending
 
 - **Severity:** High
 - **Confidence:** 9/10
 - **Evidence:** [`Secure/Core/Src/main.c`](./Secure/Core/Src/main.c#L167),
   [`Secure/STM32U585xx_FLASH_s.ld`](./Secure/STM32U585xx_FLASH_s.ld#L43), and
   `Drivers/STM32U5xx_HAL_Driver/Inc/stm32u5xx_hal_gtzc.h:54-57`.
-- **Issue and impact:** The MPCBB configuration initializes the SRAM3 security
-  attribution words to zero with `InvertSecureState` disabled; the HAL defines
-  zero as NonSecure. The Secure linker places Secure data/BSS and stack in
-  SRAM3 at `0x30000000`. If the programmed attributes match this configuration,
-  NonSecure access may expose Secure state, including key material and stack,
-  defeating the TrustZone memory boundary.
-- **Status:** New finding from this review.
-- **Validation required:** Confirm the effective SRAM3 MPCBB attributes on the
-  exact STM32U585 and board configuration. In an isolated development build,
-  test access denial using a harmless Secure test variable; do not inspect
-  production secrets. This configuration-level conclusion has not been
-  verified on hardware.
+- **Earlier issue:** SRAM3 attributes appeared NonSecure while Secure data and stack were linked there.
+- **Current status:** **Fixed in source; not verified on hardware.** `MPCBB_SecConfig_array` and `MPCBB_PrivConfig_array` are now set to `0xFFFFFFFF`, MPCBB configuration is locked, and GTZC interrupts are enabled in `Secure/Core/Src/main.c`. Confirm the effective attribution, lock result, and fault behavior on the target board before treating the hardware risk as closed.
 
 #### C2. Fixed/default keys and volatile key state
 
@@ -217,6 +207,8 @@ established.
   or fully isolated are inaccurate.
 - **Reachability:** Current firmware does not configure a functioning DLMS
   cipher path; remote exploitation was not established.
+- **Latest verification:** Still present in current source. Provisioning does
+  not make the key/state persistent, and fixed operational defaults remain.
 
 #### C3. Raw HLS/cipher keys remain in NonSecure structures
 
@@ -231,6 +223,11 @@ established.
   HLS verifier is not called by current repository code.
 - **Status:** Already documented; production key isolation is not complete.
 - **Reachability:** No production caller initializing this context was found.
+- **Latest verification:** Partially changed only: the current port initializes
+  a dummy all-zero key context, but raw-key fields/copies remain in NonSecure
+  code. The Secure HLS verifier is not wired to the port. The HLS proof callback
+  currently reports success and length without writing a proof; do not treat
+  this as a functioning authenticated integration.
 
 ### Integrity
 
@@ -241,20 +238,9 @@ established.
 - **Evidence:** [`Secure_nsclib/secure_nsc.h`](./Secure_nsclib/secure_nsc.h#L49),
   [`Secure/Core/Src/secure_nsc.c`](./Secure/Core/Src/secure_nsc.c#L263),
   and [`Secure/Core/Src/secure_nsc.c`](./Secure/Core/Src/secure_nsc.c#L528).
-- **Issue and impact:** The provisioning token is a public compile-time
-  constant. `SECURE_ProvisionMasterKey` accepts a caller-provided key when the
-  volatile `is_provisioned` flag is unset. More critically,
-  `SECURE_DLMS_TransferKeys_Atomic` only requires HLS when that flag is set, so
-  transfer can proceed without HLS while unprovisioned. The fallback KEK is
-  derivable from public UID/fixed salt. Once provisioned, the HLS authorization
-  is a global flag, not bound to a specific authorized association or lifetime.
-- **Status:** Already documented, but the unprovisioned bypass is additional
-  evidence and raises the severity of the authorization concern.
-- **Precondition/reachability:** A NonSecure caller can invoke the NSC API.
-  This is not evidence of an externally reachable remote APDU path.
-- **Validation:** Use dummy keys in an isolated test build; verify unprovisioned
-  transfer is denied and authorization cannot survive teardown or be reused
-  across sessions.
+- **Issue and impact:** A public provisioning token and weakly bound global HLS state can permit a NonSecure caller to authorize key operations outside a verified, fresh DLMS association.
+- **Status:** **Partially fixed; still unsafe at the NSC boundary.** Transfer now checks `is_provisioned` and the HLS flag and clears the flag after successful transfer. However, the provisioning token remains public; provisioning state is volatile; and HLS verification accepts caller-supplied challenges and sets a global flag that is not bound to a specific association or expiry. Because the default AK is source-visible, a NonSecure caller can potentially construct a proof for caller-chosen challenges, set this flag, and then invoke transfer. The code review also found the pre-provisioned/default-key lifecycle remains insecure. These controls do not establish factory authorization or session-bound remote authorization.
+- **Integration note:** The firmware HLS proof callback does not compute/write a proof, while the port task's cipher backend setup/binding errors are ignored. Current source therefore does not demonstrate a working secure key-transfer path.
 
 #### I2. Counter storage failures and overflow are not fail-closed
 
@@ -263,47 +249,24 @@ established.
 - **Evidence:** [`NonSecure/AMI/Src/ami_nvm_counter.c`](./NonSecure/AMI/Src/ami_nvm_counter.c#L70),
   [`NonSecure/AMI/Src/ami_dlms_cipher.c`](./NonSecure/AMI/Src/ami_dlms_cipher.c#L154),
   and [`NonSecure/AMI/Src/ami_dlms_port.c`](./NonSecure/AMI/Src/ami_dlms_port.c#L321).
-- **Issue and impact:** Invalid/missing NVM records initialize counters to low
-  values. RX high-water persistence is threshold-based, and write failures are
-  ignored while the received counter is accepted. TX lease arithmetic has no
-  overflow guard. If this backend is enabled, reset, storage corruption, or
-  failure can permit replay or reuse of an AES-GCM `(key, nonce)` pair,
-  weakening integrity and confidentiality.
-- **Status:** The general counter integration gap was already documented; the
-  fail-open storage and overflow behaviors are additional evidence.
-- **Precondition/reachability:** The current firmware task does not bind NVM
-  counters or install a cipher backend, so this path is not active in the
-  current integration.
-- **Validation:** In isolated tests with dummy keys, simulate corrupt records,
-  failed writes, reset below the RX commit threshold, and counters near
-  `UINT32_MAX`; require fail-closed behavior.
+- **Issue and impact:** Corrupt/missing records, ignored initialization/binding failures, storage-domain mismatch, or counter overflow can cause replay acceptance or GCM nonce reuse.
+- **Status:** **Partially fixed; fail-closed runtime behavior is not established.** TX overflow and RX high-water write failure now return failure. However, invalid/unreadable records still initialize low counters. On TX lease-write failure, `current_tx_counter` and `persisted_tx_limit` have already advanced in RAM before the write is checked; a subsequent call can potentially allocate a counter in a lease that was never persisted, then reuse it after reset. Valid-record initialization also adds the lease step without an overflow guard. The firmware task ignores counter initialization/bind results; the TAMP driver directly accesses the peripheral from NonSecure code while TAMP is attributed Secure; and cipher callbacks retain RAM-only fallback behavior. The task also does not successfully attach the backend using the port's setter. Host counter tests do not establish reset-safe behavior on hardware.
 
 #### I3. RNG errors return predictable output as success
 
 - **Severity:** Medium
 - **Confidence:** 9/10
 - **Evidence:** [`Secure/Core/Src/secure_nsc.c`](./Secure/Core/Src/secure_nsc.c#L195).
-- **Issue and impact:** On RNG timeout/error, or in the fallback build path,
-  the API returns success after generating output with an LCG seeded from
-  public UID/fixed data and mixed with SysTick. If used for authentication
-  challenges or nonces, output can be predictable.
-- **Status:** Already documented.
-- **Validation:** Inject RNG failure in a test build and verify that the
-  security-sensitive API fails closed. Hardware entropy quality was not tested.
+- **Issue and impact:** On RNG timeout/error, API can return success with predictable LCG output.
+- **Status:** **Still present.** The current target path falls back to an LCG when RNG data is unavailable or error flags are set; the non-RNG build path also returns LCG output as success. UID and SysTick mixing do not make this a CSPRNG. Hardware RNG behavior remains untested.
 
 #### I4. Mutable NonSecure AES-GCM parameters at NSC boundary
 
 - **Severity:** Medium
 - **Confidence:** 8/10
-- **Evidence:** [`Secure/Core/Src/secure_nsc.c`](./Secure/Core/Src/secure_nsc.c#L923).
-- **Issue and impact:** The NSC service validates pointers and lengths through a
-  NonSecure parameter structure, then reads fields again during the operation.
-  A concurrent NonSecure DMA writer could change a pointer after validation,
-  potentially crossing the Secure/NonSecure boundary.
-- **Status:** Previously documented as a potential TOCTOU issue. Actual
-  exploitability depends on DMA and TrustZone attribution and was not verified.
-- **Mitigation direction:** Copy the structure into Secure-owned memory once,
-  validate the copy, and use only that copy for the full operation.
+- **Evidence:** [`Secure/Core/Src/secure_nsc.c`](./Secure/Core/Src/secure_nsc.c#L931).
+- **Issue and impact:** NSC validates pointers/lengths from mutable NonSecure structures, then reads fields again during the operation, allowing a possible DMA TOCTOU.
+- **Status:** **Still present in current source.** The AES-GCM entry continues to dereference `params->...` after validation; key-transfer similarly validates then rereads the descriptor array. No Secure-owned snapshot is used for all subsequent checks/operations. Exploitation depends on target DMA and TrustZone attribution and has not been demonstrated.
 
 #### I5. Secure/NonSecure image authenticity and rollback protection absent
 
@@ -321,6 +284,22 @@ established.
   option bytes, and signed-image verification on target hardware before
   treating this as a confirmed deployed-device exposure.
 
+#### I6. HLS proof callback reports success without generating a proof
+
+- **Severity:** High if enabled; current status is integration defect
+- **Confidence:** 9/10
+- **Evidence:** `NonSecure/AMI/Src/ami_dlms_port.c:19-28`;
+  `NonSecure/AMI/Src/ami_dlms_association.c:423-441`.
+- **Issue and impact:** The callback validates inputs, sets `proof_length` to 16,
+  returns success, but does not write proof bytes. The association path
+  initializes proof/response buffers to zero. If this callback is used to
+  complete HLS, zero proof material may be treated as a successful response
+  instead of a real GMAC proof.
+- **Reachability:** No production call to `ami_dlms_process_hls_reply` was
+  found, and current transport is not operationally wired. This is not a
+  demonstrated remote authentication bypass; it must fail closed before HLS
+  integration is enabled.
+
 ### Availability
 
 No separate, high-confidence exploitable availability vulnerability was
@@ -333,9 +312,11 @@ path. See the error handler in `Secure/Core/Src/main.c` and
 
 ### Other audit conclusions and limitations
 
-- Firmware rejects no-auth and LLS, but the running task does not configure an
-  HLS policy or cipher backend; this is fail-closed but not a functioning
-  secured DLMS integration.
+- Firmware rejects no-auth and LLS. The current task configures an HLS callback,
+  but that callback reports success without generating a proof; the task also
+  does not successfully attach the cipher backend and the weak UART transmitter
+  is not physically wired. This is not a functioning secured DLMS integration,
+  and the stub must fail closed before HLS is enabled.
 - The previous repeating-key XOR description is stale. Current Secure source
   contains software AES/GHASH and decrypt-tag verification, but not the claimed
   hardware SAES path. Host tests do not establish target conformance or
@@ -344,8 +325,13 @@ path. See the error handler in `Secure/Core/Src/main.c` and
   NonSecure code; runtime access and backup-domain persistence require board
   validation. The record's CRC detects accidental corruption but is not keyed
   authenticity.
-- README/CHANGELOG statements that raw keys are opaque, keys are durably stored,
-  or all findings are remediated overstate the current implementation.
+- The latest ChangeLOG remediation statements are only partly supported by
+  source: SRAM3 attributes changed, TX overflow/RX write checks were added, and
+  key-transfer guards were added. Hardware attribution remains unverified;
+  RNG fallback, raw-key contexts, volatile keys, NSC re-reads, counter
+  initialization/binding failures, the HLS proof stub, and backend attachment
+  issues remain. README/CHANGELOG claims of durable key storage or complete
+  remediation overstate current integration.
 - No live target was accessed and no exploit was executed. SRAM attribution,
   DMA races, boot ROM/option-byte behavior, physical transport reachability,
   RNG quality, and persistent storage must be verified on the actual board.
