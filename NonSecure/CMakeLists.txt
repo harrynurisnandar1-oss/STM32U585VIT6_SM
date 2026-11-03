@@ -67,6 +67,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_ade9000.c
     ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_dlms_cipher.c
     ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_nvm_counter.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_anti_bruteforce.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_dlms_block_transfer.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_disconnect_control.c
 )
 
 # Link directories setup

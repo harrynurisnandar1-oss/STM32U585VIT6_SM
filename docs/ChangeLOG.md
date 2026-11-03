@@ -637,3 +637,163 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
     - NonSecure Image (`STM32U585VIT6_SM_NS.elf`): RAM 17,224 B (3.29%), ROM 43,568 B (4.15%).
   - CTest Host Suite: **11/11 tests PASS (100%)** dalam 0.29 detik.
   - Memperbarui dokumentasi `SECURITY_REVIEW.md` dengan status **Fixed / Mitigated** untuk seluruh temuan.
+
+
+## [v2.12.0] - 2026-11-03
+
+### Hardened & Remediated (CIA Triad Findings)
+- **Atribusi Keamanan SRAM3 MPCBB TrustZone (`Secure/Core/Src/main.c`) [Finding C1]**:
+  - Memperbaiki konfigurasi MPCBB SRAM3 (`0x30000000`). Array `MPCBB_SecConfig_array[0..31]` dan `MPCBB_PrivConfig_array[0..31]` kini dikonfigurasi `0xFFFFFFFF` (Secure & Privileged) dan dikunci melalui `HAL_GTZC_MPCBB_Lock(SRAM3_BASE)`.
+  - Mengeliminasi celah di mana data, BSS, dan stack Secure World sebelumnya berstatus NonSecure secara hardware.
+- **Eliminasi Kerentanan Double-Fetch / TOCTOU di Boundary NSC (`Secure/Core/Src/secure_nsc.c`) [Finding I4]**:
+  - `SECURE_DLMS_AES_GCM_Process()` dan `SECURE_DLMS_TransferKeys_Atomic()` menerapkan *atomic single-fetch copy* struktur parameter ke stack memori Secure sebelum validasi pointer CMSE dilakukan.
+- **Fail-Secure Hardware TRNG Error Handling (`Secure/Core/Src/secure_nsc.c`) [Finding I3]**:
+  - Jika hardware TRNG mengalami timeout atau terdeteksi flag SECS/CECS pada target STM32, `SECURE_TRNG_GetBytes()` segera me-zeroize output buffer dan mengembalikan error `-3`, menolak mode fail-open.
+- **Otorisasi Siklus Hidup Transfer Kunci Terproteksi (`Secure/Core/Src/secure_nsc.c`) [Finding I1]**:
+  - `SECURE_DLMS_TransferKeys_Atomic()` menolak transfer jika perangkat belum diprovisi (`is_provisioned == 0`) atau jika sesi HLS belum terverifikasi (`s_hls_authenticated_session == 0`).
+  - Menginvalidasi token sesi (`s_hls_authenticated_session = 0`) seketika setelah transfer kunci selesai untuk mencegah session reuse.
+- **Proteksi Overflow Invocation Counter & Fail-Closed NVM (`NonSecure/AMI/Src/ami_nvm_counter.c`) [Finding I2]**:
+  - Penambahan guard counter 32-bit (`>= 0xFFFFFFFEu`) untuk mencegah nonce exhaustion wrap-around per NIST SP 800-38D.
+  - Penegakan fail-closed pada kegagalan penulisan record NVM high-water mark.
+- **Integrasi Runtime Task Firmware DLMS (`NonSecure/AMI/Src/ami_dlms_port.c`)**:
+  - Mengintegrasikan persistent NVM counter driver dan Suite 0 cipher backend langsung ke dalam runtime task FreeRTOS `AmiDlmsTaskEntry`.
+
+
+## [v2.13.0] - 2026-11-03
+
+### Added
+- **Anti-Brute-Force: Progressive Exponential Backoff & Lockout per SPLN D5.002:2024 (`NonSecure/AMI/Inc/ami_anti_bruteforce.h`, `NonSecure/AMI/Src/ami_anti_bruteforce.c`)**:
+  - **Logika Tracking Kegagalan Otentikasi HLS5 (`failed_attempts`)**:
+    - Melacak percobaan gagal berturut-turut pada handshake otentikasi DLMS.
+    - Menghitung delay penalti progresif eksponensial ($delay = initial \times multiplier^{attempts - 1}$), dimulai dari 5 detik, 10 detik, 20 detik, 40 detik, hingga batas maksimum 60 detik.
+  - **Penegakan Hard Lockout Permanen Setelah 5x Kegagalan**:
+    - Sesuai standar SPLN D5.002:2024, setelah mencapai ambang batas 5 kali kegagalan (`max_failed_attempts = 5`), sistem mengunci akses secara permanen (`AMI_ABF_STATE_LOCKED_OUT` / `0xFFFFFFFF`).
+    - Selama masa lockout, meter secara fail-closed menolak semua permintaan asosiasi AARQ dan mengembalikan frame penolakan AARE (*Association-Result: rejected-permanent, Diagnostic: authentication-failure*).
+  - **Mekanisme Reset & Pemulihan Administratif**:
+    - Keberhasilan otentikasi HLS (`ami_anti_bruteforce_record_success`) seketika me-reset counter kegagalan ke 0.
+    - Tersedia fungsi pembukaan kunci administratif (`ami_anti_bruteforce_unlock`).
+- **Integrasi DLMS Port & Association LN Method 1 (`NonSecure/AMI/Inc/ami_dlms_port.h`, `NonSecure/AMI/Src/ami_dlms_port.c`)**:
+  - Penambahan pointer `AmiAntiBruteforceContext` dan pelacak waktu pada `AmiDlmsPortContext`.
+  - Penolakan AARQ otomatis saat lockout aktif dengan encoding AARE rejection standar Green Book (`encode_aare_lockout_rejection`).
+  - Pemrosesan Action-Request (Class 15 Association LN, OBIS `0.0.40.0.0.255`, Method 1 `reply_to_HLS_authentication`), menghubungkan langsung verifikasi bukti HLS (`ami_dlms_process_hls_reply`) ke pencatatan kegagalan/keberhasilan Anti-Brute-Force.
+- **Pengujian Unit & Verifikasi Host (`tests/test_ami_anti_bruteforce.c`, `tests/CMakeLists.txt`)**:
+  - `test_abf_default_initialization`: Memvalidasi inisialisasi default parameter SPLN.
+  - `test_abf_progressive_exponential_backoff`: Memvalidasi kenaikan eksponensial delay penalti (5s, 10s, 20s, 40s) hingga hard lockout pada kegagalan ke-5.
+  - `test_abf_administrative_unlock`: Memvalidasi pemulihan status dari lockout permanen.
+  - `test_abf_success_resets_backoff`: Memvalidasi reset counter kegagalan saat otentikasi berhasil.
+  - `test_abf_dlms_port_aarq_lockout_rejection`: Memvalidasi penolakan AARQ end-to-end melalui wire frame HDLC port.
+  - `test_abf_dlms_port_action_hls_reply`: Memvalidasi integrasi Action-Request Association LN Method 1 dan transisi status penalti/keberhasilan HLS.
+  - Hasil CTest: **12/12 tests PASS (100% Lulus)**.
+
+## [v2.14.0] - 2026-11-03
+
+### Added
+- **Protokol Lanjutan: DLMS/COSEM xDLMS Block Transfer & General Block Transfer (GBT) (`NonSecure/AMI/Inc/ami_dlms_block_transfer.h`, `NonSecure/AMI/Src/ami_dlms_block_transfer.c`)**:
+  - **Mekanisme Transfer Blok Data Sesuai IEC 62056-5-3 / DLMS Green Book**:
+    - Mendukung transfer data berukuran besar (Load Profile 15-menit, Event Log, Billing Profile, dan Association View Object List) yang melebihi kapasitas Max PDU / batas frame HDLC (512/1024 bytes).
+    - Parsing request blok lanjutan: `GET-Request-For-Next-Datablock` (`0xC0 0x02 <invoke-id> <block-number: 4B BE>`).
+    - Pembangkitan respons blok: `GET-Response-With-Datablock` (`0xC4 0x02 <invoke-id> <last-block: 1B> <block-number: 4B BE> <result-choice: 0x00 raw-data> <A-XDR length> <payload chunk>`).
+    - Pembangkitan respons error blok: `DataBlock-Result: data-access-result` (`0x01` choice, misal `temporary-failure = 2`).
+    - Helper pengkodean A-XDR length berstandar (`ami_bt_encode_axdr_length`).
+  - **State Machine Manajemen Buffer & Chunking (`AmiBlockTransferContext`)**:
+    - Cache respons data berukuran hingga 2048 bytes (`AMI_BT_MAX_CACHE_BUFFER_SIZE`).
+    - Konfigurasi ukuran potongan blok (`block_size`, default 128 bytes, clamped 32..512 bytes).
+    - State tracking: `IDLE`, `TRANSFERRING`, `COMPLETED`, `ERROR`.
+    - Dukungan retransmisi blok identik jika client meminta ulang (`requested_block == current_block`).
+    - Deteksi kesalahan urutan (*out-of-sequence request*) dan pelaporan error yang sesuai.
+- **Integrasi DLMS Port & Otomatisasi Transisi Block Transfer (`NonSecure/AMI/Inc/ami_dlms_port.h`, `NonSecure/AMI/Src/ami_dlms_port.c`)**:
+  - Penambahan context `block_transfer` dan parameter `block_transfer_threshold` pada `AmiDlmsPortContext`.
+  - Fungsi konfigurasi: `ami_dlms_port_configure_block_transfer(ctx, block_size, threshold)`.
+  - Pada pemrosesan `dispatch_i_frame()`:
+    - Jika menerima `0xC0 0x02` (`GET-Request-For-Next-Datablock`), port memanggil engine block transfer untuk mengirim blok data berikutnya atau merespons error jika out of order.
+    - Jika menerima `0xC0 0x01` (`GET-Request-Normal`) dan ukuran respons melebihi ambang batas (`block_transfer_threshold`), port secara otomatis memulai sesi block transfer (`ami_bt_start_get_transfer`) dan mengembalikan blok 1 dalam format `GET-Response-With-Datablock` (`0xC4 0x02`).
+    - Jika asosiasi dilepas (`RLRQ` 0x62), state machine block transfer secara otomatis di-reset (`ami_bt_reset`).
+- **Integrasi Gurux DLMS Simulator (`tests/gurux_simulator.c`)**:
+  - Mengintegrasikan `AmiBlockTransferContext s_sim_bt` pada simulator TCP host (port 4059).
+  - Simulator secara otomatis memecah respons yang melebihi 128 byte menjadi blok-blok datablock dan melayani `GET-Request-For-Next-Datablock` dari Gurux DLMS Director.
+- **Pengujian Unit & Verifikasi Host (`tests/test_ami_block_transfer.c`, `tests/CMakeLists.txt`)**:
+  - `test_bt_init_and_reset`: Memvalidasi inisialisasi, clamping min/max ukuran blok, dan reset state machine.
+  - `test_bt_start_transfer_and_chunking`: Memvalidasi pemotongan payload 350 byte menjadi 3 blok berurutan (128B + 128B + 94B) dengan flag `last_block == 1` pada blok ke-3, serta verifikasi reassembly payload 100% bit-for-bit identik.
+  - `test_bt_retransmission_and_errors`: Memvalidasi pengiriman ulang blok saat ini, penolakan permintaan blok yang melompati urutan (*out-of-sequence*), dan pembangkitan respons error DataBlock.
+  - `test_bt_parse_get_next_block_request`: Memvalidasi parsing request `0xC0 0x02`.
+  - `test_bt_port_integration`: Memvalidasi transisi otomatis port dari pembacaan buffer besar (Association Object List) menjadi stream `GET-Response-With-Datablock` (Block 1) dan pemrosesan `GET-Request-For-Next-Datablock` (Block 2) melalui wire frame HDLC lengkap.
+  - Hasil CTest: **13/13 tests PASS (100% Lulus)** dalam 0.30 detik.
+
+
+## [v2.15.0] - 2026-11-03
+
+### Added
+- **Data Model Lanjutan: Ekspansi Objek Association View (Katalog OBIS PLN) (`NonSecure/AMI/Inc/ami_cosem_model.h`, `NonSecure/AMI/Src/ami_cosem_model.c`, `NonSecure/AMI/Src/ami_dlms_apdu.c`)**:
+  - **Ekspansi Katalog Association View dari 13 Menjadi 49 Objek Standar PLN**:
+    - Sesuai standar SPLN D3.002:2021 dan IEC 62056-6-2 untuk Smart Meter 3-Fasa Pascabayar.
+    - **Manajemen & Device Info (Class 1 & 15)**: Association LN (`0.0.40.0.0.255`), Clock (`0.0.1.0.0.255`), Logical Device Name (`0.0.42.0.0.255`), Firmware Version (`1.0.0.2.0.255`), Meter ID/Serial Number (`0.0.96.1.0.255`), Meter Type (`0.0.96.1.1.255`), Security Setup (`0.0.43.0.0.255`).
+    - **Profil Riwayat & Log (Class 7)**: Event Log Profile (`0.0.99.98.0.255`), Monthly Billing Profile (`1.0.98.1.0.255`), Load Profile 15-menit (`1.0.99.1.0.255`).
+    - **Tegangan & Arus Sesaat Tiap Fasa (Class 3)**: Voltage L1/L2/L3 (`1.0.32/52/72.7.0.255`), Current L1/L2/L3 (`1.0.31/51/71.7.0.255`).
+    - **Energi Kumulatif Total (Class 3)**: Active Import (+A, `1.0.1.8.0.255`), Active Export (-A, `1.0.2.8.0.255`), Reactive Import (+R, `1.0.3.8.0.255`), Reactive Export (-R, `1.0.4.8.0.255`).
+    - **Multi-Tarif Register T1 s.d. T4 (Class 3)**:
+      - Active Energy Import Tarif 1..4 (LWBP 1, WBP, LWBP 2, T4): `1.0.1.8.1..4.255`.
+      - Active Energy Export Tarif 1..4: `1.0.2.8.1..4.255`.
+      - Reactive Energy Import Tarif 1..4: `1.0.3.8.1..4.255`.
+    - **Power Quality (Class 3)**:
+      - Frekuensi Jaringan: `1.0.14.7.0.255` (satuan Hz, scaler $10^{-3}$).
+      - Power Factor Total & Tiap Fasa L1/L2/L3: `1.0.13/33/53/73.7.0.255` (scaler $10^{-3}$, dimensionless).
+      - Total Harmonic Distortion Tegangan (THD V Total, L1, L2, L3): `1.0.12/32/52/72.7.124.255` (scaler $10^{-1}$, %).
+      - Total Harmonic Distortion Arus (THD I Total, L1, L2, L3): `1.0.11/31/51/71.7.124.255` (scaler $10^{-1}$, %).
+    - **Daya Sesaat (Class 3)**: Active Power Total (+P, `1.0.1.7.0.255`), Reactive Power Total (+Q, `1.0.3.7.0.255`).
+    - **Parameter Batas Daya (Demand Limiter Class 71)**:
+      - OBIS `0.0.17.0.3.255`, Atribut 1 s.d. 10 lengkap (Monitored Value mengarah ke Active Power `1.0.1.7.0.255`, threshold active/normal, min duration over/under, emergency profile, action script linkage).
+    - **Kendali Pemutusan Beban (Disconnect Control Class 70)**:
+      - OBIS `0.0.96.3.10.255`, Atribut 1 s.d. 4 lengkap (Output State, Control State, Control Mode).
+  - **Ekspansi Cosem Snapshot & Parser (`ami_cosem_model.h`, `ami_cosem_model.c`)**:
+    - Penambahan definisi Class ID: `AMI_COSEM_DATA_CLASS_ID` (1u), `AMI_COSEM_DISCONNECT_CONTROL_CLASS_ID` (70u), `AMI_COSEM_LIMITER_CLASS_ID` (71u).
+    - Penambahan valid mask flags: `AMI_COSEM_VALID_TARIFF_REGISTERS`, `AMI_COSEM_VALID_POWER_QUALITY`, `AMI_COSEM_VALID_LIMITER`, `AMI_COSEM_VALID_DISCONNECT_CTRL`, `AMI_COSEM_VALID_DEVICE_INFO`.
+    - Pemetaan array snapshot untuk multi-tarif `active_import_tariff_wh[4]`, `active_export_tariff_wh[4]`, `reactive_import_tariff_varh[4]`, power quality `frequency_mhz`, `power_factor[4]`, `thd_voltage_percent_x10[4]`, `thd_current_percent_x10[4]`, parameter limiter, disconnect control state, dan device info string.
+    - Pembacaan attribute komprehensif untuk register, extended register, data, limiter, dan disconnect control.
+  - **Dukungan Buffer Transmisi Skala Penuh & Block Transfer Segmentation**:
+    - Association View Object List (49 objek) menghasilkan APDU sebesar 1427 bytes.
+    - Penyesuaian buffer penampung sementara pada `ami_dlms_port.c` dan `gurux_simulator.c` menggunakan `AMI_BT_MAX_CACHE_BUFFER_SIZE` (2048 bytes), sehingga payload besar secara otomatis dan mulus disegmentasi oleh engine xDLMS DataBlock Transfer (`[v2.14.0]`).
+  - **Simulasi Gurux DLMS & Pengujian Unit Host (`tests/test_ami_cosem.c`, `tests/test_ami_dlms_apdu.c`, `tests/gurux_simulator.c`)**:
+    - Penambahan pengujian unit komprehensif untuk multi-tarif, power quality, limiter, disconnect control, dan keterbacaan 49 objek association view.
+    - Snapshot development simulator diisi penuh dengan nilai-nilai realistik untuk pengetesan interaktif menggunakan Gurux DLMSDirector.
+    - CTest Suite: **13/13 tests PASS (100% Lulus)**.
+
+
+## [v2.16.0] - 2026-11-03
+
+### Added
+- **Kontrol Beban: Logika State Machine Disconnect Control Breaker (Class 70) (`NonSecure/AMI/Inc/ami_disconnect_control.h`, `NonSecure/AMI/Src/ami_disconnect_control.c`)**:
+  - **State Machine Deterministik Sesuai IEC 62056-6-2 / DLMS Blue Book & SPLN D3.002:2021**:
+    - **Control States (Atribut 3)**: `Disconnected (0)`, `Connected (1)`, `Ready_for_Reconnection (2)`.
+    - **Output State (Atribut 2)**: `0` (kontak relay terbuka / beban terputus), `1` (kontak relay tertutup / beban tersambung).
+    - **Control Modes (Atribut 4)**: Dukungan Mode 1 s.d. 6. Default ke **Mode 2** (*Direct Remote Reconnect* untuk AMI PLN), dan mendukung konfigurasi ke **Mode 1** (*Manual Consumer Confirmation*).
+    - **Method 1 (`remote_disconnect`)**:
+      - Memeriksa izin mode (Mode 3 & 4 menolak remote disconnect).
+      - Memicu perintah aktuasi `AMI_BREAKER_CMD_OPEN`.
+      - Mengubah status ke `Disconnected (0)` dan `output_state = 0`.
+    - **Method 2 (`remote_reconnect`)**:
+      - Memeriksa izin mode (Mode 3 menolak remote reconnect).
+      - Pada Mode 1 & 5: Melakukan transisi ke `Ready_for_Reconnection (2)`, kontak tetap terbuka (`output_state = 0`) menunggu konfirmasi tombol manual.
+      - Pada Mode 2, 4, 6: Melakukan transisi langsung ke `Connected (1)`, memicu perintah aktuasi `AMI_BREAKER_CMD_CLOSE`, dan mengubah `output_state = 1`.
+    - **Trigger Manual Push Button (`ami_disconnect_control_manual_reconnect`)**:
+      - Mensimulasikan/menangani penekanan tombol fisik pada cover meter.
+      - Pada Mode 1 & 5 saat berada di state `Ready_for_Reconnection`, menutup relay (`CMD_CLOSE`) dan bertransisi ke `Connected (1)`.
+  - **Hardware Abstraction Layer (HAL Breaker Actuator)**:
+    - Antarmuka callback aktuasi koil relay bistable latching (`AmiBreakerActuatorFn`).
+    - Driver hardware referensi `ami_disconnect_hal_stm32_actuate()` untuk pulse GPIO 100ms (SET/RESET) pada target STM32U585.
+    - Penanganan fail-closed: Jika aktuator fisik melaporkan error/timeout, status meter tidak berubah dan mengembalikan `AMI_DISCONNECT_ERR_ACTUATOR_FAILED`.
+- **Integrasi DLMS Port & APDU Action-Request (`NonSecure/AMI/Inc/ami_dlms_port.h`, `NonSecure/AMI/Src/ami_dlms_port.c`, `NonSecure/AMI/Src/ami_dlms_apdu.c`)**:
+  - Penambahan pointer `disconnect_control` pada `AmiDlmsPortContext` beserta fungsi `ami_dlms_port_set_disconnect_control()`.
+  - Pemrosesan Action-Request plain (`0xC3`) pada Class 70 (`0.0.96.3.10.255`), memicu method remote disconnect / remote reconnect, mengembalikan `Action-Response-Normal` (`0xC7 0x01 <invoke_id> 0x00 0x00`), dan langsung menyinkronkan feeder snapshot.
+  - Pemrosesan Ciphered Action-Request (`GLO-ACTION-REQUEST`, `0xCB`) terenkripsi/terotentikasi penuh dengan AES-GCM Suite 0, mengembalikan respons terenkripsi `GLO-ACTION-RESPONSE` (`0xCE`).
+- **Integrasi Gurux DLMS Simulator (`tests/gurux_simulator.c`)**:
+  - Simulator TCP host menginstansiasi `s_sim_dc` dengan mock relay driver.
+  - Gurux DLMSDirector dapat mengirim perintah Action Disconnect & Reconnect langsung via TCP port 4059 dan melihat status breaker berubah secara real time.
+- **Pengujian Unit & Verifikasi Host (`tests/test_ami_disconnect_control.c`, `tests/CMakeLists.txt`)**:
+  - `test_dc_init_defaults`: Memvalidasi status awal power-on (`Connected`, `Output=1`, `Mode=2`).
+  - `test_dc_mode_2_remote_disconnect_reconnect`: Memvalidasi siklus pemutusan dan penyambungan langsung Mode 2.
+  - `test_dc_mode_1_manual_reconnect`: Memvalidasi transisi Mode 1 (`Disconnected` -> `Ready_for_Reconnection` -> `Connected` via manual button).
+  - `test_dc_mode_3_remote_prohibition`: Memvalidasi penolakan remote disconnect/reconnect pada Mode 3.
+  - `test_dc_actuator_hardware_failure`: Memvalidasi fail-closed saat aktuator relay mengalami kegagalan.
+  - `test_dc_dlms_port_wire_action_request`: Memvalidasi framing HDLC Action-Request Method 1 dan Method 2 end-to-end via DLMS port.
+  - `test_dc_ciphered_action_request`: Memvalidasi eksekusi Action-Request terenkripsi AES-GCM HLS.
+  - Hasil CTest: **14/14 tests PASS (100% Lulus)**.

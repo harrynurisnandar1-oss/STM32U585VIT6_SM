@@ -4,6 +4,7 @@
 #include "ami_cosem_model.h"
 #include "ami_dlms_association.h"
 #include "ami_security.h"
+#include "ami_disconnect_control.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -54,6 +55,7 @@ typedef struct {
      * KEK and atomically persist the batch; plaintext keys must never leave it. */
     AmiSecStatus (*transfer_keys)(void *user,
         const AmiDlmsWrappedKey *keys, size_t key_count);
+    AmiDisconnectControlContext *disconnect_control;
 } AmiDlmsCipherBackend;
 
 /* Processes GET-Request-Normal (C0 01). Class-7 buffer selective access

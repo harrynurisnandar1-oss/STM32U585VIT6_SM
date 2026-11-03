@@ -153,22 +153,24 @@ static void test_association_ln_object_list(void)
         0x00u, 0x00u, 0x28u, 0x00u, 0x00u, 0xFFu,
         0x02u, 0x00u
     };
-    uint8_t response[512u];
+    uint8_t response[1536u];
     size_t response_length = 0u;
     assert(ami_dlms_process_get_request(&association, &snapshot, request,
         sizeof(request), response, sizeof(response), &response_length) == AMI_DLMS_APDU_OK);
     assert(response_length > 6u && response[0] == 0xC4u &&
            response[1] == 0x01u && response[2] == 0xC1u &&
            response[3] == 0u && response[4] == 1u);
-    assert(response[5] == 13u); /* Association, clock, 3-phase + profiles (event, billing, load). */
+    assert(response[5] == 49u); /* 49 standard PLN objects (Association, clock, profiles, multi-tariff, PQ, limiter, etc.) */
 
     /* Association object followed by voltage L1; each advertises attr 2 RO. */
     const uint8_t association_ln[] = {9u, 6u, 0u, 0u, 40u, 0u, 0u, 255u};
     const uint8_t voltage_l1_ln[] = {9u, 6u, 1u, 0u, 32u, 7u, 0u, 255u};
     const uint8_t load_profile_ln[] = {9u, 6u, 1u, 0u, 99u, 1u, 0u, 255u};
+    const uint8_t limiter_ln[] = {9u, 6u, 0u, 0u, 17u, 0u, 3u, 255u};
     int found_association = 0;
     int found_voltage_l1 = 0;
     int found_load_profile = 0;
+    int found_limiter = 0;
     for (size_t i = 0u; i + sizeof(association_ln) <= response_length; ++i) {
         if (memcmp(response + i, association_ln, sizeof(association_ln)) == 0)
             found_association = 1;
@@ -178,8 +180,11 @@ static void test_association_ln_object_list(void)
         if (i + sizeof(load_profile_ln) <= response_length &&
             memcmp(response + i, load_profile_ln, sizeof(load_profile_ln)) == 0)
             found_load_profile = 1;
+        if (i + sizeof(limiter_ln) <= response_length &&
+            memcmp(response + i, limiter_ln, sizeof(limiter_ln)) == 0)
+            found_limiter = 1;
     }
-    assert(found_association && found_voltage_l1 && found_load_profile);
+    assert(found_association && found_voltage_l1 && found_load_profile && found_limiter);
 }
 
 static void test_association_view_objects_are_readable(void)
@@ -192,6 +197,11 @@ static void test_association_view_objects_are_readable(void)
     static const ExpectedObject objects[] = {
         {15u, {0u, 0u, 40u, 0u, 0u, 255u}},
         {8u,  {0u, 0u, 1u, 0u, 0u, 255u}},
+        {1u,  {0u, 0u, 42u, 0u, 0u, 255u}},
+        {1u,  {1u, 0u, 0u, 2u, 0u, 255u}},
+        {1u,  {0u, 0u, 96u, 1u, 0u, 255u}},
+        {1u,  {0u, 0u, 96u, 1u, 1u, 255u}},
+        {64u, {0u, 0u, 43u, 0u, 0u, 255u}},
         {3u,  {1u, 0u, 32u, 7u, 0u, 255u}},
         {3u,  {1u, 0u, 52u, 7u, 0u, 255u}},
         {3u,  {1u, 0u, 72u, 7u, 0u, 255u}},
@@ -200,6 +210,14 @@ static void test_association_view_objects_are_readable(void)
         {3u,  {1u, 0u, 71u, 7u, 0u, 255u}},
         {3u,  {1u, 0u, 1u, 8u, 0u, 255u}},
         {3u,  {1u, 0u, 2u, 8u, 0u, 255u}},
+        {3u,  {1u, 0u, 1u, 8u, 1u, 255u}}, /* Active Import T1 */
+        {3u,  {1u, 0u, 1u, 8u, 2u, 255u}}, /* Active Import T2 */
+        {3u,  {1u, 0u, 14u, 7u, 0u, 255u}},/* Frequency */
+        {3u,  {1u, 0u, 13u, 7u, 0u, 255u}},/* Power Factor Total */
+        {3u,  {1u, 0u, 12u, 7u, 124u, 255u}}, /* THD Voltage Total */
+        {3u,  {1u, 0u, 11u, 7u, 124u, 255u}}, /* THD Current Total */
+        {71u, {0u, 0u, 17u, 0u, 3u, 255u}},  /* Limiter */
+        {70u, {0u, 0u, 96u, 3u, 10u, 255u}}, /* Disconnect Control */
         {7u,  {0u, 0u, 99u, 98u, 0u, 255u}},
         {7u,  {1u, 0u, 98u, 1u, 0u, 255u}},
         {7u,  {1u, 0u, 99u, 1u, 0u, 255u}}
@@ -210,6 +228,16 @@ static void test_association_view_objects_are_readable(void)
         .phase_current_milliamps = {1000u, 1100u, 900u},
         .active_import_wh = 1234u,
         .active_export_wh = 12u,
+        .active_import_tariff_wh = {100u, 200u, 300u, 400u},
+        .frequency_mhz = 50000u,
+        .power_factor = {985, 980, 980, 980},
+        .thd_voltage_percent_x10 = {15u, 15u, 15u, 15u},
+        .thd_current_percent_x10 = {20u, 20u, 20u, 20u},
+        .limiter_threshold_active_watts = 13200u,
+        .limiter_threshold_normal_watts = 13000u,
+        .disconnect_output_state = 1u,
+        .disconnect_control_state = 1u,
+        .disconnect_control_mode = 2u,
         .valid_mask = AMI_COSEM_VALID_CLOCK |
                       AMI_COSEM_VALID_VOLTAGE_A |
                       AMI_COSEM_VALID_VOLTAGE_B |
@@ -221,7 +249,11 @@ static void test_association_view_objects_are_readable(void)
                       AMI_COSEM_VALID_ACTIVE_EXPORT |
                       AMI_COSEM_VALID_EVENT_LOG |
                       AMI_COSEM_VALID_BILLING_PROFILE |
-                      AMI_COSEM_VALID_LOAD_PROFILE
+                      AMI_COSEM_VALID_LOAD_PROFILE |
+                      AMI_COSEM_VALID_TARIFF_REGISTERS |
+                      AMI_COSEM_VALID_POWER_QUALITY |
+                      AMI_COSEM_VALID_LIMITER |
+                      AMI_COSEM_VALID_DISCONNECT_CTRL
     };
 
     snapshot.event_log_count = 1u;
@@ -242,7 +274,7 @@ static void test_association_view_objects_are_readable(void)
             objects[i].logical_name[4], objects[i].logical_name[5],
             0x02u, 0x00u
         };
-        uint8_t response[AMI_COSEM_AXDR_ENCODED_MAX];
+        uint8_t response[2048u];
         size_t response_length = 0u;
 
         assert(ami_dlms_process_get_request(&association, &snapshot, request,

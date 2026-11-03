@@ -102,14 +102,23 @@ int ami_nvm_counter_next_tx(AmiNvmCounterContext *ctx, uint32_t *out_tx_ic)
         return 0;
     }
 
+    /* Guard against 32-bit counter overflow (NIST SP 800-38D nonce exhaustion) */
+    if (ctx->current_tx_counter >= 0xFFFFFFFEu) {
+        return 0; /* Fail-closed: counter space exhausted */
+    }
+
     /* Advance TX counter */
     ctx->current_tx_counter++;
 
     /* If we have reached or exceeded the persisted lease window, advance window */
     if (ctx->current_tx_counter >= ctx->persisted_tx_limit) {
-        ctx->persisted_tx_limit += ctx->tx_window_step;
+        if (ctx->persisted_tx_limit > 0xFFFFFFFFu - ctx->tx_window_step) {
+            ctx->persisted_tx_limit = 0xFFFFFFFFu;
+        } else {
+            ctx->persisted_tx_limit += ctx->tx_window_step;
+        }
         if (commit_record(ctx, ctx->persisted_tx_limit, ctx->persisted_rx_counter) != 0) {
-            return 0;
+            return 0; /* Fail-closed on storage failure */
         }
     }
 
@@ -128,14 +137,15 @@ int ami_nvm_counter_accept_rx(AmiNvmCounterContext *ctx, uint32_t in_rx_ic)
         return 0; /* Replay detected -> Reject */
     }
 
-    ctx->last_rx_counter = in_rx_ic;
-
     /* Check if periodic high-water mark commit threshold reached */
     if (in_rx_ic >= ctx->persisted_rx_counter + ctx->rx_window_step) {
+        if (commit_record(ctx, ctx->persisted_tx_limit, in_rx_ic) != 0) {
+            return 0; /* Fail-closed: do not accept APDU if persistent record write fails */
+        }
         ctx->persisted_rx_counter = in_rx_ic;
-        (void)commit_record(ctx, ctx->persisted_tx_limit, ctx->persisted_rx_counter);
     }
 
+    ctx->last_rx_counter = in_rx_ic;
     return 1;
 }
 

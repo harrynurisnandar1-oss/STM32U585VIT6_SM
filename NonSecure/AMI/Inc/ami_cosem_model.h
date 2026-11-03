@@ -10,10 +10,14 @@ extern "C" {
 #endif
 
 #define AMI_COSEM_LOGICAL_NAME_LENGTH 6u
+#define AMI_COSEM_DATA_CLASS_ID 1u
 #define AMI_COSEM_REGISTER_CLASS_ID 3u
+#define AMI_COSEM_EXTENDED_REGISTER_CLASS_ID 4u
 #define AMI_COSEM_PROFILE_GENERIC_CLASS_ID 7u
 #define AMI_COSEM_CLOCK_CLASS_ID 8u
 #define AMI_COSEM_SECURITY_SETUP_CLASS_ID 64u
+#define AMI_COSEM_DISCONNECT_CONTROL_CLASS_ID 70u
+#define AMI_COSEM_LIMITER_CLASS_ID 71u
 #define AMI_COSEM_REGISTER_SAMPLE_MAX 64u
 
 #define AMI_COSEM_PROFILE_MAX_ENTRIES 8u
@@ -25,6 +29,11 @@ extern "C" {
 #define AMI_COSEM_VALID_BILLING_PROFILE (1u << 12)
 #define AMI_COSEM_VALID_SECURITY_CLIENT_TITLE (1u << 13)
 #define AMI_COSEM_VALID_LOAD_PROFILE (1u << 14)
+#define AMI_COSEM_VALID_TARIFF_REGISTERS (1u << 15)
+#define AMI_COSEM_VALID_POWER_QUALITY    (1u << 16)
+#define AMI_COSEM_VALID_LIMITER          (1u << 17)
+#define AMI_COSEM_VALID_DISCONNECT_CTRL  (1u << 18)
+#define AMI_COSEM_VALID_DEVICE_INFO      (1u << 19)
 
 #define AMI_COSEM_VALID_CLOCK (1u << 10)
 
@@ -102,6 +111,36 @@ typedef struct {
     uint8_t client_system_title[8];
     uint8_t server_system_title[8];
     uint32_t valid_mask;
+
+    /* Multi-Tariff Energy Registers (Tariffs 1..4: LWBP1, WBP, LWBP2, T4) */
+    uint64_t active_import_tariff_wh[4];
+    uint64_t active_export_tariff_wh[4];
+    uint64_t reactive_import_tariff_varh[4];
+
+    /* Power Quality (PQ) & Instantaneous Metrics */
+    uint32_t frequency_mhz;                    /* mHz: 50000 = 50.00 Hz (Scaler -3, Hz) */
+    int32_t  power_factor[4];                  /* Scaler -3: 0=total, 1=L1, 2=L2, 3=L3 (985 = 0.985) */
+    uint32_t thd_voltage_percent_x10[4];       /* Scaler -1: 0=total, 1=L1, 2=L2, 3=L3 (15 = 1.5%) */
+    uint32_t thd_current_percent_x10[4];       /* Scaler -1: 0=total, 1=L1, 2=L2, 3=L3 (25 = 2.5%) */
+    uint32_t active_power_watts;               /* Scaler 0: Total Active Power +P */
+    uint32_t reactive_power_vars;              /* Scaler 0: Total Reactive Power +Q */
+
+    /* Demand Limiter Class 71 */
+    uint32_t limiter_threshold_active_watts;
+    uint32_t limiter_threshold_normal_watts;
+    uint32_t limiter_min_over_threshold_duration_sec;
+    uint32_t limiter_min_under_threshold_duration_sec;
+    uint8_t  limiter_emergency_profile_active;
+
+    /* Disconnect Control Class 70 */
+    uint8_t  disconnect_output_state;          /* 1 = connected, 0 = disconnected */
+    uint8_t  disconnect_control_state;         /* 1 = connected, 0 = disconnected, 2 = ready */
+    uint8_t  disconnect_control_mode;          /* e.g. 2 */
+
+    /* Device Info Visible Strings */
+    char meter_id[17];                         /* e.g. "PLN1234567890" */
+    char meter_type[32];                       /* e.g. "3-PHASE-AMI-POSTPAID" */
+
     /* Bounded development/board-layer snapshots. Entries are oldest first;
      * the producer is responsible for ring-buffer rollover and timestamps. */
     AmiCosemEventLogEntry event_log[AMI_COSEM_PROFILE_MAX_ENTRIES];

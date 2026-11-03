@@ -538,8 +538,13 @@ CMSE_NS_ENTRY int SECURE_DLMS_TransferKeys_Atomic(
 
     ensure_secure_storage_init();
 
-    /* Enforce session authorization: require active HLS session if device is provisioned */
-    if (!s_hls_authenticated_session && s_secure_keys.is_provisioned) {
+    /* Enforce strict authorization lifecycle per SPLN/IEC:
+     * 1. Device MUST be provisioned with master KEK at factory first.
+     * 2. Remote key update MUST be executed under an active, verified HLS session. */
+    if (!s_secure_keys.is_provisioned) {
+        return -7; /* Unauthorized: Master Key must be provisioned before remote transfer */
+    }
+    if (!s_hls_authenticated_session) {
         return -6; /* Unauthorized: Session must be HLS-authenticated before remote key change */
     }
 
@@ -639,6 +644,9 @@ CMSE_NS_ENTRY int SECURE_DLMS_TransferKeys_Atomic(
     secure_memzero(staged_gbek, sizeof(staged_gbek));
     secure_memzero(staged_ak, sizeof(staged_ak));
     secure_memzero(staged_kek, sizeof(staged_kek));
+
+    /* Invalidate one-time HLS session authorization after successful key transfer */
+    s_hls_authenticated_session = 0;
     return 0;
 }
 

@@ -56,17 +56,17 @@ Tabel berikut merangkum status implementasi sistem Smart Meter 3-Fasa berdasarka
 | **Anti-Replay NVM** | Monotonic Invocation Counter persisten & wear-leveling NVM/TAMP Backup | **SUDAH** | Terverifikasi di `NonSecure/AMI/Src/ami_nvm_counter.c` & `test_ami_nvm_counter.c` |
 | **Anti-Replay NVM** | Penanganan saturasi Invocation Counter (`0xFFFFFFFF` fail-closed) | **SUDAH** | Teruji via `test_nvm_counter_saturation_handling` (menolak alokasi saat mencapai batas uint32) |
 |---|---|---|---|
-| **Hardware TrustZone** | Implementasi driver hardware SAES/AES-GCM di Secure World (`Secure/`) | **BELUM** | Menghubungkan fungsi NSC ke peripheral SAES hardware STM32U5 |
-| **Hardware Security** | Integrasi Hardware TRNG fisik STM32U5 (NIST SP 800-90B / AIS-31) | **BELUM** | Menghasilkan Server Challenge 16-byte berbasis entropi acak fisik |
-| **Anti-Brute-Force** | Progressive exponential backoff / lockout setelah N kali gagal HLS | **BELUM** | Mencegah serangan brute-force dictionary attack pada port komunikasi |
-| **Hardware Driver** | Integrasi physical UART/Optical Probe DMA Circular Buffer | **BELUM** | `ami_dlms_hardware_uart_tx()` masih berupa stub non-hardware |
-| **Metrologi ADE9000** | Task FreeRTOS akuisisi register energi/tegangan riil via SPI ADE9000 | **BELUM** | Saat ini data tegangan/arus masih diisi oleh test sample bank |
-| **Data Model Lanjutan** | Ekspansi objek Association View (seluruh 276 OBIS katalog PLN) | **BELUM** | Memetakan sisa OBIS (multi-tarif, THD, daya semu, limiter) ke snapshot |
-| **Kontrol Beban** | Eksekusi fisik Disconnect Control Breaker (Class 70) via GPIO Latching Relay | **BELUM** | Method `remote_disconnect/reconnect` belum memicu GPIO koil relay |
-| **Protokol Lanjutan** | General Block Transfer untuk unduhan data profil historis berukuran besar | **BELUM** | Diperlukan jika paket data melebihi Max PDU buffer (Class 7 log) |
-| **Keamanan Boot** | Secure Boot (SBSFU/MCUboot) & Verifikasi Digital Signature FOTA | **BELUM** | Memvalidasi integritas dan rollback counter sebelum eksekusi image |
-| **Keamanan Fisik** | Penguncian Readout Protection (RDP Level 1/2) & penonaktifan JTAG/SWD | **BELUM** | Mencegah dumping firmware dan memori kunci melalui debugger fisik |
-| **Sertifikasi** | Uji formal DLMS User Association Conformance Test Tool (CTT) & HES PLN | **BELUM** | Sertifikasi kepatuhan penuh standar utilitas sebelum komersialisasi |
+| **Hardware TrustZone** | Implementasi driver hardware SAES/AES-GCM di Secure World (`Secure/`) | **BELUM** | Menghubungkan fungsi NSC ke peripheral SAES hardware STM32U5 (Perlu hardware) |
+| **Hardware Security** | Integrasi Hardware TRNG fisik STM32U5 (NIST SP 800-90B / AIS-31) | **BELUM** | Menghasilkan Server Challenge 16-byte berbasis entropi acak fisik (Perlu hardware) |
+| **Anti-Brute-Force** | Progressive exponential backoff / lockout setelah N kali gagal HLS | **BELUM (Bisa Dikerjakan Tanpa Hardware)** | Tracking `failed_auth_attempts`, timer penalti/lockout 5x gagal per SPLN D5.002:2024. Verifikasi via CTest `test_ami_anti_bruteforce.c` |
+| **Hardware Driver** | Integrasi physical UART/Optical Probe DMA Circular Buffer | **BELUM** | `ami_dlms_hardware_uart_tx()` masih berupa stub non-hardware (Perlu hardware) |
+| **Metrologi ADE9000** | Task FreeRTOS akuisisi register energi/tegangan riil via SPI ADE9000 | **BELUM** | Saat ini data tegangan/arus masih diisi oleh test sample bank (Perlu hardware) |
+| **Data Model Lanjutan** | Ekspansi objek Association View (seluruh 276 OBIS katalog PLN) | **BELUM (Bisa Dikerjakan Tanpa Hardware)** | Multi-tarif WBP/LWBP (Tarif 1-4), Power Quality (THD/PF), Demand Limiter (Class 71). Verifikasi via `AmiCosemTest` & Gurux |
+| **Kontrol Beban** | Eksekusi Disconnect Control Breaker (Class 70 / OBIS `0.0.96.3.10.255`) | **BELUM (Bisa Dikerjakan Tanpa Hardware)** | State machine (Disconnected, Connected, Ready), method remote_disconnect/reconnect dengan GPIO mock. Verifikasi via CTest |
+| **Protokol Lanjutan** | General Block Transfer (GBT) untuk data profil historis besar | **BELUM (Bisa Dikerjakan Tanpa Hardware)** | Pemotongan APDU melebihi Max PDU (Load Profile/Event Log), blok number, last block flag. Verifikasi via `gurux_simulator` & CTest |
+| **Keamanan Boot** | Secure Boot (SBSFU/MCUboot) & Verifikasi Digital Signature FOTA | **BELUM** | Memvalidasi integritas dan rollback counter sebelum eksekusi image (Perlu hardware) |
+| **Keamanan Fisik** | Penguncian Readout Protection (RDP Level 1/2) & penonaktifan JTAG/SWD | **BELUM** | Mencegah dumping firmware dan memori kunci melalui debugger fisik (Perlu hardware) |
+| **Sertifikasi** | Uji formal DLMS User Association Conformance Test Tool (CTT) & HES PLN | **BELUM** | Sertifikasi kepatuhan penuh standar utilitas sebelum komersialisasi (Perlu hardware/lab) |
 
 ---
 
@@ -95,10 +95,16 @@ Tabel berikut merangkum status implementasi sistem Smart Meter 3-Fasa berdasarka
 
 ### Spin 2 — Pelengkapan Fitur Produksi & Kesiapan Sertifikasi (Tahap Selanjutnya)
 
-#### Phase 3 — Integrasi Hardware Kripto & Fitur Lanjutan Produksi
+#### Phase 3A — Pengembangan Fitur Software Lanjutan (Dapat Dikerjakan Tanpa Hardware)
+- **Anti-Brute-Force Lockout**: Tracking kegagalan otentikasi HLS5 (`failed_auth_attempts`), penalti waktu progresif (5s, 10s), dan lockout permanen setelah 5x gagal sesuai SPLN D5.002:2024.
+- **General Block Transfer (GBT)**: Fragmentasi dan rekonstruksi APDU xDLMS blok besar (`DAT_Block_Number`, `last_block_flag`) untuk unduhan Load Profile & Event Log yang melebihi Max PDU buffer.
+- **Ekspansi Data Model COSEM**: Pemetaan multi-tarif energi (Tarif 1–4 WBP/LWBP), Power Quality (THD arus/tegangan, rata-rata PF), dan Demand Limiter (Class 71).
+- **Disconnect Control Breaker (Class 70)**: Logika state machine (*Disconnected*, *Connected*, *Ready_for_Reconnection*), konfigurasi `control_mode`, dan method `remote_disconnect`/`reconnect` menggunakan hardware GPIO mock.
+
+#### Phase 3B — Integrasi Hardware Kripto & Target Perangkat Fisik (Perlu Hardware Unit)
 - Menghubungkan fungsi NSC ke akselerator hardware SAES/AES-GCM dan TRNG STM32U5 di Secure World.
-- Mekanisme progressive exponential backoff / lockout setelah $N$ kali kegagalan otentikasi HLS.
 - Integrasi driver fisik UART/Optical Probe DMA dengan FreeRTOS worker task.
+- Integrasi task FreeRTOS akuisisi register energi riil melalui komunikasi SPI fisik dengan IC ADE9000.
 
 #### Phase 4 — Sertifikasi, Conformance, dan Handoff
 - Pengujian Conformance resmi menggunakan DLMS UA CTT.

@@ -271,6 +271,100 @@ static void test_security_setup_class64_metadata(void)
            out.value.encoded[0] == 1u && out.value.encoded[1] == 0u);
 }
 
+static void test_multi_tariff_and_power_quality(void)
+{
+    AmiCosemRegisterSnapshot snapshot = {0};
+    snapshot.active_import_tariff_wh[0] = 1000000u; /* T1: LWBP 1 */
+    snapshot.active_import_tariff_wh[1] = 2000000u; /* T2: WBP */
+    snapshot.active_import_tariff_wh[2] = 3000000u; /* T3: LWBP 2 */
+    snapshot.active_import_tariff_wh[3] = 4000000u; /* T4 */
+    snapshot.frequency_mhz = 50020u;                /* 50.02 Hz */
+    snapshot.power_factor[0] = 985;                 /* PF Total = 0.985 */
+    snapshot.power_factor[1] = 980;                 /* PF L1 */
+    snapshot.thd_voltage_percent_x10[0] = 18u;      /* 1.8% */
+    snapshot.thd_current_percent_x10[0] = 25u;      /* 2.5% */
+    snapshot.valid_mask = AMI_COSEM_VALID_TARIFF_REGISTERS | AMI_COSEM_VALID_POWER_QUALITY;
+
+    AmiCosemData out;
+    const uint8_t obis_t1[6] = {1u, 0u, 1u, 8u, 1u, 255u};
+    const uint8_t obis_t2[6] = {1u, 0u, 1u, 8u, 2u, 255u};
+    const uint8_t obis_freq[6] = {1u, 0u, 14u, 7u, 0u, 255u};
+    const uint8_t obis_pf_total[6] = {1u, 0u, 13u, 7u, 0u, 255u};
+    const uint8_t obis_thd_v_total[6] = {1u, 0u, 12u, 7u, 124u, 255u};
+    const uint8_t obis_thd_i_total[6] = {1u, 0u, 11u, 7u, 124u, 255u};
+
+    /* Multi-tariff tests */
+    assert(ami_cosem_register_read(&snapshot, 3u, obis_t1, 2u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_LONG64_UNSIGNED && out.value.long64_unsigned == 1000000u);
+
+    assert(ami_cosem_register_read(&snapshot, 3u, obis_t2, 2u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_LONG64_UNSIGNED && out.value.long64_unsigned == 2000000u);
+
+    /* Power Quality tests */
+    assert(ami_cosem_register_read(&snapshot, 3u, obis_freq, 2u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED && out.value.double_long_unsigned == 50020u);
+
+    assert(ami_cosem_register_read(&snapshot, 3u, obis_pf_total, 2u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_DOUBLE_LONG && out.value.double_long == 985);
+
+    assert(ami_cosem_register_read(&snapshot, 3u, obis_thd_v_total, 2u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED && out.value.double_long_unsigned == 18u);
+
+    assert(ami_cosem_register_read(&snapshot, 3u, obis_thd_i_total, 2u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED && out.value.double_long_unsigned == 25u);
+}
+
+static void test_limiter_and_disconnect_control(void)
+{
+    AmiCosemRegisterSnapshot snapshot = {0};
+    snapshot.limiter_threshold_active_watts = 13200u;
+    snapshot.limiter_threshold_normal_watts = 13000u;
+    snapshot.limiter_min_over_threshold_duration_sec = 10u;
+    snapshot.limiter_min_under_threshold_duration_sec = 30u;
+    snapshot.limiter_emergency_profile_active = 0u;
+
+    snapshot.disconnect_output_state = 1u;
+    snapshot.disconnect_control_state = 1u;
+    snapshot.disconnect_control_mode = 2u;
+    strcpy(snapshot.meter_id, "PLN987654321");
+    strcpy(snapshot.meter_type, "3P-POSTPAID-SPLN");
+
+    AmiCosemData out;
+    const uint8_t obis_limiter[6] = {0u, 0u, 17u, 0u, 3u, 255u};
+    const uint8_t obis_discon[6] = {0u, 0u, 96u, 3u, 10u, 255u};
+    const uint8_t obis_meter_id[6] = {0u, 0u, 96u, 1u, 0u, 255u};
+    const uint8_t obis_meter_type[6] = {0u, 0u, 96u, 1u, 1u, 255u};
+
+    /* Class 71 Limiter */
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_LIMITER_CLASS_ID, obis_limiter, 1u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_OCTET_STRING && out.length == 6u);
+
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_LIMITER_CLASS_ID, obis_limiter, 2u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_ENCODED && out.length == 15u);
+
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_LIMITER_CLASS_ID, obis_limiter, 3u, &out) == AMI_COSEM_OK);
+    assert(out.value.double_long_unsigned == 13200u);
+
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_LIMITER_CLASS_ID, obis_limiter, 5u, &out) == AMI_COSEM_OK);
+    assert(out.value.double_long_unsigned == 10u);
+
+    /* Class 70 Disconnect Control */
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_DISCONNECT_CONTROL_CLASS_ID, obis_discon, 2u, &out) == AMI_COSEM_OK);
+    assert(out.value.unsigned_integer == 1u);
+
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_DISCONNECT_CONTROL_CLASS_ID, obis_discon, 4u, &out) == AMI_COSEM_OK);
+    assert(out.value.unsigned_integer == 2u);
+
+    /* Class 1 Data - Device Info */
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_DATA_CLASS_ID, obis_meter_id, 2u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_VISIBLE_STRING);
+    assert(strcmp((const char *)out.value.octets, "PLN987654321") == 0);
+
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_DATA_CLASS_ID, obis_meter_type, 2u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_VISIBLE_STRING);
+    assert(strcmp((const char *)out.value.octets, "3P-POSTPAID-SPLN") == 0);
+}
+
 int main(void)
 {
     test_voltage_and_scaler();
@@ -279,6 +373,8 @@ int main(void)
     test_clock_attributes();
     test_profile_generic_buffers();
     test_security_setup_class64_metadata();
+    test_multi_tariff_and_power_quality();
+    test_limiter_and_disconnect_control();
     puts("COSEM model tests passed.");
     return 0;
 }
