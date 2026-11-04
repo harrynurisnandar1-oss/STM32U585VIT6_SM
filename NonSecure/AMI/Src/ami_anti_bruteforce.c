@@ -89,17 +89,28 @@ uint32_t ami_anti_bruteforce_record_failure(AmiAntiBruteforceContext *ctx,
     }
 
     /* Calculate progressive exponential backoff: delay = initial * (multiplier ^ (attempts - 1)) */
-    uint32_t delay = ctx->config.initial_delay_sec;
+    uint32_t multiplier = (ctx->config.backoff_multiplier >= 2u)
+                               ? ctx->config.backoff_multiplier
+                               : AMI_ABF_DEFAULT_BACKOFF_MULTIPLIER;
+    uint32_t max_delay = (ctx->config.max_penalty_delay_sec > 0u)
+                             ? ctx->config.max_penalty_delay_sec
+                             : AMI_ABF_DEFAULT_MAX_PENALTY_DELAY_SEC;
+    uint32_t safe_ceiling = max_delay / multiplier;
+
+    uint32_t delay = (ctx->config.initial_delay_sec > 0u)
+                         ? ctx->config.initial_delay_sec
+                         : AMI_ABF_DEFAULT_INITIAL_DELAY_SEC;
+
     for (uint32_t i = 1u; i < ctx->failed_attempts; i++) {
-        if (delay > ctx->config.max_penalty_delay_sec / ctx->config.backoff_multiplier) {
-            delay = ctx->config.max_penalty_delay_sec;
+        if (delay > safe_ceiling) {
+            delay = max_delay;
             break;
         }
-        delay *= ctx->config.backoff_multiplier;
+        delay *= multiplier;
     }
 
-    if (delay > ctx->config.max_penalty_delay_sec) {
-        delay = ctx->config.max_penalty_delay_sec;
+    if (delay > max_delay) {
+        delay = max_delay;
     }
 
     /* Guard against timestamp addition overflow */

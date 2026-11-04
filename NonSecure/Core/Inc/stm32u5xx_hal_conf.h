@@ -37,6 +37,7 @@ extern "C" {
 /*#define HAL_COMP_MODULE_ENABLED */
 /*#define HAL_CORDIC_MODULE_ENABLED */
 /*#define HAL_CRC_MODULE_ENABLED */
+#define HAL_CRYP_MODULE_ENABLED
 /*#define HAL_DAC_MODULE_ENABLED */
 /*#define HAL_DCACHE_MODULE_ENABLED */
 /*#define HAL_DCMI_MODULE_ENABLED */
@@ -75,12 +76,12 @@ extern "C" {
 /*#define HAL_SDIO_MODULE_ENABLED */
 /*#define HAL_SMARTCARD_MODULE_ENABLED */
 /*#define HAL_SMBUS_MODULE_ENABLED */
-#define HAL_SPI_MODULE_ENABLED
+/*#define HAL_SPI_MODULE_ENABLED */
 /*#define HAL_SRAM_MODULE_ENABLED */
 /*#define HAL_TIM_MODULE_ENABLED */
 /*#define HAL_TSC_MODULE_ENABLED */
-#define HAL_UART_MODULE_ENABLED
-#define HAL_USART_MODULE_ENABLED
+/*#define HAL_UART_MODULE_ENABLED */
+/*#define HAL_USART_MODULE_ENABLED */
 /*#define HAL_WWDG_MODULE_ENABLED */
 /*#define HAL_XSPI_MODULE_ENABLED */
 #define HAL_GPIO_MODULE_ENABLED
@@ -513,3 +514,4 @@ void assert_failed(uint8_t *file, uint32_t line);
 #endif
 
 #endif /* STM32U5xx_HAL_CONF_H */
+

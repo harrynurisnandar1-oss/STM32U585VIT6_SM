@@ -871,3 +871,21 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
     - Verifikasi pembacaan 23 capture objects load profile dan 3 capture objects event logbook.
     - Verifikasi selective access range descriptor dan specific tamper filter query.
     - CTest Suite: **14/14 tests PASS (100% Lulus)**.
+
+## [v2.18.1] - 2026-11-04
+
+### Changed & Fixed
+- **Anti-Brute-Force & Lockout Resilience (SIGFPE Remediation)**:
+  - **Sanitasi Aritmetika Pembagian (`NonSecure/AMI/Src/ami_anti_bruteforce.c`)**:
+    - Memperbaiki potensi integer division by zero (`SIGFPE`) pada runtime x86_64 Alpine Linux saat dieksekusi di bawah flag compiler `-O3 -DNDEBUG`.
+    - Menambahkan batas bawah defensif untuk `backoff_multiplier >= 2u` dan `initial_delay_sec > 0u`.
+    - Mengamankan ceiling delay eksponensial (`safe_ceiling = max_delay / multiplier`) sebelum kalkulasi delay penalti, mencegah pembagian dengan nilai nol pada konfigurasi default atau uninitialized.
+  - **Unit Testing Resilience (`tests/test_ami_anti_bruteforce.c`)**:
+    - Menambahkan test case `test_abf_zero_config_resilience()` guna memverifikasi ketahanan modul saat menerima parameter konfigurasi serba-nol.
+- **Docker Environment & Pipeline**:
+  - **Penyelarasan Runner Dockerfile (`Dockerfile`)**:
+    - Menambahkan paket `cmake` pada image runtime container agar executable `ctest` tersedia saat menjalankan `run_all_docker_tests.sh`.
+    - Verifikasi hasil CTest di dalam container Docker: **14/14 suites PASS (100% Lulus)** serta pengujian integrasi E2E simulator DLMS Gurux lulus 100%.
+- **Pembersihan Repositori GitHub**:
+  - Menghapus folder template `.github/ISSUE_TEMPLATE` (`01_feature_request_pln.yml`, `02_security_or_bug.yml`, `03_hardware_integration.yml`, `config.yml`) dan template pull request `.github/PULL_REQUEST_TEMPLATE.md` sesuai kebutuhan proyek.
+

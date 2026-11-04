@@ -24,7 +24,7 @@ FROM alpine:latest AS runner
 LABEL Name=stm32u585vit6sm Version=0.0.1
 
 RUN apk update && apk upgrade --no-cache && \
-    apk add --no-cache bash python3
+    apk add --no-cache bash python3 cmake
 
 WORKDIR /workspace
 

@@ -1,6 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: Dokumentasi Arsitektur & Aturan Keamanan
-    url: https://github.com/
-    about: Baca dokumentasi keamanan TrustZone, model ancaman, dan profil DLMS di folder docs/security-rules/.
-

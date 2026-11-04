@@ -386,6 +386,23 @@ static void test_abf_dlms_port_action_hls_reply(void)
     printf("test_abf_dlms_port_action_hls_reply: PASS\n");
 }
 
+static void test_abf_zero_config_resilience(void)
+{
+    AmiAntiBruteforceContext ctx;
+    AmiAntiBruteforceConfig bad_config;
+    memset(&bad_config, 0, sizeof(bad_config)); /* All zeros */
+
+    assert(ami_anti_bruteforce_init(&ctx, &bad_config) == 0);
+
+    /* Record multiple failures with zero config to ensure no SIGFPE/arithmetic exception occurs */
+    for (uint32_t t = 100u; t <= 500u; t += 100u) {
+        uint32_t delay = ami_anti_bruteforce_record_failure(&ctx, t);
+        assert(delay > 0u);
+    }
+    assert(ctx.is_locked_permanent == 1);
+    printf("test_abf_zero_config_resilience: PASS\n");
+}
+
 int main(void)
 {
     printf("=== Starting Anti-Brute-Force & Lockout Test Suite ===\n");
@@ -395,6 +412,7 @@ int main(void)
     test_abf_success_resets_backoff();
     test_abf_dlms_port_aarq_lockout_rejection();
     test_abf_dlms_port_action_hls_reply();
+    test_abf_zero_config_resilience();
     printf("=== All Anti-Brute-Force Tests PASSED (100%%) ===\n");
     return 0;
 }
