@@ -1,30 +1,65 @@
 # Tinjauan Keamanan — STM32U585VIT6_SM
 
-**Tanggal tinjauan:** 3 November 2026
-**Cakupan:** tinjauan statis source, konfigurasi build, dan dokumentasi.
-**Batasan:** tidak ada perangkat atau jaringan nyata yang diuji; tidak ada
-exploit yang dijalankan.
+| Informasi | Keterangan |
+|---|---|
+| Tinjauan awal | 3 November 2026 |
+| Pembaruan status source | 4 November 2026 |
+| Cakupan | Tinjauan statis source code, konfigurasi build, dan dokumentasi |
+| Di luar cakupan | Pengujian perangkat/jaringan nyata dan eksekusi exploit |
 
-## Ringkasan
+## Ringkasan untuk pembaca
 
-Project ini **belum dapat dinyatakan memenuhi CIA Triad atau siap produksi**.
-Ada cacat implementasi pada jalur HLS dan otorisasi key-management, serta
-kesenjangan pada penyimpanan kunci/counter, RNG, dan secure boot. Namun,
-jalur serang jarak jauh pada firmware saat ini belum terbukti: task belum
-terhubung ke transport fisik yang berfungsi dan cipher backend tidak terpasang
-ke port dengan benar.
+**Status: belum dapat dinyatakan aman atau siap produksi.** Laporan ini
+mencatat temuan dari tinjauan awal serta pembaruan source yang dilaporkan
+kemudian. Beberapa perbaikan source sudah dicatat, tetapi persistensi kunci
+dan counter, otorisasi Secure, pemeriksaan descriptor, serta verifikasi
+hardware dan rantai boot masih perlu dituntaskan.
 
-| Prinsip | Risiko utama | Status |
-|---|---|---|
-| **Confidentiality (Kerahasiaan)** | Kunci default/volatile; struktur kunci mentah di NonSecure | Belum siap produksi |
-| **Integrity (Integritas)** | Callback HLS tidak memverifikasi proof; otorisasi NSC lemah; counter NVM rentan gagal terbuka | Temuan source-level, jalur remote belum terbukti |
-| **Availability (Ketersediaan)** | Error handler berhenti tanpa pemulihan/watchdog; ketahanan DoS belum diuji | Risiko operasional, exploitability belum dibuktikan |
+Temuan source-level **bukan bukti bahwa serangan jarak jauh dapat dilakukan**.
+Jangkauan serangan bergantung pada integrasi firmware, konfigurasi perangkat,
+dan jalur komunikasi yang aktif; hal-hal tersebut belum diverifikasi pada
+hardware.
 
-Severity menunjukkan dampak potensial **bila jalur terkait diaktifkan**.
-Confidence menunjukkan keyakinan atas analisis source, bukan kepastian bahwa
-serangan dapat dilakukan dari jaringan.
+### Status temuan terbaru
 
-## Temuan
+Status di bawah merangkum adendum 4 November. Detail dan bukti setiap temuan
+ada pada bagian [Temuan audit awal](#temuan-audit-awal-3-november-2026).
+
+| ID | Area | Severity awal | Status setelah pembaruan source |
+|---|---|---:|---|
+| C1 | Kunci default dan persistensi | HIGH | **Sebagian ditangani.** Kunci default dihapus, tetapi persistensi dan lifecycle kunci belum terjamin. |
+| C2 | Representasi kunci di NonSecure | HIGH | **Belum ditangani** menurut adendum. |
+| C3 | Atribut keamanan SRAM3 | HIGH* | **Source diperbarui; hardware belum diverifikasi.** |
+| I1 | Proof HLS | HIGH* | **Perbaikan source dilaporkan.** Perlu verifikasi integrasi dan fail-closed. |
+| I2 | Otorisasi key-management | HIGH | **Sebagian ditangani.** Token publik dihapus; otorisasi sesi masih perlu diperkuat. |
+| I3 | Persistensi invocation counter | MEDIUM | **Belum tuntas.** Kegagalan storage dan integrasi end-to-end masih perlu diuji. |
+| I4 | RNG fail-closed | MEDIUM | **Perbaikan source dilaporkan;** kualitas dan kegagalan hardware belum diuji. |
+| I5 | Descriptor NSC / TOCTOU | MEDIUM | **Belum ditangani** menurut adendum. |
+| I6 | Verifikasi image dan rollback | HIGH* | **Sebagian ditangani.** Pemeriksaan manifest ditambahkan; rantai boot dan signature belum diverifikasi. |
+| A1 | Error recovery dan ketersediaan | Belum dinilai | **Belum diverifikasi.** DoS remote tidak terkonfirmasi. |
+
+\* Severity berlaku jika jalur atau kondisi terkait dapat dicapai. Confidence
+menunjukkan keyakinan terhadap analisis source, bukan kepastian exploitability.
+
+### Daftar isi
+
+- [Temuan audit awal](#temuan-audit-awal-3-november-2026)
+  - [Confidentiality](#confidentiality--kerahasiaan)
+  - [Integrity](#integrity--integritas-dan-autentikasi)
+  - [Availability](#availability--ketersediaan)
+- [Batas verifikasi](#status-integrasi-dan-batas-verifikasi)
+- [Tindak lanjut yang masih diperlukan](#tindak-lanjut-yang-masih-diperlukan)
+- [Pembaruan source 4 November](#pembaruan-source-level-4-november-2026)
+
+Severity menggambarkan dampak potensial jika jalur terkait aktif. Confidence
+menggambarkan tingkat keyakinan analisis source, bukan kepastian bahwa serangan
+dapat dilakukan dari jaringan.
+
+## Temuan audit awal (3 November 2026)
+
+> Status pada bagian ini merekam kondisi saat tinjauan awal. Gunakan tabel
+> **Status temuan terbaru** di atas dan bagian pembaruan di bawah untuk melihat
+> perubahan source yang dilaporkan pada 4 November.
 
 ### Confidentiality — Kerahasiaan
 
@@ -174,7 +209,7 @@ serangan dapat dilakukan dari jaringan.
 - **Validasi aman:** Dokumentasikan dan tinjau boot chain serta proses signing;
   verifikasi konfigurasi pada perangkat lab berizin.
 
-### Availability — Ketersediaan
+### Availability — Ketersediaan (A1)
 
 Belum ada DoS remote yang terkonfirmasi dari tinjauan statis. Namun,
 `Error_Handler()` masuk loop tanpa akhir dan watchdog/recovery tidak terlihat
@@ -183,7 +218,11 @@ di startup yang ditinjau ([`Secure/Core/Src/main.c`](./Secure/Core/Src/main.c:23
 inisialisasi dapat membuat layanan tidak pulih sampai reset. Batas resource,
 timeout, dan ketahanan terhadap beban/protokol malformed perlu diuji terpisah.
 
-## Status integrasi dan batas verifikasi
+## Status integrasi dan batas verifikasi (tinjauan awal)
+
+Catatan berikut menggambarkan integrasi pada saat tinjauan 3 November 2026.
+Untuk pembaruan source yang dilaporkan sesudahnya, lihat bagian
+[Pembaruan source-level](#pembaruan-source-level-4-november-2026).
 
 - Firmware menolak no-auth/LLS, tetapi task belum membentuk jalur DLMS
   terautentikasi yang berfungsi penuh. HLS callback bukan implementasi proof.
@@ -203,46 +242,45 @@ timeout, dan ketahanan terhadap beban/protokol malformed perlu diuji terpisah.
 - Hasil build/test yang tercantum di bagian lama laporan adalah historis;
   tidak dijalankan ulang sebagai bagian audit ini dan bukan bukti keamanan.
 
-## Prioritas tindak lanjut
+## Tindak lanjut yang masih diperlukan
 
-1. Hapus/gate HLS proof stub; gagal tertutup sampai verifier Secure yang benar
-   terhubung. Pastikan aksi kontrol beban memerlukan autentikasi pesan yang
-   valid dan otorisasi spesifik.
-2. Hilangkan token provisioning publik, default operational keys, dan HLS
-   global flag; ikat operasi Secure ke sesi/otorisasi tepercaya.
-3. Simpan kunci dan counter secara persisten di storage terlindungi; tolak
-   record corrupt, kegagalan tulis/init/bind, dan counter overflow tanpa
-   fallback ke nilai rendah/RAM.
-4. Hapus fallback LCG untuk operasi keamanan dan kembalikan error jika RNG
-   tidak sehat.
-5. Hapus raw-key API/struktur dari NonSecure production build; gunakan handle
-   dan operasi Secure.
-6. Tambahkan dan verifikasi secure boot, signature, serta anti-rollback
-   sebagai bagian rantai boot.
-7. Setelah perbaikan source, lakukan validasi hardware berizin untuk SRAM3,
-   TAMP, DMA/CMSE, RNG, boot configuration, dan pemulihan error.
+Urutan berikut berfokus pada risiko yang belum selesai atau belum diverifikasi.
+Perbaikan yang disebut di bagian pembaruan source tetap memerlukan validasi
+integrasi sebelum dianggap tuntas.
 
+1. **Amankan lifecycle kunci (C1, C2, I2).** Hilangkan representasi raw key
+   dari build NonSecure produksi; gunakan handle opaque dan operasi Secure.
+   Pastikan kunci disimpan secara persisten di storage terlindungi dan operasi
+   provisioning terikat pada otorisasi manufaktur/sesi yang tepercaya.
+2. **Buat counter fail-closed (I3).** Persistenkan counter; tolak record rusak,
+   kegagalan tulis/init/bind, dan overflow tanpa kembali ke nilai rendah atau
+   state RAM yang belum tersimpan.
+3. **Amankan descriptor NSC (I5).** Salin descriptor ke memori Secure,
+   validasi salinan, lalu gunakan hanya salinan tersebut selama operasi.
+4. **Verifikasi HLS dan aksi kontrol (I1).** Uji proof valid/tidak valid,
+   integrasi cipher backend, serta otorisasi spesifik sebelum aksi kontrol
+   beban. Semua kegagalan harus ditolak.
+5. **Lengkapi rantai boot (I6).** Tinjau signing, validasi signature,
+   anti-rollback, boot ROM, dan option bytes. Pemeriksaan manifest saja belum
+   membuktikan image telah diautentikasi secara kriptografis.
+6. **Tinjau pemulihan error (A1).** Evaluasi watchdog/recovery, batas resource,
+   timeout, dan perilaku terhadap input malformed; DoS remote belum terbukti.
+7. **Validasi pada hardware berizin.** Periksa SRAM3, GTZC/MPCBB, TAMP,
+   DMA/CMSE, RNG, boot configuration, persistensi, dan pemulihan error pada
+   board pengembangan terisolasi.
 
----
+## Pembaruan source-level (4 November 2026)
 
-## Adendum Status Remediasi Source-Level (4 November 2026)
+Pembaruan berikut dilaporkan setelah tinjauan awal. Dokumen ini mencatat
+perubahan pada source dan hasil host test yang dilaporkan (14/14 lulus);
+hasil tersebut **bukan** pengganti build firmware target atau validasi
+hardware.
 
-Menindaklanjuti temuan pada tinjauan 3 November 2026, sejumlah perbaikan mendasar pada tingkat source-code telah diselesaikan dan diverifikasi melalui host unit test suite (14/14 tests PASS):
-
-1. **Remediasi I1 & HLS Proof**:
-   - Fungsi gateway Secure NSC `SECURE_DLMS_HLS5_CalculateProof()` telah diimplementasikan di [`Secure/Core/Src/secure_nsc.c`](./Secure/Core/Src/secure_nsc.c) untuk menghitung GMAC Server Proof 16-byte secara kriptografis riil.
-   - Callback `ami_dlms_secure_hls_proof()` di [`ami_dlms_port.c`](./NonSecure/AMI/Src/ami_dlms_port.c) kini menghasilkan proof otentik ke buffer respons server.
-   - Pemasangan cipher backend di [`ami_dlms_port.c`](./NonSecure/AMI/Src/ami_dlms_port.c) telah diperbaiki dengan pemanggilan eksplisit `ami_dlms_port_set_cipher_backend(&s_global_port_ctx, &s_cipher_backend)`.
-2. **Remediasi C1 & I2 (Kunci Default & Token Provisi)**:
-   - Konstanta publik `DEFAULT_GUEK`, `DEFAULT_GBEK`, `DEFAULT_AK` telah dihapus dari source [`secure_nsc.c`](./Secure/Core/Src/secure_nsc.c). Perangkat yang belum diprovisi akan menolak eksekusi ciphering dengan error `SECURE_ERROR_UNPROVISIONED` (-8).
-   - Konstanta token provisi publik `SECURE_FACTORY_PROVISION_TOKEN` telah dihapus dari header publik `secure_nsc.h`.
-3. **Remediasi I4 (RNG Fail-Closed)**:
-   - Algoritma fallback LCG pada [`secure_nsc.c`](./Secure/Core/Src/secure_nsc.c) telah dihapus total. Setiap kegagalan perangkat keras TRNG (CECS, SECS, atau timeout) langsung menolkan buffer output dan mengembalikan error code `-2` (*fail-closed*).
-4. **Remediasi I6 (Secure Boot Pre-Jump Manifest Verification)**:
-   - Fungsi `SECURE_VerifyNonSecureImage()` telah ditambahkan pada [`Secure/Core/Src/main.c`](./Secure/Core/Src/main.c) sebelum eksekusi NonSecure dimulai. Memvalidasi magic header `0x504C4E21` ('PLN!'), batas MSP di RAM NonSecure, alignment pointer ResetHandler (Thumb bit), dan anti-rollback version counter. Divalidasi pada `test_ami_firmware_auth_policy.c`.
-5. **Driver Hardware I/O UART & Metrologi ADE9000**:
-   - Modul HAL UART, USART, dan SPI telah diaktifkan di [`stm32u5xx_hal_conf.h`](./NonSecure/Core/Inc/stm32u5xx_hal_conf.h).
-   - Driver circular DMA UART + IDLE interrupt (`ami_bsp_uart.c`, `ami_bsp_uart.h`) telah dibuat dan dihubungkan ke `stm32u5xx_it.c`.
-   - Driver ADE9000 di [`ami_ade9000.c`](./NonSecure/AMI/Src/ami_ade9000.c) kini memeriksa return code seluruh register SPI secara ketat dan menolak memasukkan data kotor ke snapshot (`valid_mask = 0`) jika SPI gagal.
-6. **Data Model Lanjutan Class 7**:
-   - Pemodelan buffer Load Profile 23-Kanal 15-menit (`1.0.99.1.0.255`) dan Tamper Event Logbook (3 capture objects, 9 modus tamper PLN Event 20..28) telah selesai diimplementasikan di [`ami_cosem_model.c`](./NonSecure/AMI/Src/ami_cosem_model.c).
+| Temuan/area | Perubahan source yang dilaporkan |
+|---|---|
+| **I1 — HLS dan cipher backend** | Gateway Secure NSC `SECURE_DLMS_HLS5_CalculateProof()` di [`secure_nsc.c`](./Secure/Core/Src/secure_nsc.c) menghitung GMAC server proof 16-byte. Callback `ami_dlms_secure_hls_proof()` di [`ami_dlms_port.c`](./NonSecure/AMI/Src/ami_dlms_port.c) menghasilkan proof; cipher backend dipasang melalui `ami_dlms_port_set_cipher_backend(&s_global_port_ctx, &s_cipher_backend)`. |
+| **C1/I2 — Kunci default dan token provisioning** | Konstanta `DEFAULT_GUEK`, `DEFAULT_GBEK`, `DEFAULT_AK`, dan `SECURE_FACTORY_PROVISION_TOKEN` dilaporkan dihapus. Ciphering menolak perangkat belum diprovisi dengan `SECURE_ERROR_UNPROVISIONED` (-8). Ini belum menyelesaikan seluruh masalah persistensi dan otorisasi key-management. |
+| **I4 — RNG** | Fallback LCG dihapus. Kegagalan TRNG (CECS, SECS, atau timeout) dilaporkan menolkan output dan mengembalikan error `-2` (*fail-closed*). Kualitas RNG hardware belum diuji. |
+| **I6 — Pemeriksaan sebelum jump ke NonSecure** | `SECURE_VerifyNonSecureImage()` di [`main.c`](./Secure/Core/Src/main.c) memeriksa magic header `0x504C4E21` (`PLN!`), rentang MSP di RAM NonSecure, alignment ResetHandler/Thumb bit, dan anti-rollback version counter. Pengujian disebut ada di `test_ami_firmware_auth_policy.c`; validasi signature dan rantai boot tetap perlu ditinjau. |
+| **I/O dan metrologi** | Modul HAL UART, USART, dan SPI dilaporkan diaktifkan di `stm32u5xx_hal_conf.h`. Driver UART circular DMA + IDLE dikaitkan dengan `stm32u5xx_it.c`. Driver ADE9000 memeriksa return code SPI dan menolak snapshot jika pembacaan gagal (`valid_mask = 0`). |
+| **Data model** | Buffer Load Profile 23 kanal 15 menit (`1.0.99.1.0.255`) dan Tamper Event Logbook dengan 3 capture object serta 9 modus tamper PLN Event 20–28 dilaporkan selesai di `ami_cosem_model.c`. |

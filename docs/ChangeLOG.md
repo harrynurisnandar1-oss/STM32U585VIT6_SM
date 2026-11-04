@@ -1,4 +1,13 @@
-# Sprint 1 — DLMS/COSEM read-only path
+# Firmware Release Changelog: STM32U585VIT6 + ADE9000 Smart Meter
+
+Dokumen ini mencatat seluruh riwayat pembaruan, perbaikan, dan pengerasan keamanan (*security hardening*) firmware Smart Meter 3-Fasa. Pengembangan dibagi menjadi dua fase utama:
+
+- **SPIN 1 (v1.0.0 s.d. v2.12.0)**: Fondasi Protokol DLMS/COSEM, Arsitektur TrustZone Cortex-M33, Kriptografi Suite 0, Keamanan NVM Anti-Replay, dan Integrasi Host Simulator.
+- **SPIN 2 (v2.13.0 s.d. v2.18.1)**: Pelengkapan Fitur Produksi (Anti-Brute-Force Lockout, Block Transfer GBT, 49 Objek COSEM PLN, Disconnect Control Class 70, Load Profile 23-Kanal, Kesiapan Driver Target, dan Uji Terpadu Docker).
+
+---
+
+# 🚀 SPIN 1 — Fondasi Protokol, Arsitektur TrustZone & Integrasi Awal
 
 ## Scope and limitations
 
@@ -658,6 +667,11 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 - **Integrasi Runtime Task Firmware DLMS (`NonSecure/AMI/Src/ami_dlms_port.c`)**:
   - Mengintegrasikan persistent NVM counter driver dan Suite 0 cipher backend langsung ke dalam runtime task FreeRTOS `AmiDlmsTaskEntry`.
 
+
+---
+
+# 🏭 SPIN 2 — Pelengkapan Fitur Produksi, Kesiapan Mainboard & Sertifikasi
+*(Acuan: 26-Week Work Plan Rev D, Weeks 11–26: Disconnect Control Breaker Class 70, Anti-Brute-Force Lockout SPLN D5.002:2024, General Block Transfer GBT, 49 Objek PLN, Load Profile 23-Kanal, dan Kesiapan Driver Target)*
 
 ## [v2.13.0] - 2026-11-03
 
