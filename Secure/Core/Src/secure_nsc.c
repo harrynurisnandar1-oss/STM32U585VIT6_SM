@@ -228,8 +228,6 @@ CMSE_NS_ENTRY int SECURE_ProvisionMasterKey(const uint8_t *factory_kek, uint32_t
   if (auth_token != SECURE_INTERNAL_FACTORY_TOKEN) {
     return -1; /* Unauthorized */
   }
-    return -1; /* Unauthorized */
-  }
   if (factory_kek == NULL || validate_ns_buffer(factory_kek, 16, 0) != 0) {
     return -2; /* Invalid pointer or outside NS memory */
   }
@@ -896,11 +894,9 @@ CMSE_NS_ENTRY int SECURE_DLMS_HLS5_Verify(const uint8_t *server_challenge,
 CMSE_NS_ENTRY int SECURE_DLMS_HLS5_CalculateProof(const uint8_t *challenge,
                                                  uint32_t challenge_len,
                                                  uint8_t *proof_out,
-                                                 uint32_t proof_capacity,
                                                  uint32_t *proof_len)
 {
-  if (challenge == NULL || proof_out == NULL || proof_len == NULL ||
-      challenge_len != 16 || proof_capacity < 16) {
+  if (challenge == NULL || proof_out == NULL || proof_len == NULL || challenge_len != 16) {
     return -1;
   }
   if (validate_ns_buffer(challenge, challenge_len, 0) != 0 ||

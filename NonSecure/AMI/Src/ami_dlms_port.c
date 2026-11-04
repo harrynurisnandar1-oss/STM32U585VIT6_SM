@@ -29,7 +29,7 @@ static int ami_dlms_secure_hls_proof(void *user, const uint8_t *oid, size_t oid_
 
     uint32_t out_len = 0u;
     int st = SECURE_DLMS_HLS5_CalculateProof(challenge, (uint32_t)challenge_length,
-                                            proof, (uint32_t)proof_capacity, &out_len);
+                                            proof, &out_len);
     if (st == 0 && out_len == 16u) {
         *proof_length = 16u;
         return 1;

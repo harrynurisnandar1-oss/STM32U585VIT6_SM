@@ -122,15 +122,13 @@ int SECURE_DLMS_HLS5_Verify(const uint8_t *server_challenge,
  * @brief Calculate DLMS HLS5 GMAC server authentication proof using isolated Secure World AK.
  * @param challenge 16-byte challenge.
  * @param challenge_len Must be 16.
- * @param proof_out Output buffer for 16-byte GMAC proof.
- * @param proof_capacity Must be at least 16.
+ * @param proof_out Output buffer for 16-byte GMAC proof (must be at least 16 bytes).
  * @param proof_len Pointer to receive length written (16).
  * @return 0 on success, negative error code on failure.
  */
 int SECURE_DLMS_HLS5_CalculateProof(const uint8_t *challenge,
                                    uint32_t challenge_len,
                                    uint8_t *proof_out,
-                                   uint32_t proof_capacity,
                                    uint32_t *proof_len);
 
 /**
