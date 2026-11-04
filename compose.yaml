@@ -1,6 +1,9 @@
 services:
   stm32u585vit6sm:
     image: stm32u585vit6sm
+    container_name: stm32u585vit6sm
     build:
       context: .
       dockerfile: ./Dockerfile
+    ports:
+      - "4059:4059"

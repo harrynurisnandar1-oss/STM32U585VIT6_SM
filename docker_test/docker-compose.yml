@@ -1,7 +1,0 @@
-services:
-  ami-docker-test:
-    build:
-      context: ..
-      dockerfile: docker_test/Dockerfile
-    container_name: ami_dlms_docker_test
-
