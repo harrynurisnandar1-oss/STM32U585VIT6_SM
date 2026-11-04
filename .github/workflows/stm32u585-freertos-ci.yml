@@ -46,8 +46,8 @@ jobs:
 
       - name: Display Memory Footprint (Size)
         run: |
-          arm-none-eabi-size Secure/build/STM32U585VIT6_SM_S.elf || true
-          arm-none-eabi-size NonSecure/build/STM32U585VIT6_SM_NS.elf || true
+          arm-none-eabi-size Secure/build/STM32U585VIT6_SM_S.elf
+          arm-none-eabi-size NonSecure/build/STM32U585VIT6_SM_NS.elf
 
       - name: Upload Firmware Artifacts
         uses: actions/upload-artifact@v4

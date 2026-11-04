@@ -62,6 +62,18 @@ static const uint8_t FACTORY_MASTER_SALT[16] = {
   0x54, 0x5F, 0x4D, 0x45, 0x54, 0x45, 0x52, 0x33  /* "T_METER3" */
 };
 
+/**
+  * @brief  Secure constant-time memory zeroization.
+  */
+static void secure_memzero(void *ptr, size_t size)
+{
+  if (ptr == NULL || size == 0) return;
+  volatile uint8_t *p = (volatile uint8_t *)ptr;
+  while (size--) {
+    *p++ = 0u;
+  }
+}
+
 static void derive_device_unique_kek(uint8_t out_kek[16])
 {
 #if defined(UID_BASE)
@@ -113,18 +125,6 @@ static void ensure_secure_storage_init(void)
   }
 
   s_init = 1;
-}
-
-/**
-  * @brief  Secure constant-time memory zeroization.
-  */
-static void secure_memzero(void *ptr, size_t size)
-{
-  if (ptr == NULL || size == 0) return;
-  volatile uint8_t *p = (volatile uint8_t *)ptr;
-  while (size--) {
-    *p++ = 0u;
-  }
 }
 
 /**
