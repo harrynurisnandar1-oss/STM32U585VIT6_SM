@@ -70,6 +70,14 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_anti_bruteforce.c
     ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_dlms_block_transfer.c
     ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_disconnect_control.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_bsp_uart.c
+)
+
+# Generate raw binary and Intel HEX files after linking
+add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin
+    COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.hex
+    COMMENT "Generating ${CMAKE_PROJECT_NAME}.bin and ${CMAKE_PROJECT_NAME}.hex"
 )
 
 # Link directories setup

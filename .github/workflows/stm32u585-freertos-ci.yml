@@ -20,19 +20,21 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install Build Tools & ARM Toolchain with Standard C Libraries (Newlib)
+      - name: Install Ninja build tool
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            ninja-build \
-            gcc-arm-none-eabi \
-            libnewlib-arm-none-eabi \
-            libstdc++-arm-none-eabi-newlib
+          sudo apt-get install --yes --no-install-recommends ninja-build
 
-      - name: Verify Arm Toolchain & Libc Installation
+      - name: Install Official ARM GNU Embedded Toolchain
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: '13.3.Rel1'
+
+      - name: Verify Arm Toolchain & Standard C Libraries
         run: |
           arm-none-eabi-gcc --version
           arm-none-eabi-gcc -print-file-name=include/math.h
+          arm-none-eabi-gcc -print-multi-lib
 
       - name: Configure CMake with ARM Toolchain Preset
         run: |
