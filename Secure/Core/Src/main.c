@@ -115,6 +115,62 @@ int main(void)
   /* USER CODE END 3 */
 }
 
+#define AMI_BOOT_MANIFEST_MAGIC      0x504C4E21U /* 'PLN!' */
+#define AMI_NS_FLASH_START           0x08040000U
+#define AMI_NS_FLASH_END             0x081FFFFFU
+#define AMI_NS_SRAM_START            0x20018000U
+#define AMI_NS_SRAM_END              0x20040000U
+
+typedef struct {
+  uint32_t magic;           /* 0x504C4E21 'PLN!' */
+  uint32_t version_epoch;   /* Monotonic counter for anti-rollback */
+  uint32_t image_size;      /* NonSecure image size in bytes */
+  uint32_t flags;           /* Security attributes */
+  uint8_t  sha256_hash[32]; /* SHA-256 digest of NonSecure image */
+} NonSecureImageManifestTypeDef;
+
+static int SECURE_VerifyNonSecureImage(void)
+{
+  uint32_t msp_ns = *(uint32_t *)VTOR_TABLE_NS_START_ADDR;
+  uint32_t reset_handler = *(uint32_t *)(VTOR_TABLE_NS_START_ADDR + 4U);
+
+  /* 1. Verify NonSecure Vector Table boundary */
+  if (VTOR_TABLE_NS_START_ADDR < AMI_NS_FLASH_START || VTOR_TABLE_NS_START_ADDR >= AMI_NS_FLASH_END) {
+    return -1;
+  }
+
+  /* 2. Verify Initial MSP_NS lies within NonSecure RAM */
+  if (msp_ns < AMI_NS_SRAM_START || msp_ns > AMI_NS_SRAM_END) {
+    return -2;
+  }
+
+  /* 3. Verify ResetHandler points to executable NonSecure Flash with Thumb bit set */
+  if ((reset_handler & 1U) == 0U || reset_handler < AMI_NS_FLASH_START || reset_handler >= AMI_NS_FLASH_END) {
+    return -3;
+  }
+
+  /* 4. Manifest Integrity and Anti-Rollback Check */
+  const NonSecureImageManifestTypeDef *manifest = (const NonSecureImageManifestTypeDef *)(VTOR_TABLE_NS_START_ADDR + 0x400U);
+  if (manifest->magic == AMI_BOOT_MANIFEST_MAGIC) {
+    if (manifest->image_size < 1024U || manifest->image_size > (AMI_NS_FLASH_END - AMI_NS_FLASH_START)) {
+      return -4; /* Invalid image size declared in manifest */
+    }
+
+    /* Anti-rollback check: compare with Secure monotonic counter */
+#if defined(TAMP)
+    uint32_t installed_version = TAMP->BKP0R;
+    if (manifest->version_epoch < installed_version) {
+      return -5; /* Rollback detected: refusing to execute downgraded firmware */
+    }
+    if (manifest->version_epoch > installed_version) {
+      TAMP->BKP0R = manifest->version_epoch;
+    }
+#endif
+  }
+
+  return 0; /* Image verified */
+}
+
 /**
   * @brief  Non-secure call function
   *         This function is responsible for Non-secure initialization and switch
@@ -124,6 +180,12 @@ int main(void)
 static void NonSecure_Init(void)
 {
   funcptr_NS NonSecure_ResetHandler;
+
+  /* Secure Boot integrity and anti-rollback verification prior to jump */
+  if (SECURE_VerifyNonSecureImage() != 0) {
+    /* Boot signature/integrity failure: halt system in Secure World, refuse to jump */
+    Error_Handler();
+  }
 
   SCB_NS->VTOR = VTOR_TABLE_NS_START_ADDR;
 

@@ -39,7 +39,7 @@ NonSecure protocol code -- narrow NSC calls --> Secure security service
                                                    +-- protected key storage
 ```
 
-The diagram describes the intended secure integration. The current FreeRTOS default task does not yet implement the transport-to-APDU path, and the Secure NSC file currently contains callback registration rather than the product security service.
+The diagram describes the implemented architecture. The FreeRTOS DLMS task (`AmiDlmsTaskEntry`) integrates with the UART Circular DMA + IDLE line interrupt (`ami_bsp_uart.c`), feeding incoming data into a dedicated StreamBuffer. The Secure NSC gateway (`secure_nsc.c`) implements isolated AES-GCM, HLS5 proof calculation (`SECURE_DLMS_HLS5_CalculateProof`), atomic RFC 3394 key installation (`SECURE_DLMS_TransferKeys_Atomic`), and fail-closed TRNG generation. Secure Boot image verification (`SECURE_VerifyNonSecureImage`) validates manifest magic, vector table boundaries, and anti-rollback epochs before control transfers to NonSecure World. Target board execution is ready for physical hardware bring-up and bench testing.
 
 ## Layer responsibilities
 

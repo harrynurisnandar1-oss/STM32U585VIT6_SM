@@ -46,7 +46,14 @@ typedef enum
   SECURE_KEY_KEK    = 0x04U
 } SECURE_KeyIdTypeDef;
 
-#define SECURE_FACTORY_PROVISION_TOKEN  0x504C4E31U /* 'PLN1' */
+#define SECURE_ERROR_GENERIC           -1
+#define SECURE_ERROR_RNG_FAIL          -2
+#define SECURE_ERROR_AUTH_FAIL         -3
+#define SECURE_ERROR_INVALID_KEY       -4
+#define SECURE_ERROR_LOCKED            -5
+#define SECURE_ERROR_UNAUTHORIZED      -6
+#define SECURE_ERROR_NO_KEK            -7
+#define SECURE_ERROR_UNPROVISIONED     -8
 
 typedef struct
 {
@@ -110,6 +117,21 @@ int SECURE_TRNG_GetBytes(uint8_t *output, uint32_t length);
 int SECURE_DLMS_HLS5_Verify(const uint8_t *server_challenge,
                            const uint8_t *client_challenge,
                            const uint8_t *gmac_response);
+
+/**
+ * @brief Calculate DLMS HLS5 GMAC server authentication proof using isolated Secure World AK.
+ * @param challenge 16-byte challenge.
+ * @param challenge_len Must be 16.
+ * @param proof_out Output buffer for 16-byte GMAC proof.
+ * @param proof_capacity Must be at least 16.
+ * @param proof_len Pointer to receive length written (16).
+ * @return 0 on success, negative error code on failure.
+ */
+int SECURE_DLMS_HLS5_CalculateProof(const uint8_t *challenge,
+                                   uint32_t challenge_len,
+                                   uint8_t *proof_out,
+                                   uint32_t proof_capacity,
+                                   uint32_t *proof_len);
 
 /**
  * @brief Secure AES-GCM encryption / decryption engine using Secure World hardware SAES.

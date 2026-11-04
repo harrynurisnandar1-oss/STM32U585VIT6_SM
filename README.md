@@ -10,8 +10,8 @@ Fokus pekerjaan E2 adalah menyediakan komunikasi meter melalui DLMS/COSEM dan me
 
 - **Protokol DLMS/COSEM & ACSE:** Pemrosesan asosiasi AARQ/AARE, negosiasi conformance dinamis (`Get` + `SelectiveAccess`), Max PDU size negotiation, penanganan status disconnect, dan silent drop sesuai standar CTT.
 - **HDLC Data Link Layer:** Parser streaming deterministik zero-heap $O(1)$, framing Frame Format Type 3 (`0xA0`), dual-stage CRC-16 CCITT (HCS & FCS) dengan resiliensi transparent flag `0x7E`, stripping/auto-wrapping LLC sublayer (`0xE6 0xE6 0x00` / `0xE6 0xE7 0x00`), dan negosiasi parameter SNRM/UA.
-- **Data Model COSEM & Katalog PLN:** Pemetaan katalog lengkap 276 kode OBIS standar PLN pascabayar (`ami_obis_catalog.h`) ke dalam 22 kategori fungsional, serta implementasi aktif 13 objek esensial dalam Association View yang siap diakses via xDLMS `GET`.
-- **Profile Generic & Selective Access:** Implementasi buffer histori Class 7 untuk Event Log, Billing Profile, dan Load Profile 15-menit (12 kanal daya/tegangan/arus) dengan dukungan Selector 1 (DateTime Range) dan Selector 2 (Entry Index Range).
+- **Data Model COSEM & Katalog PLN:** Pemetaan katalog lengkap 276 kode OBIS standar PLN pascabayar (`ami_obis_catalog.h`) ke dalam 22 kategori fungsional, serta implementasi aktif 49 objek standar PLN dalam Association View yang siap diakses via xDLMS `GET` dan tersegmentasi rapi via General Block Transfer (GBT).
+- **Profile Generic & Selective Access:** Implementasi buffer histori Class 7 untuk Tamper Event Logbook (3 Capture Objects: Clock, Event Code, Status Register, mendukung 9 Modus Tamper PLN), Monthly Billing Profile, dan Load Profile 15-menit (23 kanal lengkap: energi kumulatif, kuadran Q1..Q4, tegangan, arus fasa/netral, daya sesaat, PF, frekuensi, THD) dengan dukungan Selector 1 (DateTime Range) dan Selector 2 (Entry Index Range).
 - **Keamanan Protokol & APDU Ciphering:**
   - Penegakan fail-closed policy: Firmware menolak No-Auth, LLS, HLS3/MD5, HLS4/SHA-1, dan challenge bukan 16 byte.
   - DLMS Security Suite 0 (`glo-get`, `glo-set`, `glo-action`) dengan enkripsi terotentikasi AES-128-GCM, Security Control `0x30`, dan 12-byte Nonce/IV.
@@ -29,7 +29,10 @@ E2 menangani kontrak data antara sumber data meter dan protokol: objek/OBIS yang
 
 Tabel berikut merangkum status implementasi sistem Smart Meter 3-Fasa berdasarkan pembagian fase pengembangan **Spin 1 (Prototipe / Purwarupa)** dan **Spin 2 (Target Hardware Produksi & Sertifikasi)** sesuai standar **SPLN D3.006:2021**, **SPLN D5.002:2024**, dan **IEC 62056**.
 
-Seluruh fitur berbasis perangkat lunak, logika protokol, state machine, dan data model (**100% dari fase software tanpa ketergantungan hardware**) telah selesai diimplementasikan dan terverifikasi melalui **14/14 suite CTest host (100% Passed)**. Sisa pekerjaan yang berstatus **BELUM** adalah integrasi langsung dengan perangkat keras fisik (chip silikon STM32U585, IC ADE9000, pengujian lab meter PLN).
+Pemisahan status secara tegas dan transparan:
+1. **Layer Software, Logika Protokol & Data Model (Simulasi Host)**: **100% Selesai & Terverifikasi** melalui **14/14 suite CTest host (100% Passed)**.
+2. **Layer Driver Firmware Target STM32U5 & Metrologi ADE9000**: **Selesai Diimplementasikan di Kode Sumber** (HAL UART/SPI aktif, DMA circular buffer IDLE driver, verifikasi return code ADE9000, secure boot manifest validator, dan TRNG fail-closed), saat ini berstatus **Menunggu Flashing & Uji Bench Perangkat Keras Fisik (Bench Testing Required)**.
+3. **Sertifikasi Formal & Uji Lab**: **Belum Dikerjakan (Memerlukan Lab PLN / CTT Tool)**.
 
 | Area / Komponen | Item Pekerjaan | Status | Catatan / Lokasi Implementasi |
 |---|---|:---:|---|
@@ -38,8 +41,8 @@ Seluruh fitur berbasis perangkat lunak, logika protokol, state machine, dan data
 | **Protokol HDLC** | Stripping/auto-wrapping LLC sublayer (`0xE6 0xE6 0x00` / `0xE6 0xE7 0x00`) | **SUDAH** | Memenuhi kepatuhan IEC 62056-46 pada I-Frame APDU |
 | **Protokol ACSE** | State machine AARQ/AARE, negosiasi conformance dinamis, Max PDU | **SUDAH** | Terverifikasi di `NonSecure/AMI/Src/ami_dlms_association.c` |
 | **Data Model COSEM** | Pemetaan katalog lengkap 276 kode OBIS standar PLN pascabayar | **SUDAH** | Didefinisikan dalam 22 kategori di `NonSecure/AMI/Inc/ami_obis_catalog.h` |
-| **Data Model COSEM** | Implementasi Association View terdaftar (13 objek esensial) via `GET` | **SUDAH** | 13 objek terverifikasi (termasuk Load Profile 15-menit `1.0.99.1.0.255`) |
-| **Data Model COSEM** | Selective Access Class 7 (rentang waktu Clock & rentang entri baris) | **SUDAH** | Selector 1 & 2 terimplementasi untuk Load Profile, Billing, dan Event Log |
+| **Data Model COSEM** | Implementasi Association View terdaftar (49 objek aktif) via `GET` | **SUDAH** | 49 objek terverifikasi (termasuk Load Profile 23-kanal `1.0.99.1.0.255`) |
+| **Data Model COSEM** | Selective Access Class 7 (rentang waktu Clock & rentang entri baris) | **SUDAH** | Selector 1 & 2 terimplementasi untuk Load Profile 23-kanal, Billing, dan Tamper Log (9 Modus Tamper) |
 | **Keamanan Host** | Core Kriptografi mandiri AES-128 NIST FIPS 197 & GHASH GF(2^128) | **SUDAH** | Lolos 100% Known Answer Test (KAT) NIST SP 800-38D Case 1, 2, 4 |
 | **Keamanan Host** | 4-Pass Mutual Authentication HLS 5 (GMAC) OID `2.16.756.5.8.2.5` | **SUDAH** | Constant-time verification & zeroization di `ami_security.c` |
 | **Keamanan Port** | Penegakan fail-closed policy (blokir No-Auth & LLS pada build firmware) | **SUDAH** | `#if !defined(STM32U585xx)` mengisolasi helper development |
@@ -62,12 +65,12 @@ Seluruh fitur berbasis perangkat lunak, logika protokol, state machine, dan data
 | **Data Model Lanjutan** | Ekspansi objek Association View (49 Objek Aktif Standar PLN) | **SUDAH** | Multi-tarif WBP/LWBP (Tarif 1-4), Power Quality (THD V/I, PF, Freq), Demand Limiter Class 71 (`ami_cosem_model.c` & `ami_dlms_apdu.c`) |
 | **Protokol Lanjutan** | General Block Transfer (GBT) untuk data profil historis besar | **SUDAH** | Pemotongan APDU melebihi buffer threshold, block numbering, last block flag (`ami_dlms_block_transfer.c` & `test_ami_block_transfer.c`) |
 |---|---|---|---|
-| *KELOMPOK 2: BELUM* | **Perlu Hardware Fisik (Target Silicon STM32U585 / ADE9000 / Lab PLN)** | | |
-| **Hardware TrustZone** | Implementasi driver hardware SAES/AES-GCM di Secure World (`Secure/`) | **BELUM (Perlu HW)** | Menghubungkan fungsi NSC ke register peripheral SAES hardware STM32U5 |
-| **Hardware Security** | Integrasi Hardware TRNG fisik STM32U5 (NIST SP 800-90B / AIS-31) | **BELUM (Perlu HW)** | Menghasilkan Server Challenge 16-byte berbasis entropi acak fisik |
-| **Hardware Driver** | Integrasi physical UART/Optical Probe DMA Circular Buffer | **BELUM (Perlu HW)** | Menghubungkan ring buffer DMA fisik STM32U5 dengan `ami_dlms_port.c` |
-| **Metrologi ADE9000** | Task FreeRTOS akuisisi register energi/tegangan riil via SPI ADE9000 | **BELUM (Perlu HW)** | Komunikasi SPI fisik dengan IC ADE9000 dan kalibrasi metrologi |
-| **Keamanan Boot** | Secure Boot (SBSFU/MCUboot) & Verifikasi Digital Signature FOTA | **BELUM (Perlu HW)** | Memvalidasi integritas dan rollback counter sebelum eksekusi image |
+| *KELOMPOK 2: KESIAPAN TARGET HARDWARE & SERTIFIKASI* | **Status Target Hardware (STM32U585 / ADE9000 / Lab PLN)** | | |
+| **Hardware Driver UART** | Driver UART DMA Circular Buffer & IDLE line interrupt (`ami_bsp_uart.c`, `stm32u5xx_it.c`) | **Kode Selesai (Perlu Uji Board)** | HAL UART aktif, stream buffer FreeRTOS terhubung; menunggu uji kabel serial/optik |
+| **Metrologi ADE9000** | Pemeriksaan ketat SPI return code, fail-closed snapshot, scaling 3-fasa (`ami_ade9000.c`) | **Kode Selesai (Perlu Uji Board)** | Menolak data kotor saat SPI gagal; menunggu kalibrasi register fisik IC ADE9000 |
+| **Hardware TRNG** | Generator acak fisik fail-closed STM32U5 tanpa fallback LCG (`secure_nsc.c`) | **Kode Selesai (Perlu Uji Board)** | Otomatis abort jika CECS/SECS/timeout; menunggu running pada silikon STM32U5 |
+| **Keamanan Boot** | Secure Boot Manifest Verification (Magic `0x504C4E21`, size, version epoch, SHA-256) | **Kode Selesai (Perlu Uji Board)** | Validasi pra-jump di `Secure/Core/Src/main.c`; menunggu flashing signed image |
+| **Hardware SAES** | Implementasi akselerator SAES hardware STM32U5 di Secure World (`Secure/`) | **BELUM (Perlu HW)** | Menghubungkan fungsi NSC ke register peripheral SAES hardware STM32U5 |
 | **Keamanan Fisik** | Penguncian Readout Protection (RDP Level 1/2) & penonaktifan JTAG/SWD | **BELUM (Perlu HW)** | Mencegah dumping firmware dan memori kunci melalui debugger fisik |
 | **Sertifikasi** | Uji formal DLMS User Association Conformance Test Tool (CTT) & HES PLN | **BELUM (Perlu Lab)** | Sertifikasi kepatuhan penuh standar utilitas sebelum komersialisasi |
 

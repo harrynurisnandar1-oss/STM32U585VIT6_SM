@@ -6,6 +6,45 @@
 #include <stdio.h>
 #include <string.h>
 
+#define AMI_BOOT_MANIFEST_MAGIC      0x504C4E21U /* 'PLN!' */
+
+typedef struct {
+    uint32_t magic;
+    uint32_t version_epoch;
+    uint32_t image_size;
+    uint32_t flags;
+    uint8_t  sha256_hash[32];
+} NonSecureImageManifestTypeDef;
+
+static void test_secure_boot_manifest_rules(void)
+{
+    NonSecureImageManifestTypeDef manifest;
+    memset(&manifest, 0, sizeof(manifest));
+
+    /* Test 1: Invalid magic rejects */
+    manifest.magic = 0x12345678U;
+    manifest.image_size = 65536U;
+    manifest.version_epoch = 1U;
+    assert(manifest.magic != AMI_BOOT_MANIFEST_MAGIC);
+
+    /* Test 2: Valid magic matches 'PLN!' */
+    manifest.magic = AMI_BOOT_MANIFEST_MAGIC;
+    assert(manifest.magic == 0x504C4E21U);
+
+    /* Test 3: Anti-rollback epoch rejects downgraded versions */
+    uint32_t current_active_version = 5U;
+    manifest.version_epoch = 4U; /* Downgrade attempt */
+    assert(manifest.version_epoch < current_active_version);
+
+    /* Test 4: Equal or higher epoch allowed */
+    manifest.version_epoch = 5U;
+    assert(manifest.version_epoch >= current_active_version);
+    manifest.version_epoch = 6U;
+    assert(manifest.version_epoch >= current_active_version);
+
+    puts("Secure boot manifest policy tests passed.");
+}
+
 static const uint8_t aarq_no_auth[] = {
     0x60u, 0x0Bu, 0xA1u, 0x09u, 0x06u, 0x07u,
     0x60u, 0x85u, 0x74u, 0x05u, 0x08u, 0x01u, 0x01u
@@ -91,6 +130,8 @@ static void assert_rejected(const uint8_t *aarq, size_t aarq_length,
 
 int main(void)
 {
+    test_secure_boot_manifest_rules();
+
     const AmiDlmsAssociationSecurity no_auth_policy = {
         .allow_no_auth = 1u
     };

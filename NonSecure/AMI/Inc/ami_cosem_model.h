@@ -21,9 +21,12 @@ extern "C" {
 #define AMI_COSEM_REGISTER_SAMPLE_MAX 64u
 
 #define AMI_COSEM_PROFILE_MAX_ENTRIES 8u
-#define AMI_COSEM_AXDR_ENCODED_MAX 1024u
+#define AMI_COSEM_AXDR_ENCODED_MAX 2048u
 #define AMI_COSEM_PROFILE_SELECTOR_RANGE 1u
 #define AMI_COSEM_PROFILE_SELECTOR_ENTRY 2u
+
+#define AMI_COSEM_LOAD_PROFILE_CHANNELS 23u
+#define AMI_COSEM_TAMPER_LOG_COLUMNS 3u
 
 #define AMI_COSEM_VALID_EVENT_LOG (1u << 11)
 #define AMI_COSEM_VALID_BILLING_PROFILE (1u << 12)
@@ -64,6 +67,7 @@ typedef struct {
 typedef struct {
     AmiCosemDateTime timestamp;
     uint8_t event_code;
+    uint32_t status;
 } AmiCosemEventLogEntry;
 
 typedef struct {
@@ -81,8 +85,19 @@ typedef struct {
     uint64_t active_export_wh;
     uint64_t reactive_import_varh;
     uint64_t reactive_export_varh;
+    uint64_t reactive_q1_varh;
+    uint64_t reactive_q2_varh;
+    uint64_t reactive_q3_varh;
+    uint64_t reactive_q4_varh;
     uint32_t phase_voltage_mv[3];
     uint32_t phase_current_ma[3];
+    uint32_t neutral_current_ma;
+    uint32_t active_power_watts;
+    uint32_t reactive_power_vars;
+    int32_t  power_factor;
+    uint32_t frequency_mhz;
+    uint32_t thd_voltage_percent_x10;
+    uint32_t thd_current_percent_x10;
 } AmiCosemLoadProfileEntry;
 
 /* Raw register values supplied by metrology. The model only accepts logical

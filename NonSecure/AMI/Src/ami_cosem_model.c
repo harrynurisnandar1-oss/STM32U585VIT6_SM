@@ -177,7 +177,13 @@ static const ExtendedRegisterDefinition extended_registers[] = {
     EXT(1,0,67,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
     EXT(1,0,28,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
     EXT(1,0,48,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
-    EXT(1,0,68,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH)
+    EXT(1,0,68,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+
+    /* Total Reactive Energy per Quadrant Q1..Q4 */
+    EXT(1,0,5,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,6,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,7,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH),
+    EXT(1,0,8,8,0,255, AMI_COSEM_TYPE_LONG64_UNSIGNED, 0, COSEM_UNIT_REACTIVE_ENERGY_VARH)
 };
 #undef EXT
 #undef OBIS
@@ -208,6 +214,14 @@ static const uint8_t reactive_import_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH]
     {1, 0, 3, 8, 0, 255};
 static const uint8_t reactive_export_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
     {1, 0, 4, 8, 0, 255};
+static const uint8_t reactive_q1_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {1, 0, 5, 8, 0, 255};
+static const uint8_t reactive_q2_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {1, 0, 6, 8, 0, 255};
+static const uint8_t reactive_q3_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {1, 0, 7, 8, 0, 255};
+static const uint8_t reactive_q4_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {1, 0, 8, 8, 0, 255};
 static const uint8_t voltage_a_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
     {1, 0, 32, 7, 0, 255};
 static const uint8_t voltage_b_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
@@ -220,6 +234,20 @@ static const uint8_t current_b_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
     {1, 0, 51, 7, 0, 255};
 static const uint8_t current_c_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
     {1, 0, 71, 7, 0, 255};
+static const uint8_t current_neutral_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {1, 0, 91, 7, 0, 255};
+static const uint8_t active_power_total_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {1, 0, 1, 7, 0, 255};
+static const uint8_t reactive_power_total_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {1, 0, 3, 7, 0, 255};
+static const uint8_t power_factor_total_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {1, 0, 13, 7, 0, 255};
+static const uint8_t frequency_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {1, 0, 14, 7, 0, 255};
+static const uint8_t thd_voltage_l1_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {1, 0, 32, 7, 124, 255};
+static const uint8_t thd_current_l1_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
+    {1, 0, 31, 7, 124, 255};
 
 static const uint8_t security_setup_logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH] =
     {0, 0, 43, 0, 0, 255};
@@ -233,7 +261,8 @@ typedef struct {
 
 static const CaptureObject event_capture_objects[] = {
     {AMI_COSEM_CLOCK_CLASS_ID, clock_logical_name, 2, 0},
-    {1u, event_code_logical_name, 2, 0}
+    {1u, event_code_logical_name, 2, 0},
+    {1u, status_reg_logical_name, 2, 0}
 };
 static const CaptureObject billing_capture_objects[] = {
     {AMI_COSEM_CLOCK_CLASS_ID, clock_logical_name, 2, 0},
@@ -249,12 +278,23 @@ static const CaptureObject load_profile_capture_objects[] = {
     {AMI_COSEM_REGISTER_CLASS_ID, active_export_logical_name, 2, 0},
     {AMI_COSEM_REGISTER_CLASS_ID, reactive_import_logical_name, 2, 0},
     {AMI_COSEM_REGISTER_CLASS_ID, reactive_export_logical_name, 2, 0},
+    {AMI_COSEM_REGISTER_CLASS_ID, reactive_q1_logical_name, 2, 0},
+    {AMI_COSEM_REGISTER_CLASS_ID, reactive_q2_logical_name, 2, 0},
+    {AMI_COSEM_REGISTER_CLASS_ID, reactive_q3_logical_name, 2, 0},
+    {AMI_COSEM_REGISTER_CLASS_ID, reactive_q4_logical_name, 2, 0},
     {AMI_COSEM_REGISTER_CLASS_ID, voltage_a_logical_name, 2, 0},
     {AMI_COSEM_REGISTER_CLASS_ID, voltage_b_logical_name, 2, 0},
     {AMI_COSEM_REGISTER_CLASS_ID, voltage_c_logical_name, 2, 0},
     {AMI_COSEM_REGISTER_CLASS_ID, current_a_logical_name, 2, 0},
     {AMI_COSEM_REGISTER_CLASS_ID, current_b_logical_name, 2, 0},
-    {AMI_COSEM_REGISTER_CLASS_ID, current_c_logical_name, 2, 0}
+    {AMI_COSEM_REGISTER_CLASS_ID, current_c_logical_name, 2, 0},
+    {AMI_COSEM_REGISTER_CLASS_ID, current_neutral_logical_name, 2, 0},
+    {AMI_COSEM_REGISTER_CLASS_ID, active_power_total_logical_name, 2, 0},
+    {AMI_COSEM_REGISTER_CLASS_ID, reactive_power_total_logical_name, 2, 0},
+    {AMI_COSEM_REGISTER_CLASS_ID, power_factor_total_logical_name, 2, 0},
+    {AMI_COSEM_REGISTER_CLASS_ID, frequency_logical_name, 2, 0},
+    {AMI_COSEM_REGISTER_CLASS_ID, thd_voltage_l1_logical_name, 2, 0},
+    {AMI_COSEM_REGISTER_CLASS_ID, thd_current_l1_logical_name, 2, 0}
 };
 
 static int put_byte(AmiCosemData *out, size_t *offset, uint8_t value)
@@ -355,16 +395,25 @@ static int compare_profile_datetime(const AmiCosemDateTime *left,
     }
     return 0;
 }
+
 static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
                                    const uint8_t *logical_name,
                                    uint8_t attribute_id,
                                    const AmiCosemProfileSelection *selection,
                                    AmiCosemData *out)
 {
-    const int is_event = (memcmp(logical_name, event_log_logical_name,
-                                 AMI_COSEM_LOGICAL_NAME_LENGTH) == 0) ||
-                         (memcmp(logical_name, tamper_log_logical_name,
-                                 AMI_COSEM_LOGICAL_NAME_LENGTH) == 0);
+    int specific_tamper_code = -1;
+    const int is_generic_event = (memcmp(logical_name, event_log_logical_name,
+                                         AMI_COSEM_LOGICAL_NAME_LENGTH) == 0) ||
+                                 (memcmp(logical_name, tamper_log_logical_name,
+                                         AMI_COSEM_LOGICAL_NAME_LENGTH) == 0);
+    const int is_specific_tamper = (logical_name[0] == 1 && logical_name[1] == 97 &&
+                                    logical_name[2] == 99 && logical_name[3] == 98 &&
+                                    logical_name[5] == 255);
+    if (is_specific_tamper) {
+        specific_tamper_code = (int)logical_name[4];
+    }
+    const int is_event = is_generic_event || is_specific_tamper;
     const int is_billing = (memcmp(logical_name, billing_profile_logical_name,
                                    AMI_COSEM_LOGICAL_NAME_LENGTH) == 0) ||
                            (memcmp(logical_name, billing_profile_alt_logical_name,
@@ -442,6 +491,10 @@ static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
             return AMI_COSEM_INVALID_ARGUMENT;
         int encode_failed = 0;
         for (size_t i = 0; i < count; ++i) {
+            if (is_event && specific_tamper_code >= 0 &&
+                snapshot->event_log[i].event_code != (uint8_t)specific_tamper_code) {
+                continue;
+            }
             if (selection != NULL && selection->selector == AMI_COSEM_PROFILE_SELECTOR_ENTRY &&
                 (i < first_entry || i >= last_entry)) continue;
             const AmiCosemDateTime *timestamp = is_load ? &snapshot->load_profile[i].timestamp :
@@ -453,7 +506,7 @@ static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
 
             if (is_load) {
                 if (!put_byte(out, &offset, AMI_COSEM_TYPE_STRUCTURE) ||
-                    !put_byte(out, &offset, 12u) ||
+                    !put_byte(out, &offset, (uint8_t)AMI_COSEM_LOAD_PROFILE_CHANNELS) ||
                     !put_datetime(out, &offset, timestamp) ||
                     !put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
                     !put_u32(out, &offset, snapshot->load_profile[i].status) ||
@@ -465,6 +518,14 @@ static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
                     !put_u64(out, &offset, snapshot->load_profile[i].reactive_import_varh) ||
                     !put_byte(out, &offset, AMI_COSEM_TYPE_LONG64_UNSIGNED) ||
                     !put_u64(out, &offset, snapshot->load_profile[i].reactive_export_varh) ||
+                    !put_byte(out, &offset, AMI_COSEM_TYPE_LONG64_UNSIGNED) ||
+                    !put_u64(out, &offset, snapshot->load_profile[i].reactive_q1_varh) ||
+                    !put_byte(out, &offset, AMI_COSEM_TYPE_LONG64_UNSIGNED) ||
+                    !put_u64(out, &offset, snapshot->load_profile[i].reactive_q2_varh) ||
+                    !put_byte(out, &offset, AMI_COSEM_TYPE_LONG64_UNSIGNED) ||
+                    !put_u64(out, &offset, snapshot->load_profile[i].reactive_q3_varh) ||
+                    !put_byte(out, &offset, AMI_COSEM_TYPE_LONG64_UNSIGNED) ||
+                    !put_u64(out, &offset, snapshot->load_profile[i].reactive_q4_varh) ||
                     !put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
                     !put_u32(out, &offset, snapshot->load_profile[i].phase_voltage_mv[0]) ||
                     !put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
@@ -476,7 +537,21 @@ static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
                     !put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
                     !put_u32(out, &offset, snapshot->load_profile[i].phase_current_ma[1]) ||
                     !put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
-                    !put_u32(out, &offset, snapshot->load_profile[i].phase_current_ma[2])) {
+                    !put_u32(out, &offset, snapshot->load_profile[i].phase_current_ma[2]) ||
+                    !put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
+                    !put_u32(out, &offset, snapshot->load_profile[i].neutral_current_ma) ||
+                    !put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
+                    !put_u32(out, &offset, snapshot->load_profile[i].active_power_watts) ||
+                    !put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
+                    !put_u32(out, &offset, snapshot->load_profile[i].reactive_power_vars) ||
+                    !put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG) ||
+                    !put_u32(out, &offset, (uint32_t)snapshot->load_profile[i].power_factor) ||
+                    !put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
+                    !put_u32(out, &offset, snapshot->load_profile[i].frequency_mhz) ||
+                    !put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
+                    !put_u32(out, &offset, snapshot->load_profile[i].thd_voltage_percent_x10) ||
+                    !put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
+                    !put_u32(out, &offset, snapshot->load_profile[i].thd_current_percent_x10)) {
                     encode_failed = 1;
                     break;
                 }
@@ -497,10 +572,12 @@ static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
                 }
             } else {
                 if (!put_byte(out, &offset, AMI_COSEM_TYPE_STRUCTURE) ||
-                    !put_byte(out, &offset, 2u) ||
+                    !put_byte(out, &offset, (uint8_t)AMI_COSEM_TAMPER_LOG_COLUMNS) ||
                     !put_datetime(out, &offset, timestamp) ||
                     !put_byte(out, &offset, AMI_COSEM_TYPE_UNSIGNED) ||
-                    !put_byte(out, &offset, snapshot->event_log[i].event_code)) {
+                    !put_byte(out, &offset, snapshot->event_log[i].event_code) ||
+                    !put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
+                    !put_u32(out, &offset, snapshot->event_log[i].status)) {
                     encode_failed = 1;
                     break;
                 }
@@ -527,8 +604,19 @@ static AmiCosemStatus read_profile(const AmiCosemRegisterSnapshot *snapshot,
         goto encoded;
     case 7:
         if ((snapshot->valid_mask & valid_bit) == 0u) return AMI_COSEM_VALUE_UNAVAILABLE;
-        if (!put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
-            !put_u32(out, &offset, (uint32_t)count)) break;
+        {
+            uint32_t active_entries = (uint32_t)count;
+            if (is_event && specific_tamper_code >= 0) {
+                active_entries = 0u;
+                for (size_t k = 0; k < count; ++k) {
+                    if (snapshot->event_log[k].event_code == (uint8_t)specific_tamper_code) {
+                        active_entries++;
+                    }
+                }
+            }
+            if (!put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
+                !put_u32(out, &offset, active_entries)) break;
+        }
         goto encoded;
     case 8:
         if (!put_byte(out, &offset, AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED) ||
@@ -798,12 +886,12 @@ AmiCosemStatus ami_cosem_register_read_selected(
         case 3:
             out->type = AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED;
             out->length = sizeof(uint32_t);
-            out->value.double_long_unsigned = snapshot->limiter_threshold_active_watts;
+            out->value.double_long_unsigned = snapshot->limiter_threshold_normal_watts;
             return AMI_COSEM_OK;
         case 4:
             out->type = AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED;
             out->length = sizeof(uint32_t);
-            out->value.double_long_unsigned = snapshot->limiter_threshold_normal_watts;
+            out->value.double_long_unsigned = snapshot->limiter_threshold_active_watts;
             return AMI_COSEM_OK;
         case 5:
             out->type = AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED;
@@ -816,36 +904,15 @@ AmiCosemStatus ami_cosem_register_read_selected(
             out->value.double_long_unsigned = snapshot->limiter_min_under_threshold_duration_sec;
             return AMI_COSEM_OK;
         case 7: {
-            /* Emergency Profile: Structure (ID=0, Time=empty) */
-            static const uint8_t emerg_prof[] = { 0x02, 0x02, 0x11, 0x00, 0x09, 0x00 };
-            out->type = AMI_COSEM_TYPE_ENCODED;
-            out->length = sizeof(emerg_prof);
-            memcpy(out->value.encoded, emerg_prof, sizeof(emerg_prof));
-            return AMI_COSEM_OK;
-        }
-        case 8: {
-            /* Emergency Profile Group ID List: empty array */
-            static const uint8_t group_list[] = { 0x01, 0x00 };
-            out->type = AMI_COSEM_TYPE_ENCODED;
-            out->length = sizeof(group_list);
-            memcpy(out->value.encoded, group_list, sizeof(group_list));
-            return AMI_COSEM_OK;
-        }
-        case 9:
-            out->type = AMI_COSEM_TYPE_ENUM;
-            out->length = 1u;
-            out->value.unsigned_integer = snapshot->limiter_emergency_profile_active;
-            return AMI_COSEM_OK;
-        case 10: {
-            /* Actions: Structure (action_over, action_under) -> script table 0.0.10.2.105.255 */
-            static const uint8_t actions_val[] = {
-                0x02, 0x02,
-                0x02, 0x02, 0x09, 0x06, 0, 0, 10, 2, 105, 255, 0x12, 0x00, 0x01,
-                0x02, 0x02, 0x09, 0x06, 0, 0, 10, 2, 105, 255, 0x12, 0x00, 0x02
+            /* Actions: Structure of two script actions (Emergency Script, Normal Script) */
+            static const uint8_t actions_data[] = {
+                0x02, 0x02,                         /* Structure, 2 elements */
+                0x02, 0x02, 0x09, 0x06, 0, 0, 10, 0, 105, 255, 0x12, 0x00, 0x01, /* Action 1: Script Table 0.0.10.0.105.255, ID 1 */
+                0x02, 0x02, 0x09, 0x06, 0, 0, 10, 0, 105, 255, 0x12, 0x00, 0x02  /* Action 2: Script Table 0.0.10.0.105.255, ID 2 */
             };
             out->type = AMI_COSEM_TYPE_ENCODED;
-            out->length = sizeof(actions_val);
-            memcpy(out->value.encoded, actions_val, sizeof(actions_val));
+            out->length = sizeof(actions_data);
+            memcpy(out->value.encoded, actions_data, sizeof(actions_data));
             return AMI_COSEM_OK;
         }
         default:
@@ -854,8 +921,8 @@ AmiCosemStatus ami_cosem_register_read_selected(
     }
 
     if (class_id == AMI_COSEM_DISCONNECT_CONTROL_CLASS_ID) {
-        static const uint8_t discon_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 96, 3, 10, 255};
-        if (memcmp(logical_name, discon_ln, AMI_COSEM_LOGICAL_NAME_LENGTH) != 0) {
+        static const uint8_t disconnect_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 96, 3, 10, 255};
+        if (memcmp(logical_name, disconnect_ln, AMI_COSEM_LOGICAL_NAME_LENGTH) != 0) {
             return AMI_COSEM_OBJECT_NOT_FOUND;
         }
         memset(out, 0, sizeof(*out));
@@ -863,20 +930,23 @@ AmiCosemStatus ami_cosem_register_read_selected(
         case 1:
             out->type = AMI_COSEM_TYPE_OCTET_STRING;
             out->length = AMI_COSEM_LOGICAL_NAME_LENGTH;
-            memcpy(out->value.logical_name, discon_ln, AMI_COSEM_LOGICAL_NAME_LENGTH);
+            memcpy(out->value.logical_name, disconnect_ln, AMI_COSEM_LOGICAL_NAME_LENGTH);
             return AMI_COSEM_OK;
         case 2:
-            out->type = AMI_COSEM_TYPE_ENUM;
+            /* output_state: boolean */
+            out->type = AMI_COSEM_TYPE_UNSIGNED;
             out->length = 1u;
-            out->value.unsigned_integer = snapshot->disconnect_output_state;
+            out->value.unsigned_integer = snapshot->disconnect_output_state ? 1u : 0u;
             return AMI_COSEM_OK;
         case 3:
+            /* control_state: enum (0 = disconnected, 1 = connected, 2 = ready_for_reconnection) */
             out->type = AMI_COSEM_TYPE_ENUM;
             out->length = 1u;
             out->value.unsigned_integer = snapshot->disconnect_control_state;
             return AMI_COSEM_OK;
         case 4:
-            out->type = AMI_COSEM_TYPE_ENUM;
+            /* control_mode: unsigned integer */
+            out->type = AMI_COSEM_TYPE_UNSIGNED;
             out->length = 1u;
             out->value.unsigned_integer = snapshot->disconnect_control_mode;
             return AMI_COSEM_OK;

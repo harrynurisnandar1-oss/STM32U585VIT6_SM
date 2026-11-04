@@ -97,6 +97,8 @@ static void derive_device_unique_kek(uint8_t out_kek[16])
   }
 }
 
+#define SECURE_INTERNAL_FACTORY_TOKEN  0x504C4E31U /* 'PLN1' */
+
 static void ensure_secure_storage_init(void)
 {
   static int s_init = 0;
@@ -104,24 +106,12 @@ static void ensure_secure_storage_init(void)
 
   if (!s_secure_keys.is_provisioned) {
     derive_device_unique_kek(s_secure_keys.master_kek);
+    /* Operational keys remain unprovisioned (zeroed) until securely injected via RFC 3394 or Factory */
+    secure_memzero(s_secure_keys.guek, 16);
+    secure_memzero(s_secure_keys.gbek, 16);
+    secure_memzero(s_secure_keys.ak, 16);
   }
 
-  static const uint8_t DEFAULT_GUEK[16] = {
-    0xD0, 0xD1, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7,
-    0xD8, 0xD9, 0xDA, 0xDB, 0xDC, 0xDD, 0xDE, 0xDF
-  };
-  static const uint8_t DEFAULT_GBEK[16] = {
-    0xE0, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7,
-    0xE8, 0xE9, 0xEA, 0xEB, 0xEC, 0xED, 0xEE, 0xEF
-  };
-  static const uint8_t DEFAULT_AK[16] = {
-    0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7,
-    0xA8, 0xA9, 0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF
-  };
-
-  memcpy(s_secure_keys.guek, DEFAULT_GUEK, 16);
-  memcpy(s_secure_keys.gbek, DEFAULT_GBEK, 16);
-  memcpy(s_secure_keys.ak, DEFAULT_AK, 16);
   s_init = 1;
 }
 
@@ -212,57 +202,32 @@ CMSE_NS_ENTRY int SECURE_TRNG_GetBytes(uint8_t *output, uint32_t length)
     /* Wait for random data ready or timeout */
     uint32_t count = 20000;
     while ((RNG->SR & RNG_SR_DRDY) == 0 && (--count > 0));
-    if (count > 0 && (RNG->SR & (RNG_SR_SECS | RNG_SR_CECS)) == 0) {
-      uint32_t rnd = RNG->DR;
-      for (uint32_t b = 0; b < 4 && (i + b) < length; b++) {
-        output[i + b] = (uint8_t)(rnd >> (b * 8));
-      }
-    } else {
-      /* Cryptographic PRNG fallback with dynamic entropy if hardware timed out */
-      static uint32_t seed = 0;
-      if (seed == 0) {
-#if defined(UID_BASE)
-        const uint32_t *u = (const uint32_t *)UID_BASE;
-        seed = u[0] ^ u[1] ^ u[2] ^ 0x6C8E9B2Du;
-#else
-        seed = 0x6C8E9B2Du;
-#endif
-      }
-#if defined(SysTick)
-      seed ^= SysTick->VAL;
-#endif
-      for (uint32_t b = 0; b < 4 && (i + b) < length; b++) {
-        seed = seed * 1664525u + 1013904223u;
-        output[i + b] = (uint8_t)(seed >> 16);
-      }
+    if (count == 0 || (RNG->SR & (RNG_SR_SECS | RNG_SR_CECS)) != 0) {
+      /* FAIL-CLOSED: Fail immediately on RNG timeout, clock error, or seed error.
+       * Zero the output buffer and never fallback to predictable PRNG/LCG. */
+      secure_memzero(output, length);
+      RNG->SR &= ~(RNG_SR_SECS | RNG_SR_CECS);
+      return -2; /* Hardware TRNG Failure */
+    }
+
+    uint32_t rnd = RNG->DR;
+    for (uint32_t b = 0; b < 4 && (i + b) < length; b++) {
+      output[i + b] = (uint8_t)(rnd >> (b * 8));
     }
   }
   return 0;
 #else
-  /* Secure PRNG fallback with dynamic entropy */
-  static uint32_t seed = 0;
-  if (seed == 0) {
-#if defined(UID_BASE)
-    const uint32_t *u = (const uint32_t *)UID_BASE;
-    seed = u[0] ^ u[1] ^ u[2] ^ 0x6C8E9B2Du;
-#else
-    seed = 0x6C8E9B2Du;
-#endif
-  }
-#if defined(SysTick)
-  seed ^= SysTick->VAL;
-#endif
-  for (uint32_t i = 0; i < length; i++) {
-    seed = seed * 1664525u + 1013904223u;
-    output[i] = (uint8_t)(seed >> 16);
-  }
-  return 0;
+  /* Hardware without physical RNG must fail-closed */
+  secure_memzero(output, length);
+  return -2;
 #endif
 }
 
 CMSE_NS_ENTRY int SECURE_ProvisionMasterKey(const uint8_t *factory_kek, uint32_t auth_token)
 {
-  if (auth_token != SECURE_FACTORY_PROVISION_TOKEN) {
+  if (auth_token != SECURE_INTERNAL_FACTORY_TOKEN) {
+    return -1; /* Unauthorized */
+  }
     return -1; /* Unauthorized */
   }
   if (factory_kek == NULL || validate_ns_buffer(factory_kek, 16, 0) != 0) {
@@ -895,6 +860,9 @@ CMSE_NS_ENTRY int SECURE_DLMS_HLS5_Verify(const uint8_t *server_challenge,
   }
 
   ensure_secure_storage_init();
+  if (!s_secure_keys.is_provisioned) {
+    return -8; /* SECURE_ERROR_UNPROVISIONED: Refuse HLS verify if keys not provisioned */
+  }
 
   /* Compute true DLMS HLS5 GMAC over challenges using isolated s_secure_keys.ak */
   uint8_t aad[33];
@@ -925,6 +893,46 @@ CMSE_NS_ENTRY int SECURE_DLMS_HLS5_Verify(const uint8_t *server_challenge,
   }
 }
 
+CMSE_NS_ENTRY int SECURE_DLMS_HLS5_CalculateProof(const uint8_t *challenge,
+                                                 uint32_t challenge_len,
+                                                 uint8_t *proof_out,
+                                                 uint32_t proof_capacity,
+                                                 uint32_t *proof_len)
+{
+  if (challenge == NULL || proof_out == NULL || proof_len == NULL ||
+      challenge_len != 16 || proof_capacity < 16) {
+    return -1;
+  }
+  if (validate_ns_buffer(challenge, challenge_len, 0) != 0 ||
+      validate_ns_buffer(proof_out, 16, 1) != 0 ||
+      validate_ns_buffer(proof_len, sizeof(uint32_t), 1) != 0) {
+    return -1;
+  }
+
+  ensure_secure_storage_init();
+  if (!s_secure_keys.is_provisioned) {
+    return -8; /* SECURE_ERROR_UNPROVISIONED */
+  }
+
+  uint8_t aad[33];
+  aad[0] = 0x10; /* SC: authentication only */
+  memcpy(&aad[1], s_secure_keys.ak, 16);
+  memcpy(&aad[17], challenge, 16);
+
+  uint8_t computed_tag[16];
+  secure_aes_128_gcm_encrypt(
+      s_secure_keys.ak, challenge,
+      aad, sizeof(aad), NULL, 0, NULL,
+      computed_tag, sizeof(computed_tag));
+
+  memcpy(proof_out, computed_tag, 16);
+  *proof_len = 16;
+
+  secure_memzero(aad, sizeof(aad));
+  secure_memzero(computed_tag, sizeof(computed_tag));
+  return 0;
+}
+
 /**
   * @brief Secure AES-GCM encryption / decryption engine using Secure World hardware SAES.
   */
@@ -950,6 +958,11 @@ CMSE_NS_ENTRY int SECURE_DLMS_AES_GCM_Process(const SECURE_AesGcmParamsTypeDef *
   }
 
   ensure_secure_storage_init();
+  if (params->key_id != SECURE_KEY_MASTER && params->key_id != SECURE_KEY_KEK) {
+    if (!s_secure_keys.is_provisioned) {
+      return -8; /* SECURE_ERROR_UNPROVISIONED: Cannot encrypt/decrypt with operational key if not provisioned */
+    }
+  }
 
   const uint8_t *key_ptr = NULL;
   switch (params->key_id) {

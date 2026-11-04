@@ -124,11 +124,40 @@ static void test_ade9000_feed_cosem_snapshot(void) {
     printf("test_ade9000_feed_cosem_snapshot: PASS\n");
 }
 
+static int mock_failing_spi_transfer(uint16_t reg_addr, uint8_t is_read, uint32_t *data, void *user_data) {
+    (void)reg_addr;
+    (void)is_read;
+    (void)data;
+    (void)user_data;
+    return -1; /* Simulated hardware SPI transmission failure or disconnected cable */
+}
+
+static void test_ade9000_spi_error_handling(void) {
+    AmiAde9000Context ctx;
+    assert(ami_ade9000_init(&ctx, NULL, mock_failing_spi_transfer, NULL) == 0);
+
+    /* 1. Acquire must propagate SPI error code and clear is_valid */
+    int st = ami_ade9000_acquire_all(&ctx);
+    assert(st == AMI_ADE9000_ERR_SPI);
+    assert(ctx.scaled.is_valid == 0u);
+    assert(ctx.scaled.last_error_code == AMI_ADE9000_ERR_SPI);
+
+    /* 2. Snapshot feeder must reject feeding invalid data */
+    AmiCosemRegisterSnapshot snapshot;
+    memset(&snapshot, 0, sizeof(snapshot));
+    int feed_st = ami_ade9000_feed_cosem_snapshot(&ctx, &snapshot);
+    assert(feed_st == AMI_ADE9000_ERR_INVALID_DATA);
+    assert(snapshot.valid_mask == 0u); /* Zero valid mask ensures fail-closed behavior */
+
+    printf("test_ade9000_spi_error_handling: PASS\n");
+}
+
 int main(void) {
     printf("Starting ADE9000 Metrology Driver Tests...\n");
     test_ade9000_init_and_rw();
     test_ade9000_acquire_and_scale();
     test_ade9000_feed_cosem_snapshot();
+    test_ade9000_spi_error_handling();
     printf("All ADE9000 Metrology Driver Tests PASSED!\n");
     return 0;
 }

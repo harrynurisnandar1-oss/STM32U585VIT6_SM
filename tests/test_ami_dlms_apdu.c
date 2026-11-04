@@ -321,9 +321,9 @@ static void test_profile_entry_selective_access(void)
         sizeof(request), response, sizeof(response), &response_length) == AMI_DLMS_APDU_OK);
     assert(response_length > 6u && response[0] == 0xC4u && response[4] == 1u);
     assert(response[5] == 1u); /* exactly one row returned */
-    assert(response[6] == AMI_COSEM_TYPE_STRUCTURE);
-    assert(response[response_length - 2u] == AMI_COSEM_TYPE_UNSIGNED);
-    assert(response[response_length - 1u] == 2u);
+    assert(response[6] == AMI_COSEM_TYPE_STRUCTURE && response[7] == 3u);
+    assert(response[22] == AMI_COSEM_TYPE_UNSIGNED);
+    assert(response[23] == 2u);
 }
 
 static void test_profile_clock_range_selective_access(void)
@@ -363,7 +363,9 @@ static void test_profile_clock_range_selective_access(void)
         sizeof(request), response, sizeof(response), &response_length) == AMI_DLMS_APDU_OK);
     assert(response_length > 6u && response[0] == 0xC4u && response[4] == 1u);
     assert(response[5] == 1u); /* only the matching date is returned */
-    assert(response[response_length - 1u] == 4u);
+    assert(response[6] == AMI_COSEM_TYPE_STRUCTURE && response[7] == 3u);
+    assert(response[22] == AMI_COSEM_TYPE_UNSIGNED);
+    assert(response[23] == 4u);
 }
 
 static void test_load_profile_apdu_selective_access(void)
@@ -416,7 +418,7 @@ static void test_load_profile_apdu_selective_access(void)
     assert(response_length > 6u && response[0] == 0xC4u && response[3] == 0u);
     assert(response[4] == 1u); /* array tag */
     assert(response[5] == 1u); /* 1 row returned */
-    assert(response[6] == AMI_COSEM_TYPE_STRUCTURE && response[7] == 12u); /* 12 columns */
+    assert(response[6] == AMI_COSEM_TYPE_STRUCTURE && response[7] == 23u); /* 23 channels */
 }
 
 static void test_hls_requires_ciphered_apdu_and_returns_ciphered_response(void)

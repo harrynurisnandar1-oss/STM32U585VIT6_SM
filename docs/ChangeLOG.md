@@ -797,3 +797,77 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
   - `test_dc_dlms_port_wire_action_request`: Memvalidasi framing HDLC Action-Request Method 1 dan Method 2 end-to-end via DLMS port.
   - `test_dc_ciphered_action_request`: Memvalidasi eksekusi Action-Request terenkripsi AES-GCM HLS.
   - Hasil CTest: **14/14 tests PASS (100% Lulus)**.
+
+## [v2.17.0] - 2026-11-04
+
+### Changed & Fixed
+- **Remediasi Kesiapan Produksi Hardware I/O, Metrologi, dan Kriptografi**:
+  - **Aktivasi Driver Hardware HAL (`NonSecure/Core/Inc/stm32u5xx_hal_conf.h`)**:
+    - Mengaktifkan `#define HAL_UART_MODULE_ENABLED`, `#define HAL_USART_MODULE_ENABLED`, dan `#define HAL_SPI_MODULE_ENABLED`.
+  - **Driver Komunikasi UART/DMA Non-Blocking (`NonSecure/AMI/Inc/ami_bsp_uart.h`, `NonSecure/AMI/Src/ami_bsp_uart.c`)**:
+    - Implementasi circular DMA receive buffer 512 byte dengan deteksi IDLE line interrupt (`HAL_UARTEx_ReceiveToIdle_DMA`).
+    - Integrasi interrupt vector di `NonSecure/Core/Src/stm32u5xx_it.c` melalui `HAL_UARTEx_RxEventCallback()` langsung ke FreeRTOS StreamBuffer.
+  - **Kalkulasi Proof HLS 5 Otentik (`Secure/Core/Src/secure_nsc.c`, `Secure_nsclib/secure_nsc.h`, `NonSecure/AMI/Src/ami_dlms_port.c`)**:
+    - Penambahan fungsi Secure Gateway `SECURE_DLMS_HLS5_CalculateProof()` yang menghitung 16-byte GMAC Server Proof tag secara kriptografis riil.
+    - Perbaikan `ami_dlms_port.c` untuk secara eksplisit mendaftarkan cipher backend (`ami_dlms_port_set_cipher_backend()`).
+  - **Key Management & TRNG Fail-Closed (`Secure/Core/Src/secure_nsc.c`)**:
+    - Menghapus algoritma pseudo-random fallback LCG; kegagalan hardware TRNG (CECS/SECS/timeout) langsung menghentikan operasi secara fail-closed (return code `-2`).
+    - Menghapus array statis kunci default publik (`DEFAULT_GUEK`, `DEFAULT_GBEK`, `DEFAULT_AK`); perangkat yang belum diprovisi akan menolak akses enkripsi dengan `SECURE_ERROR_UNPROVISIONED` (-8).
+    - Menghapus token provisi statis publik dari header `secure_nsc.h`.
+  - **Keandalan Metrologi ADE9000 (`NonSecure/AMI/Src/ami_ade9000.c`, `tests/test_ami_ade9000.c`)**:
+    - Seluruh pembacaan register SPI kini memeriksa nilai balik (`return code`) secara ketat tanpa abaian `(void)`.
+    - Penambahan flag `is_valid` dan `last_error_code`. Jika terjadi kesalahan transfer SPI, `ami_ade9000_feed_cosem_snapshot` menolak mengisi data (`valid_mask = 0`) untuk mencegah pembacaan data kotor.
+  - **Verifikasi Pra-Jump Secure Boot (`Secure/Core/Src/main.c`, `tests/test_ami_firmware_auth_policy.c`)**:
+    - Mengimplementasikan `SECURE_VerifyNonSecureImage()` yang memvalidasi Magic Header `0x504C4E21` ('PLN!'), ukuran image, batas stack MSP_NS di RAM NonSecure, alignment pointer ResetHandler dengan bit Thumb aktif, serta pencegahan downgrade versi anti-rollback counter.
+
+## [v2.18.0] - 2026-11-04
+
+### Added
+- **Pemodelan Buffer Load Profile 23-Kanal 15-Menit & Tamper Event Logbook (Class 7)**:
+  - **Load Profile 23-Kanal 15-Menit (`1.0.99.1.0.255`, Class 7) (`NonSecure/AMI/Inc/ami_cosem_model.h`, `NonSecure/AMI/Src/ami_cosem_model.c`)**:
+    - Sesuai standar SPLN D3.006-2:2021 dan PRD Smart Meter 3-Fasa Pascabayar.
+    - **23 Capture Objects Lengkap**:
+      1. Clock (`0.0.1.0.0.255`, Attr 2)
+      2. Status Register (`0.0.96.5.0.255`, Attr 2)
+      3. Energi Aktif Impor +A (`1.0.1.8.0.255`, Attr 2)
+      4. Energi Aktif Ekspor -A (`1.0.2.8.0.255`, Attr 2)
+      5. Energi Reaktif Impor +R (`1.0.3.8.0.255`, Attr 2)
+      6. Energi Reaktif Ekspor -R (`1.0.4.8.0.255`, Attr 2)
+      7. Energi Kuadran I Q1 (`1.0.5.8.0.255`, Attr 2)
+      8. Energi Kuadran II Q2 (`1.0.6.8.0.255`, Attr 2)
+      9. Energi Kuadran III Q3 (`1.0.7.8.0.255`, Attr 2)
+      10. Energi Kuadran IV Q4 (`1.0.8.8.0.255`, Attr 2)
+      11. Tegangan Fasa L1 (`1.0.32.7.0.255`, Attr 2)
+      12. Tegangan Fasa L2 (`1.0.52.7.0.255`, Attr 2)
+      13. Tegangan Fasa L3 (`1.0.72.7.0.255`, Attr 2)
+      14. Arus Fasa L1 (`1.0.31.7.0.255`, Attr 2)
+      15. Arus Fasa L2 (`1.0.51.7.0.255`, Attr 2)
+      16. Arus Fasa L3 (`1.0.71.7.0.255`, Attr 2)
+      17. Arus Netral In (`1.0.91.7.0.255`, Attr 2)
+      18. Daya Aktif Sesaat L1 (`1.0.21.7.0.255`, Attr 2)
+      19. Daya Aktif Sesaat L2 (`1.0.41.7.0.255`, Attr 2)
+      20. Daya Aktif Sesaat L3 (`1.0.61.7.0.255`, Attr 2)
+      21. Power Factor Total (`1.0.13.7.0.255`, Attr 2)
+      22. Frekuensi Jaringan (`1.0.14.7.0.255`, Attr 2)
+      23. THD Tegangan L1 (`1.0.32.7.124.255`, Attr 2)
+    - Peningkatan kapasitas buffer A-XDR encoding (`AMI_COSEM_AXDR_ENCODED_MAX`) dari 1024 menjadi 2048 bytes.
+    - Struktur entry load profile `AmiCosemLoadProfileEntry` diperluas menampung 23 kanal secara native.
+  - **Tamper Event Logbook (Class 7) (`NonSecure/AMI/Inc/ami_cosem_model.h`, `NonSecure/AMI/Src/ami_cosem_model.c`, `NonSecure/AMI/Src/ami_ade9000.c`)**:
+    - **3 Capture Objects Standar**: Clock (`0.0.1.0.0.255`), Event Code (`0.0.96.11.0.255`), Status Register (`0.0.96.5.0.255`).
+    - Dukungan profil umum (`0.0.99.98.0.255` & `0.0.99.98.1.255`) dan OBIS spesifik per modus tamper (`1.97.99.98.20..28.255`).
+    - Pemetaan 9 Modus Tamper Resmi PLN:
+      - Event 20: Cover Open (`1.97.99.98.20.255`)
+      - Event 21: Terminal Cover Open (`1.97.99.98.21.255`)
+      - Event 22: Phase Sequence Reverse (`1.97.99.98.22.255`)
+      - Event 23: Neutral Disturbance (`1.97.99.98.23.255`)
+      - Event 24: Magnetic Field Disturbance (`1.97.99.98.24.255`)
+      - Event 25: Loss of Phase (`1.97.99.98.25.255`)
+      - Event 26: Neutral Current Bypass (`1.97.99.98.26.255`)
+      - Event 27: Reverse Power Flow (`1.97.99.98.27.255`)
+      - Event 28: Over Voltage / Current Tamper (`1.97.99.98.28.255`)
+    - Integrasi otomatis pemicu tamper metrologi (Reverse Power, Phase Sequence Reverse, Loss of Phase) dari driver ADE9000 ke event log.
+    - Selective access dan perhitungan atribut 7 (`entries_in_use`) terfilter secara dinamis per OBIS spesifik tamper.
+  - **Pengujian Unit & Verifikasi Host (`tests/test_ami_cosem.c`, `tests/test_ami_dlms_apdu.c`)**:
+    - Verifikasi pembacaan 23 capture objects load profile dan 3 capture objects event logbook.
+    - Verifikasi selective access range descriptor dan specific tamper filter query.
+    - CTest Suite: **14/14 tests PASS (100% Lulus)**.

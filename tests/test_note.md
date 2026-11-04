@@ -18,9 +18,23 @@ Untuk menjalankan satu suite:
 ctest --test-dir tests/build -R AmiDlmsApduTest --output-on-failure
 ```
 
-Daftar suite ditentukan di `tests/CMakeLists.txt`. Suite host mencakup model COSEM, security, association, firmware authentication policy, APDU, HDLC, port, driver metrologi ADE9000, serta enkripsi ciphered APDU Security Suite 0 (`AmiDlmsCipherTest`). Hasil CTest hanya membuktikan perilaku yang dicakup test tersebut pada build host; hasilnya bukan validasi hardware, UART, metrologi, sertifikasi, atau seluruh conformance IEC 62056.
+Daftar 14 suite ditentukan di `tests/CMakeLists.txt`:
+1. `AmiCosemTest`: Validasi data model COSEM, 49 objek PLN, Load Profile 23-kanal 15-menit, Tamper Logbook 3 capture objects (9 Modus Tamper), Multi-tarif, Power Quality, Limiter (Class 71), Disconnect Control (Class 70).
+2. `AmiSecurityTest`: Validasi algoritma AES-128 NIST SP 800-38D KAT, GMAC, dan constant-time compare.
+3. `AmiDlmsAssociationTest`: State machine asosiasi AARQ/AARE, negosiasi conformance, dan handling disconnect.
+4. `AmiFirmwareAuthPolicyTest`: Penegakan kebijakan keamanan fail-closed firmware target (blokir No-Auth/LLS, wajib HLS5 16-byte challenge, secure boot manifest check).
+5. `AmiDlmsApduTest`: xDLMS GET/SET/ACTION normal, ciphered APDU, dan verifikasi keterbacaan 49 objek Association View.
+6. `AmiDlmsHdlcTest`: Parser streaming HDLC zero-heap, CRC-16 HCS/FCS, resiliensi flag transparent 0x7E, dan LLC framing.
+7. `AmiDlmsPortTest`: Layer transport port, buffer circular UART, dan integrasi cipher backend.
+8. `AmiAde9000Test`: Driver metrologi SPI ADE9000, register scaling, penanganan error fail-closed SPI, dan feeder snapshot.
+9. `AmiDlmsCipherTest`: Engine ciphering Suite 0 (AES-128-GCM), autentikasi tag, dan penolakan replay/tampering.
+10. `AmiNvmCounterTest`: Wear-leveling NVM/TAMP anti-replay Invocation Counter dan proteksi batas saturasi 0xFFFFFFFF.
+11. `AmiKeyTransferTest`: Remote Key Transfer RFC 3394 AES Key Wrap atomik di Secure World.
+12. `AmiAntiBruteforceTest`: Mitigasi brute-force per SPLN D5.002:2024 (penalti progresif 5s, 10s, 20s, 40s, lockout permanen 5x gagal).
+13. `AmiBlockTransferTest`: General Block Transfer (GBT) xDLMS Datablock untuk transmisi payload profil/buffer besar.
+14. `AmiDisconnectControlTest`: State machine Disconnect Control Class 70 (Disconnected, Connected, Ready) dan Action method.
 
-`AmiDlmsApduTest` juga memeriksa bahwa seluruh objek yang diumumkan melalui Association View saat ini berhasil menjawab GET attribute 2 menggunakan snapshot pengujian. Baseline objek/protokol yang dites didokumentasikan di [docs/PROTOCOL_PROFILE.md](../docs/security-rules/PROTOCOL_PROFILE.md).
+`AmiDlmsApduTest` juga memeriksa bahwa seluruh 49 objek yang diumumkan melalui Association View saat ini berhasil menjawab GET attribute 2 menggunakan snapshot pengujian. Baseline objek/protokol yang dites didokumentasikan di [docs/security-rules/PROTOCOL_PROFILE.md](../docs/security-rules/PROTOCOL_PROFILE.md).
 
 ## Simulator Gurux
 
@@ -47,7 +61,7 @@ Alamat client/server harus mengikuti profil koneksi simulator. Jika koneksi gaga
 
 **Penting:** simulator host yang memakai No-Auth berbeda dari firmware. Firmware dikonfigurasi untuk menolak No-Auth dan LLS. Hasil CTT dengan `Authentication level: None` terhadap simulator tidak membuktikan kebijakan autentikasi firmware. Uji firmware memerlukan profil autentikasi yang didukung oleh integrasi target.
 
-Firmware policy test juga memastikan hanya OID HLS5-GMAC dengan challenge client 16-byte yang diterima; No-Auth, LLS, HLS3/MD5, HLS4/SHA-1, dan challenge dengan panjang lain ditolak. Test ini memverifikasi policy, bukan implementasi crypto Secure-world, provisioning key, atau keamanan produksi. Profil target dan status gate tercatat di [docs/PROTOCOL_PROFILE.md](../docs/security-rules/PROTOCOL_PROFILE.md).
+Firmware policy test juga memastikan hanya OID HLS5-GMAC dengan challenge client 16-byte yang diterima; No-Auth, LLS, HLS3/MD5, HLS4/SHA-1, dan challenge dengan panjang lain ditolak. Test ini memverifikasi policy, bukan implementasi crypto Secure-world, provisioning key, atau keamanan produksi. Profil target dan status gate tercatat di [docs/security-rules/PROTOCOL_PROFILE.md](../docs/security-rules/PROTOCOL_PROFILE.md).
 
 ## OBIS: katalog, model, dan Association View
 

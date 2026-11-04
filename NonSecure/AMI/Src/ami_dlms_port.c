@@ -26,8 +26,15 @@ static int ami_dlms_secure_hls_proof(void *user, const uint8_t *oid, size_t oid_
     if (challenge == NULL || proof == NULL || proof_length == NULL || challenge_length != 16 || proof_capacity < 16) {
         return 0;
     }
-    *proof_length = 16u;
-    return 1;
+
+    uint32_t out_len = 0u;
+    int st = SECURE_DLMS_HLS5_CalculateProof(challenge, (uint32_t)challenge_length,
+                                            proof, (uint32_t)proof_capacity, &out_len);
+    if (st == 0 && out_len == 16u) {
+        *proof_length = 16u;
+        return 1;
+    }
+    return 0;
 }
 #endif
 
@@ -545,11 +552,26 @@ __attribute__((weak)) int ami_dlms_hardware_uart_tx(const uint8_t *data, size_t 
     return 0;
 }
 
+#include "ami_ade9000.h"
+
 __attribute__((weak)) int ami_dlms_hardware_get_snapshot(AmiCosemRegisterSnapshot *snapshot, void *user_data)
 {
-    (void)user_data;
     if (snapshot == NULL) return 0;
-    /* Default development snapshot if metrology hardware not connected yet */
+
+    /* If metrology context is supplied, bridge real calibrated ADE9000 readings */
+    if (user_data != NULL) {
+        const AmiAde9000Context *ade = (const AmiAde9000Context *)user_data;
+        if (ami_ade9000_feed_cosem_snapshot(ade, snapshot) == 0) {
+            return 1;
+        }
+        return 0; /* Metrology invalid or communication error: fail-closed */
+    }
+
+#if defined(STM32U585xx)
+    /* In production target firmware, refuse to fabricate fake measurement data */
+    return 0;
+#else
+    /* Development snapshot strictly for host CTest suite simulation */
     snapshot->valid_mask = AMI_COSEM_VALID_VOLTAGE_A | AMI_COSEM_VALID_CURRENT_A |
                            AMI_COSEM_VALID_ACTIVE_IMPORT | AMI_COSEM_VALID_CLOCK;
     snapshot->phase_voltage_millivolts[0] = 230000u;
@@ -561,6 +583,7 @@ __attribute__((weak)) int ami_dlms_hardware_get_snapshot(AmiCosemRegisterSnapsho
     snapshot->clock_date_time.day = 28u;
     snapshot->clock_date_time.hour = 12u;
     return 1;
+#endif
 }
 
 static void AmiDlmsTaskEntry(void *argument)
@@ -590,7 +613,8 @@ static void AmiDlmsTaskEntry(void *argument)
     ami_dlms_port_init(&s_global_port_ctx,
                        ami_dlms_hardware_uart_tx,
                        ami_dlms_hardware_get_snapshot,
-                       &s_cipher_backend);
+                       NULL);
+    ami_dlms_port_set_cipher_backend(&s_global_port_ctx, &s_cipher_backend);
 
     /* Enforce HLS security policy with TrustZone TRNG and HLS proof callbacks */
     static const uint8_t hls5_oid[7] = {0x60, 0x85, 0x74, 0x05, 0x08, 0x02, 0x05};

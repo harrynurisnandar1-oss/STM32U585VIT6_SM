@@ -24,6 +24,7 @@
 #include "task.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "ami_bsp_uart.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -103,5 +104,12 @@ void UsageFault_Handler(void)
 /******************************************************************************/
 
 /* USER CODE BEGIN 1 */
-
+/**
+  * @brief HAL UART Reception Event Callback (Rx to IDLE line).
+  * Automatically invoked by STM32 HAL when UART IDLE line event occurs.
+  */
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+{
+  ami_bsp_uart_rx_event_isr(huart, Size);
+}
 /* USER CODE END 1 */

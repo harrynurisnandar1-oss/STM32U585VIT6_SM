@@ -221,3 +221,28 @@ timeout, dan ketahanan terhadap beban/protokol malformed perlu diuji terpisah.
    sebagai bagian rantai boot.
 7. Setelah perbaikan source, lakukan validasi hardware berizin untuk SRAM3,
    TAMP, DMA/CMSE, RNG, boot configuration, dan pemulihan error.
+
+
+---
+
+## Adendum Status Remediasi Source-Level (4 November 2026)
+
+Menindaklanjuti temuan pada tinjauan 3 November 2026, sejumlah perbaikan mendasar pada tingkat source-code telah diselesaikan dan diverifikasi melalui host unit test suite (14/14 tests PASS):
+
+1. **Remediasi I1 & HLS Proof**:
+   - Fungsi gateway Secure NSC `SECURE_DLMS_HLS5_CalculateProof()` telah diimplementasikan di [`Secure/Core/Src/secure_nsc.c`](./Secure/Core/Src/secure_nsc.c) untuk menghitung GMAC Server Proof 16-byte secara kriptografis riil.
+   - Callback `ami_dlms_secure_hls_proof()` di [`ami_dlms_port.c`](./NonSecure/AMI/Src/ami_dlms_port.c) kini menghasilkan proof otentik ke buffer respons server.
+   - Pemasangan cipher backend di [`ami_dlms_port.c`](./NonSecure/AMI/Src/ami_dlms_port.c) telah diperbaiki dengan pemanggilan eksplisit `ami_dlms_port_set_cipher_backend(&s_global_port_ctx, &s_cipher_backend)`.
+2. **Remediasi C1 & I2 (Kunci Default & Token Provisi)**:
+   - Konstanta publik `DEFAULT_GUEK`, `DEFAULT_GBEK`, `DEFAULT_AK` telah dihapus dari source [`secure_nsc.c`](./Secure/Core/Src/secure_nsc.c). Perangkat yang belum diprovisi akan menolak eksekusi ciphering dengan error `SECURE_ERROR_UNPROVISIONED` (-8).
+   - Konstanta token provisi publik `SECURE_FACTORY_PROVISION_TOKEN` telah dihapus dari header publik `secure_nsc.h`.
+3. **Remediasi I4 (RNG Fail-Closed)**:
+   - Algoritma fallback LCG pada [`secure_nsc.c`](./Secure/Core/Src/secure_nsc.c) telah dihapus total. Setiap kegagalan perangkat keras TRNG (CECS, SECS, atau timeout) langsung menolkan buffer output dan mengembalikan error code `-2` (*fail-closed*).
+4. **Remediasi I6 (Secure Boot Pre-Jump Manifest Verification)**:
+   - Fungsi `SECURE_VerifyNonSecureImage()` telah ditambahkan pada [`Secure/Core/Src/main.c`](./Secure/Core/Src/main.c) sebelum eksekusi NonSecure dimulai. Memvalidasi magic header `0x504C4E21` ('PLN!'), batas MSP di RAM NonSecure, alignment pointer ResetHandler (Thumb bit), dan anti-rollback version counter. Divalidasi pada `test_ami_firmware_auth_policy.c`.
+5. **Driver Hardware I/O UART & Metrologi ADE9000**:
+   - Modul HAL UART, USART, dan SPI telah diaktifkan di [`stm32u5xx_hal_conf.h`](./NonSecure/Core/Inc/stm32u5xx_hal_conf.h).
+   - Driver circular DMA UART + IDLE interrupt (`ami_bsp_uart.c`, `ami_bsp_uart.h`) telah dibuat dan dihubungkan ke `stm32u5xx_it.c`.
+   - Driver ADE9000 di [`ami_ade9000.c`](./NonSecure/AMI/Src/ami_ade9000.c) kini memeriksa return code seluruh register SPI secara ketat dan menolak memasukkan data kotor ke snapshot (`valid_mask = 0`) jika SPI gagal.
+6. **Data Model Lanjutan Class 7**:
+   - Pemodelan buffer Load Profile 23-Kanal 15-menit (`1.0.99.1.0.255`) dan Tamper Event Logbook (3 capture objects, 9 modus tamper PLN Event 20..28) telah selesai diimplementasikan di [`ami_cosem_model.c`](./NonSecure/AMI/Src/ami_cosem_model.c).

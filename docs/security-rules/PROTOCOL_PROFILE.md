@@ -54,7 +54,7 @@ Implementasi protokol dan arsitektur keamanan DLMS/COSEM diselaraskan secara ket
 | **Association State Machine** | AARQ/AARE, negosiasi conformance dinamis, mutual 4-pass HLS5 GMAC |
 | **Anti-Brute-Force Lockout** | Tracking kegagalan HLS5, penalti waktu progresif (5s s.d. 40s), hard lockout 5x gagal (SPLN D5.002:2024) |
 | **Block Transfer (GBT)** | xDLMS Datablock transfer (`0xC0 0x02` / `0xC4 0x02`) untuk payload profil & buffer besar |
-| **Data Services** | GET-Request-Normal, Datablock Transfer, dan selective access Class 7 (waktu & entri baris) |
+| **Data Services** | GET-Request-Normal, Datablock Transfer, dan selective access Class 7 (Load Profile 23-Kanal 15-menit, Tamper Logbook 3 Capture Objects dengan 9 Modus Tamper PLN) |
 | **Load Control Breaker** | State Machine Disconnect Control Class 70 (Disconnected, Connected, Ready) & Action Method 1/2 |
 | **Access Rights** | Association View komprehensif (49 objek aktif teruji via GET attribute 2 & GBT) |
 | **Host Simulator Auth** | No-Auth hanya untuk lingkungan development/simulator lokal |
@@ -127,7 +127,7 @@ Association View adalah daftar otoritatif yang diumumkan meter kepada DLMS Clien
 
 1. Gunakan konfigurasi **Logical Name (LN)** dan antarmuka **HDLC** saat menguji dengan GXDLMSDirector.
 2. Mode *Authentication None* hanya diperbolehkan pada simulator development host.
-3. Seluruh 12 objek dalam Association View wajib merespons `GET` attribute 2 dengan status sukses.
+3. Seluruh 49 objek dalam Association View wajib merespons `GET` attribute 2 dengan status sukses.
 4. Parameter `ExcludeBasicTests` pada CTT harus diset ke `False` untuk audit diagnostik penuh.
 5. Dokumentasikan log pengujian secara terpisah antara simulator host dan binary firmware STM32.
 
