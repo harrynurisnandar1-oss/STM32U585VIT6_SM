@@ -1,4 +1,4 @@
-name: STM32U585 FreeRTOS Firmware CI
+name: STM32U585 FreeRTOS Firmware & ARM Native CI
 
 on:
   push:
@@ -64,3 +64,35 @@ jobs:
             NonSecure/build/*.hex
             NonSecure/build/*.map
           retention-days: 7
+
+  test-native-arm64:
+    name: Native ARM64 Host Verification (14 CTest Suites)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify Native ARM64 Architecture
+        run: |
+          echo "=== CPU ARCHITECTURE ==="
+          uname -m
+          lscpu || cat /proc/cpuinfo | grep "model name" | head -n 4
+
+      - name: Install Host Build Dependencies (ARM64)
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends cmake ninja-build build-essential python3
+
+      - name: Configure CMake for ARM64 Native Environment
+        run: |
+          cmake -S tests -B build/arm64-tests -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Compile 14 Test Suites & Simulator (ARM64)
+        run: |
+          cmake --build build/arm64-tests --parallel
+
+      - name: Execute 14 CTest Suites on Physical ARM64 Hardware
+        run: |
+          ctest --test-dir build/arm64-tests --output-on-failure --verbose
