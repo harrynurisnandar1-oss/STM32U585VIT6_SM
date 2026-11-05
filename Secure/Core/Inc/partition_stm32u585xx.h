@@ -50,7 +50,7 @@
 //   <q> Enable SAU
 //   <i> Value for SAU->CTRL register bit ENABLE
 */
-#define SAU_INIT_CTRL_ENABLE   0
+#define SAU_INIT_CTRL_ENABLE   1
 
 /*
 //   <o> When SAU is disabled
@@ -59,7 +59,7 @@
 //   <i> Value for SAU->CTRL register bit ALLNS
 //   <i> When all Memory is Non-Secure (ALLNS is 1), IDAU can override memory map configuration.
 */
-#define SAU_INIT_CTRL_ALLNS  1
+#define SAU_INIT_CTRL_ALLNS  0
 
 /*
 // </e>
@@ -78,7 +78,7 @@
 //   <e>Initialize SAU Region 0
 //   <i> Setup SAU Region 0 memory attributes
 */
-#define SAU_INIT_REGION0    0
+#define SAU_INIT_REGION0    1
 
 /*
 //     <o>Start Address <0-0xFFFFFFE0>
@@ -102,7 +102,7 @@
 //   <e>Initialize SAU Region 1
 //   <i> Setup SAU Region 1 memory attributes
 */
-#define SAU_INIT_REGION1    0
+#define SAU_INIT_REGION1    1
 
 /*
 //     <o>Start Address <0-0xFFFFFFE0>
@@ -126,7 +126,7 @@
 //   <e>Initialize SAU Region 2
 //   <i> Setup SAU Region 2 memory attributes
 */
-#define SAU_INIT_REGION2    0
+#define SAU_INIT_REGION2    1
 
 /*
 //     <o>Start Address <0-0xFFFFFFE0>
@@ -150,7 +150,7 @@
 //   <e>Initialize SAU Region 3
 //   <i> Setup SAU Region 3 memory attributes
 */
-#define SAU_INIT_REGION3    0
+#define SAU_INIT_REGION3    1
 
 /*
 //     <o>Start Address <0-0xFFFFFFE0>
@@ -176,7 +176,7 @@
 //   <e>Initialize SAU Region 4
 //   <i> Setup SAU Region 4 memory attributes
 */
-#define SAU_INIT_REGION4    0
+#define SAU_INIT_REGION4    1
 
 /*
 //     <o>Start Address <0-0xFFFFFFE0>
@@ -202,7 +202,7 @@
 //   <e>Initialize SAU Region 5
 //   <i> Setup SAU Region 5 memory attributes
 */
-#define SAU_INIT_REGION5    0
+#define SAU_INIT_REGION5    1
 
 /*
 //     <o>Start Address <0-0xFFFFFFE0>
@@ -283,7 +283,7 @@
 /*
 // <e>Setup behaviour of Sleep and Exception Handling
 */
-#define SCB_CSR_AIRCR_INIT  0
+#define SCB_CSR_AIRCR_INIT  1
 
 /*
 //   <o> Deep Sleep can be enabled by
@@ -299,7 +299,7 @@
 //     <1=> Secure state only
 //   <i> Value for SCB->AIRCR register bit SYSRESETREQS
 */
-#define SCB_AIRCR_SYSRESETREQS_VAL    0
+#define SCB_AIRCR_SYSRESETREQS_VAL    1
 /* USER CODE END 0 */
 /*
 //   <o>Priority of Non-Secure exceptions is
@@ -307,7 +307,7 @@
 //     <1=> Lowered to 0x04-0x07
 //   <i> Value for SCB->AIRCR register bit PRIS
 */
-#define SCB_AIRCR_PRIS_VAL      0
+#define SCB_AIRCR_PRIS_VAL      1
 
 /*
 //   <o>BusFault, HardFault, and NMI target
@@ -406,7 +406,7 @@
 //   <o.30> GPDMA1_Channel1_IRQn  <0=> Secure state
 //   <o.31> GPDMA1_Channel2_IRQn  <0=> Secure state
 */
-#define NVIC_INIT_ITNS0_VAL      0x00000000
+#define NVIC_INIT_ITNS0_VAL      0x07FFF800
 /*
 //   </e>
 */
@@ -452,7 +452,7 @@
 //   <o.31> USART3_IRQn           <0=> Secure state
 */
 
-#define NVIC_INIT_ITNS1_VAL      0x00000000
+#define NVIC_INIT_ITNS1_VAL      0xFFFFFFFF
 
 /*
 //   </e>
@@ -502,7 +502,7 @@
 //   <o.31> FPU_IRQn              <0=> Secure state
 */
 
-#define NVIC_INIT_ITNS2_VAL      0x00000000
+#define NVIC_INIT_ITNS2_VAL      0x9FFFFFFF
 
 /*
 //   </e>
@@ -549,7 +549,7 @@
 
 */
 
-#define NVIC_INIT_ITNS3_VAL      0x00000000
+#define NVIC_INIT_ITNS3_VAL      0xFFFFFFFC
 
 /*
 //   </e>

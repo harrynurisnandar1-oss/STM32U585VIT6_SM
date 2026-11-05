@@ -22,6 +22,7 @@
 #include "stm32u5xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "secure_nsc.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -138,17 +139,35 @@ void UsageFault_Handler(void)
   }
 }
 
+extern void *pSecureFaultCallback;
+extern void *pSecureErrorCallback;
+
 /**
   * @brief This function handles Secure fault.
   */
 void SecureFault_Handler(void)
 {
   /* USER CODE BEGIN SecureFault_IRQn 0 */
+  uint32_t sfsr = SCB->SFSR;
+  uint32_t sfar = SCB->SFAR;
+  (void)sfsr;
+  (void)sfar;
 
+  /* Clear SecureFault status flags */
+  SCB->SFSR = sfsr;
+
+  /* Invoke registered non-secure callback if configured */
+  if (pSecureFaultCallback != NULL)
+  {
+    typedef void (*fault_callback_t)(void);
+    fault_callback_t callback = (fault_callback_t)pSecureFaultCallback;
+    callback();
+  }
   /* USER CODE END SecureFault_IRQn 0 */
   while (1)
   {
     /* USER CODE BEGIN W1_SecureFault_IRQn 0 */
+    /* System failsafe lockdown on unrecoverable security fault */
     /* USER CODE END W1_SecureFault_IRQn 0 */
   }
 }
@@ -214,5 +233,29 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /* USER CODE BEGIN 1 */
+/**
+  * @brief This function handles GTZC (Global TrustZone Controller) interrupt.
+  */
+void GTZC_IRQHandler(void)
+{
+  HAL_GTZC_IRQHandler();
+}
 
+/**
+  * @brief GTZC TZIC illegal access callback.
+  * @param PeriphId Peripheral identifier that caused illegal access.
+  */
+void HAL_GTZC_TZIC_Callback(uint32_t PeriphId)
+{
+  /* Clear illegal access event flag */
+  HAL_GTZC_TZIC_ClearFlag(PeriphId);
+
+  /* Notify registered NonSecure callback */
+  if (pSecureErrorCallback != NULL)
+  {
+    typedef void (*error_callback_t)(void);
+    error_callback_t callback = (error_callback_t)pSecureErrorCallback;
+    callback();
+  }
+}
 /* USER CODE END 1 */

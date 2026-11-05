@@ -1,53 +1,205 @@
 #include "ami_dlms_hdlc.h"
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
-static AmiHdlcStatus feed(HdlcContext *c,const uint8_t *w,size_t n,HdlcFrame *f){AmiHdlcStatus s=AMI_HDLC_INCOMPLETE;for(size_t i=0;i<n;i++)s=ami_dlms_hdlc_parse_byte(c,w[i],f);return s;}
-static void test_crc_and_stream_roundtrip(void){static const uint8_t v[]="123456789";const uint8_t p[]={0xE6,0xE6,0x00,0xC0,1,0x55,0};const uint8_t apdu[]={0xC0,1,0x55,0};uint8_t w[64];size_t n=0;HdlcContext c;HdlcFrame f;
- assert(ami_dlms_hdlc_crc16(v,sizeof(v)-1u)==0x906Eu);assert(ami_dlms_hdlc_encode_frame(1,16,0x10,p,sizeof(p),w,sizeof(w),&n)==AMI_HDLC_FRAME_READY);assert((((size_t)(w[1]&7u)<<8)|w[2])==n-2u);
- ami_dlms_hdlc_init(&c);assert(feed(&c,w,n,&f)==AMI_HDLC_FRAME_READY);assert(f.destination_sap==1u&&f.source_sap==16u&&f.type==AMI_HDLC_FRAME_I);assert(f.payload_length==sizeof(apdu)&&memcmp(f.payload,apdu,sizeof(apdu))==0);}
-static void test_sap_and_output_boundaries(void){uint8_t w[64];size_t n;HdlcContext c;HdlcFrame f;
- assert(ami_dlms_hdlc_encode_frame(0x0FFFFFFF,0x3FFF,0x10,NULL,0,w,sizeof(w),&n)==AMI_HDLC_FRAME_READY);ami_dlms_hdlc_init(&c);assert(feed(&c,w,n,&f)==AMI_HDLC_FRAME_READY);
- assert(f.destination_sap==0x0FFFFFFFu&&f.source_sap==0x3FFFu);assert(ami_dlms_hdlc_encode_frame(0x10000000,1,0x10,NULL,0,w,sizeof(w),&n)==AMI_HDLC_INVALID_ADDRESS);
- assert(ami_dlms_hdlc_encode_frame(1,1,0x10,NULL,0,w,2,&n)==AMI_HDLC_BUFFER_TOO_SMALL);}
-static void test_crc_and_truncated_errors(void){const uint8_t p[]={0x55};uint8_t w[64];size_t n;HdlcContext c;HdlcFrame f;
- assert(ami_dlms_hdlc_encode_frame(1,16,0x10,p,sizeof(p),w,sizeof(w),&n)==AMI_HDLC_FRAME_READY);w[n-3u]^=1u;ami_dlms_hdlc_init(&c);assert(feed(&c,w,n,&f)==AMI_HDLC_FCS_ERROR);
- assert(ami_dlms_hdlc_encode_frame(1,16,0x10,p,sizeof(p),w,sizeof(w),&n)==AMI_HDLC_FRAME_READY);w[6]^=1u;ami_dlms_hdlc_init(&c);assert(feed(&c,w,n,&f)==AMI_HDLC_HCS_ERROR);
- assert(ami_dlms_hdlc_encode_frame(1,16,0x10,p,sizeof(p),w,sizeof(w),&n)==AMI_HDLC_FRAME_READY);ami_dlms_hdlc_init(&c);assert(feed(&c,w,n-1u,&f)==AMI_HDLC_INCOMPLETE);}
-static void test_snrm_disc_to_ua_and_i_reply(void){
- HdlcContext c;HdlcFrame r={.destination_sap=1,.source_sap=16,.control=AMI_HDLC_CONTROL_SNRM,.type=AMI_HDLC_FRAME_SNRM},f;uint8_t w[64];size_t n;ami_dlms_hdlc_init(&c);
-  c.tx_sequence=5u;c.rx_sequence=4u;assert(ami_dlms_hdlc_build_frame(&c,&r,NULL,0,w,sizeof(w),&n)==AMI_HDLC_FRAME_READY);assert(c.tx_sequence==0u&&c.rx_sequence==0u);ami_dlms_hdlc_init(&c);assert(feed(&c,w,n,&f)==AMI_HDLC_FRAME_READY);assert(f.type==AMI_HDLC_FRAME_UA&&f.destination_sap==16u&&f.source_sap==1u);
- r.type=AMI_HDLC_FRAME_DISC;r.control=AMI_HDLC_CONTROL_DISC;
- assert(ami_dlms_hdlc_build_frame(&c,&r,NULL,0,w,sizeof(w),&n)==AMI_HDLC_FRAME_READY);ami_dlms_hdlc_init(&c);assert(feed(&c,w,n,&f)==AMI_HDLC_FRAME_READY);assert(f.type==AMI_HDLC_FRAME_UA);
- r.type=AMI_HDLC_FRAME_I;r.control=0x10;const uint8_t p[]={0xC4,1,0};assert(ami_dlms_hdlc_build_frame(&c,&r,p,sizeof(p),w,sizeof(w),&n)==AMI_HDLC_FRAME_READY);assert(feed(&c,w,n,&f)==AMI_HDLC_FRAME_READY&&f.type==AMI_HDLC_FRAME_I);assert(f.payload_length==sizeof(p)&&memcmp(f.payload,p,sizeof(p))==0);
- }
-static void test_snrm_parameter_negotiation(void){
- const uint8_t snrm_info[]={0x81,0x80,0x13,0x05,0x01,0x80,0x06,0x02,0x01,0x00,0x07,0x04,0,0,0,2,0x08,0x04,0,0,0,3};
- HdlcContext c;HdlcFrame req,ua;uint8_t input[64],output[64];size_t in_len=0,out_len=0;ami_dlms_hdlc_init(&c);
- assert(ami_dlms_hdlc_encode_frame(1u,16u,AMI_HDLC_CONTROL_SNRM,snrm_info,sizeof(snrm_info),input,sizeof(input),&in_len)==AMI_HDLC_FRAME_READY);
- assert(feed(&c,input,in_len,&req)==AMI_HDLC_FRAME_READY&&req.type==AMI_HDLC_FRAME_SNRM);
- assert(ami_dlms_hdlc_build_frame(&c,&req,NULL,0u,output,sizeof(output),&out_len)==AMI_HDLC_FRAME_READY);
- ami_dlms_hdlc_init(&c);assert(feed(&c,output,out_len,&ua)==AMI_HDLC_FRAME_READY&&ua.type==AMI_HDLC_FRAME_UA);
- assert(ua.payload_length==22u&&ua.payload[0]==0x81u&&ua.payload[2]==19u);
- assert(ua.payload[3]==5u&&ua.payload[4]==2u&&ua.payload[5]==1u&&ua.payload[6]==0u);
- assert(ua.payload[7]==6u&&ua.payload[8]==1u&&ua.payload[9]==128u);
- assert(ua.payload[10]==7u&&ua.payload[15]==1u&&ua.payload[16]==8u&&ua.payload[21]==1u);
-}
-static void test_early_flag_resynchronizes(void){
- HdlcContext c;HdlcFrame f;uint8_t frame[64];size_t n=0;ami_dlms_hdlc_init(&c);
- assert(ami_dlms_hdlc_parse_byte(&c,AMI_HDLC_FLAG,&f)==AMI_HDLC_INCOMPLETE);
- assert(ami_dlms_hdlc_parse_byte(&c,0xA2u,&f)==AMI_HDLC_INCOMPLETE);
- assert(ami_dlms_hdlc_parse_byte(&c,0x20u,&f)==AMI_HDLC_INCOMPLETE);
- assert(ami_dlms_hdlc_parse_byte(&c,AMI_HDLC_FLAG,&f)==AMI_HDLC_INVALID_FRAME);
- assert(ami_dlms_hdlc_encode_frame(1u,16u,0x10u,NULL,0u,frame,sizeof(frame),&n)==AMI_HDLC_FRAME_READY);
- assert(feed(&c,frame,n,&f)==AMI_HDLC_FRAME_READY);
-}
-static void test_gurux_snrm_known_frame(void){
- const uint8_t frame[]={0x7E,0xA0,0x08,0x02,0x03,0x2D,0x93,0x26,0xCE,0x7E};
- HdlcContext c;HdlcFrame request,reply;uint8_t output[64];size_t output_length=0u;ami_dlms_hdlc_init(&c);
- assert(feed(&c,frame,sizeof(frame),&request)==AMI_HDLC_FRAME_READY);
- assert(request.type==AMI_HDLC_FRAME_SNRM&&request.destination_sap==129u&&request.source_sap==22u);
- assert(ami_dlms_hdlc_build_frame(&c,&request,NULL,0u,output,sizeof(output),&output_length)==AMI_HDLC_FRAME_READY);
- ami_dlms_hdlc_init(&c);assert(feed(&c,output,output_length,&reply)==AMI_HDLC_FRAME_READY&&reply.type==AMI_HDLC_FRAME_UA);
-}
-int main(void){test_crc_and_stream_roundtrip();test_sap_and_output_boundaries();test_crc_and_truncated_errors();test_snrm_disc_to_ua_and_i_reply();test_snrm_parameter_negotiation();test_early_flag_resynchronizes();test_gurux_snrm_known_frame();return 0;}
 
+static AmiHdlcStatus feed(HdlcContext *c, const uint8_t *w, size_t n, HdlcFrame *f)
+{
+    AmiHdlcStatus s = AMI_HDLC_INCOMPLETE;
+    for (size_t i = 0; i < n; i++) {
+        s = ami_dlms_hdlc_parse_byte(c, w[i], f);
+    }
+    return s;
+}
+
+static void test_crc_and_stream_roundtrip(void)
+{
+    static const uint8_t v[] = "123456789";
+    const uint8_t p[] = {0xE6, 0xE6, 0x00, 0xC0, 1, 0x55, 0};
+    const uint8_t apdu[] = {0xC0, 1, 0x55, 0};
+    uint8_t w[64];
+    size_t n = 0;
+    HdlcContext c;
+    HdlcFrame f;
+
+    assert(ami_dlms_hdlc_crc16(v, sizeof(v) - 1u) == 0x906Eu);
+    assert(ami_dlms_hdlc_encode_frame(1, 16, 0x10, p, sizeof(p), w, sizeof(w), &n) == AMI_HDLC_FRAME_READY);
+    assert((((size_t)(w[1] & 7u) << 8) | w[2]) == n - 2u);
+
+    ami_dlms_hdlc_init(&c);
+    assert(feed(&c, w, n, &f) == AMI_HDLC_FRAME_READY);
+    assert(f.destination_sap == 1u && f.source_sap == 16u && f.type == AMI_HDLC_FRAME_I);
+    assert(f.payload_length == sizeof(apdu) && memcmp(f.payload, apdu, sizeof(apdu)) == 0);
+}
+
+static void test_sap_and_output_boundaries(void)
+{
+    uint8_t w[64];
+    size_t n;
+    HdlcContext c;
+    HdlcFrame f;
+
+    assert(ami_dlms_hdlc_encode_frame(0x0FFFFFFF, 0x3FFF, 0x10, NULL, 0, w, sizeof(w), &n) == AMI_HDLC_FRAME_READY);
+    ami_dlms_hdlc_init(&c);
+    assert(feed(&c, w, n, &f) == AMI_HDLC_FRAME_READY);
+    assert(f.destination_sap == 0x0FFFFFFFu && f.source_sap == 0x3FFFu);
+    assert(ami_dlms_hdlc_encode_frame(0x10000000, 1, 0x10, NULL, 0, w, sizeof(w), &n) == AMI_HDLC_INVALID_ADDRESS);
+    assert(ami_dlms_hdlc_encode_frame(1, 1, 0x10, NULL, 0, w, 2, &n) == AMI_HDLC_BUFFER_TOO_SMALL);
+}
+
+static void test_crc_and_truncated_errors(void)
+{
+    const uint8_t p[] = {0x55};
+    uint8_t w[64];
+    size_t n;
+    HdlcContext c;
+    HdlcFrame f;
+
+    assert(ami_dlms_hdlc_encode_frame(1, 16, 0x10, p, sizeof(p), w, sizeof(w), &n) == AMI_HDLC_FRAME_READY);
+    w[n - 3u] ^= 1u;
+    ami_dlms_hdlc_init(&c);
+    assert(feed(&c, w, n, &f) == AMI_HDLC_FCS_ERROR);
+
+    assert(ami_dlms_hdlc_encode_frame(1, 16, 0x10, p, sizeof(p), w, sizeof(w), &n) == AMI_HDLC_FRAME_READY);
+    w[6] ^= 1u;
+    ami_dlms_hdlc_init(&c);
+    assert(feed(&c, w, n, &f) == AMI_HDLC_HCS_ERROR);
+
+    assert(ami_dlms_hdlc_encode_frame(1, 16, 0x10, p, sizeof(p), w, sizeof(w), &n) == AMI_HDLC_FRAME_READY);
+    ami_dlms_hdlc_init(&c);
+    assert(feed(&c, w, n - 1u, &f) == AMI_HDLC_INCOMPLETE);
+}
+
+static void test_snrm_disc_to_ua_and_i_reply(void)
+{
+    HdlcContext c;
+    HdlcFrame r = {
+        .destination_sap = 1,
+        .source_sap = 16,
+        .control = AMI_HDLC_CONTROL_SNRM,
+        .type = AMI_HDLC_FRAME_SNRM
+    };
+    HdlcFrame f;
+    uint8_t w[64];
+    size_t n;
+
+    ami_dlms_hdlc_init(&c);
+    c.tx_sequence = 5u;
+    c.rx_sequence = 4u;
+    assert(ami_dlms_hdlc_build_frame(&c, &r, NULL, 0, w, sizeof(w), &n) == AMI_HDLC_FRAME_READY);
+    assert(c.tx_sequence == 0u && c.rx_sequence == 0u);
+    ami_dlms_hdlc_init(&c);
+    assert(feed(&c, w, n, &f) == AMI_HDLC_FRAME_READY);
+    assert(f.type == AMI_HDLC_FRAME_UA && f.destination_sap == 16u && f.source_sap == 1u);
+
+    r.type = AMI_HDLC_FRAME_DISC;
+    r.control = AMI_HDLC_CONTROL_DISC;
+    assert(ami_dlms_hdlc_build_frame(&c, &r, NULL, 0, w, sizeof(w), &n) == AMI_HDLC_FRAME_READY);
+    ami_dlms_hdlc_init(&c);
+    assert(feed(&c, w, n, &f) == AMI_HDLC_FRAME_READY);
+    assert(f.type == AMI_HDLC_FRAME_UA);
+
+    r.type = AMI_HDLC_FRAME_I;
+    r.control = 0x10;
+    const uint8_t p[] = {0xC4, 1, 0};
+    assert(ami_dlms_hdlc_build_frame(&c, &r, p, sizeof(p), w, sizeof(w), &n) == AMI_HDLC_FRAME_READY);
+    assert(feed(&c, w, n, &f) == AMI_HDLC_FRAME_READY && f.type == AMI_HDLC_FRAME_I);
+    assert(f.payload_length == sizeof(p) && memcmp(f.payload, p, sizeof(p)) == 0);
+}
+
+static void test_snrm_parameter_negotiation(void)
+{
+    const uint8_t snrm_info[] = {
+        0x81, 0x80, 0x13,
+        0x05, 0x01, 0x80,
+        0x06, 0x02, 0x01, 0x00,
+        0x07, 0x04, 0, 0, 0, 2,
+        0x08, 0x04, 0, 0, 0, 3
+    };
+    HdlcContext c;
+    HdlcFrame req, ua;
+    uint8_t input[64], output[64];
+    size_t in_len = 0, out_len = 0;
+
+    ami_dlms_hdlc_init(&c);
+    assert(ami_dlms_hdlc_encode_frame(1u, 16u, AMI_HDLC_CONTROL_SNRM, snrm_info,
+                                     sizeof(snrm_info), input, sizeof(input), &in_len) == AMI_HDLC_FRAME_READY);
+    assert(feed(&c, input, in_len, &req) == AMI_HDLC_FRAME_READY && req.type == AMI_HDLC_FRAME_SNRM);
+    assert(ami_dlms_hdlc_build_frame(&c, &req, NULL, 0u, output, sizeof(output), &out_len) == AMI_HDLC_FRAME_READY);
+
+    ami_dlms_hdlc_init(&c);
+    assert(feed(&c, output, out_len, &ua) == AMI_HDLC_FRAME_READY && ua.type == AMI_HDLC_FRAME_UA);
+    assert(ua.payload_length == 22u && ua.payload[0] == 0x81u && ua.payload[2] == 19u);
+    assert(ua.payload[3] == 5u && ua.payload[4] == 2u && ua.payload[5] == 1u && ua.payload[6] == 0u);
+    assert(ua.payload[7] == 6u && ua.payload[8] == 1u && ua.payload[9] == 128u);
+    assert(ua.payload[10] == 7u && ua.payload[15] == 1u && ua.payload[16] == 8u && ua.payload[21] == 1u);
+}
+
+static void test_early_flag_resynchronizes(void)
+{
+    HdlcContext c;
+    HdlcFrame f;
+    uint8_t frame[64];
+    size_t n = 0;
+
+    ami_dlms_hdlc_init(&c);
+    assert(ami_dlms_hdlc_parse_byte(&c, AMI_HDLC_FLAG, &f) == AMI_HDLC_INCOMPLETE);
+    assert(ami_dlms_hdlc_parse_byte(&c, 0xA2u, &f) == AMI_HDLC_INCOMPLETE);
+    assert(ami_dlms_hdlc_parse_byte(&c, 0x20u, &f) == AMI_HDLC_INCOMPLETE);
+    assert(ami_dlms_hdlc_parse_byte(&c, AMI_HDLC_FLAG, &f) == AMI_HDLC_INVALID_FRAME);
+    assert(ami_dlms_hdlc_encode_frame(1u, 16u, 0x10u, NULL, 0u, frame, sizeof(frame), &n) == AMI_HDLC_FRAME_READY);
+    assert(feed(&c, frame, n, &f) == AMI_HDLC_FRAME_READY);
+}
+
+static void test_gurux_snrm_known_frame(void)
+{
+    const uint8_t frame[] = {0x7E, 0xA0, 0x08, 0x02, 0x03, 0x2D, 0x93, 0x26, 0xCE, 0x7E};
+    HdlcContext c;
+    HdlcFrame request, reply;
+    uint8_t output[64];
+    size_t output_length = 0u;
+
+    ami_dlms_hdlc_init(&c);
+    assert(feed(&c, frame, sizeof(frame), &request) == AMI_HDLC_FRAME_READY);
+    assert(request.type == AMI_HDLC_FRAME_SNRM && request.destination_sap == 129u && request.source_sap == 22u);
+    assert(ami_dlms_hdlc_build_frame(&c, &request, NULL, 0u, output, sizeof(output), &output_length) == AMI_HDLC_FRAME_READY);
+    ami_dlms_hdlc_init(&c);
+    assert(feed(&c, output, output_length, &reply) == AMI_HDLC_FRAME_READY && reply.type == AMI_HDLC_FRAME_UA);
+}
+
+
+static void test_transparent_flag_in_payload_and_fcs(void)
+{
+    /* Gurux frame requesting 0.0.96.96.0.255 whose FCS ends in 0x7E 0x0A:
+     * 7E A0 1A 02 03 2D BA 2D D0 E6 E6 00 C0 01 C1 00 01 00 00 60 60 00 FF 02 00 7E 0A 7E
+     */
+    const uint8_t raw[] = {
+        0x7E,
+        0xA0, 0x1A, 0x02, 0x03, 0x2D, 0xBA, 0x2D, 0xD0,
+        0xE6, 0xE6, 0x00, 0xC0, 0x01, 0xC1, 0x00, 0x01,
+        0x00, 0x00, 0x60, 0x60, 0x00, 0xFF, 0x02, 0x00,
+        0x7E, 0x0A,
+        0x7E
+    };
+    HdlcContext c;
+    HdlcFrame f;
+
+    ami_dlms_hdlc_init(&c);
+    assert(feed(&c, raw, sizeof(raw), &f) == AMI_HDLC_FRAME_READY);
+    assert(f.type == AMI_HDLC_FRAME_I);
+    assert(f.destination_sap == 129u && f.source_sap == 22u);
+}
+
+int main(void)
+{
+    test_transparent_flag_in_payload_and_fcs();
+    test_crc_and_stream_roundtrip();
+    test_sap_and_output_boundaries();
+    test_crc_and_truncated_errors();
+    test_snrm_disc_to_ua_and_i_reply();
+    test_snrm_parameter_negotiation();
+    test_early_flag_resynchronizes();
+    test_gurux_snrm_known_frame();
+    printf("DLMS HDLC tests passed.\n");
+    return 0;
+}

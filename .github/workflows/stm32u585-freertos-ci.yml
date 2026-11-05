@@ -1,0 +1,98 @@
+name: STM32U585 FreeRTOS Firmware & ARM Native CI
+
+on:
+  push:
+    branches: [ "main", "master", ]
+  pull_request:
+    branches: [ "main", "master", ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-arm-cortex-m33:
+    name: Build Embedded Firmware (Cortex-M33 / FreeRTOS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Ninja build tool
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ninja-build
+
+      - name: Install Official ARM GNU Embedded Toolchain
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: '13.3.Rel1'
+
+      - name: Verify Arm Toolchain & Standard C Libraries
+        run: |
+          arm-none-eabi-gcc --version
+          arm-none-eabi-gcc -print-file-name=include/math.h
+          arm-none-eabi-gcc -print-multi-lib
+
+      - name: Configure CMake with ARM Toolchain Preset
+        run: |
+          cmake --preset Debug
+
+      - name: Build Firmware
+        run: |
+          cmake --build --preset Debug --parallel
+
+      - name: Display Memory Footprint (Size)
+        run: |
+          arm-none-eabi-size Secure/build/STM32U585VIT6_SM_S.elf
+          arm-none-eabi-size NonSecure/build/STM32U585VIT6_SM_NS.elf
+
+      - name: Upload Firmware Artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: stm32u585-freertos-firmware-debug
+          path: |
+            Secure/build/*.elf
+            Secure/build/*.bin
+            Secure/build/*.hex
+            Secure/build/*.map
+            NonSecure/build/*.elf
+            NonSecure/build/*.bin
+            NonSecure/build/*.hex
+            NonSecure/build/*.map
+          retention-days: 7
+
+  test-native-arm64:
+    name: Native ARM64 Host Verification (14 CTest Suites)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify Native ARM64 Architecture
+        run: |
+          echo "=== CPU ARCHITECTURE ==="
+          uname -m
+          lscpu || cat /proc/cpuinfo | grep "model name" | head -n 4
+
+      - name: Install Host Build Dependencies (ARM64)
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends cmake ninja-build build-essential python3
+
+      - name: Configure CMake for ARM64 Native Environment
+        run: |
+          cmake -S tests -B build/arm64-tests -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Compile 14 Test Suites & Simulator (ARM64)
+        run: |
+          cmake --build build/arm64-tests --parallel
+
+      - name: Execute 14 CTest Suites on Physical ARM64 Hardware
+        run: |
+          ctest --test-dir build/arm64-tests --output-on-failure --verbose

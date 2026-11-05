@@ -23,14 +23,23 @@ add_test(NAME AmiSecurityTest COMMAND test_ami_security)
 
 add_executable(test_ami_dlms_association
     test_ami_dlms_association.c
-    "${AMI_SRC}/ami_dlms_association.c")
+    "${AMI_SRC}/ami_dlms_association.c"
+    "${AMI_SRC}/ami_security.c")
 target_include_directories(test_ami_dlms_association PRIVATE "${AMI_INC}")
 add_test(NAME AmiDlmsAssociationTest COMMAND test_ami_dlms_association)
+
+add_executable(test_ami_firmware_auth_policy
+    test_ami_firmware_auth_policy.c
+    "${AMI_SRC}/ami_dlms_association.c")
+target_include_directories(test_ami_firmware_auth_policy PRIVATE "${AMI_INC}")
+target_compile_definitions(test_ami_firmware_auth_policy PRIVATE STM32U585xx)
+add_test(NAME AmiFirmwareAuthPolicyTest COMMAND test_ami_firmware_auth_policy)
 
 add_executable(test_ami_dlms_apdu
     test_ami_dlms_apdu.c
     "${AMI_SRC}/ami_dlms_apdu.c"
     "${AMI_SRC}/ami_dlms_association.c"
+    "${AMI_SRC}/ami_disconnect_control.c"
     "${AMI_SRC}/ami_cosem_model.c")
 target_include_directories(test_ami_dlms_apdu PRIVATE "${AMI_INC}")
 add_test(NAME AmiDlmsApduTest COMMAND test_ami_dlms_apdu)
@@ -46,6 +55,8 @@ add_executable(gurux_simulator
     "${AMI_SRC}/ami_dlms_hdlc.c"
     "${AMI_SRC}/ami_dlms_association.c"
     "${AMI_SRC}/ami_dlms_apdu.c"
+    "${AMI_SRC}/ami_dlms_block_transfer.c"
+    "${AMI_SRC}/ami_disconnect_control.c"
     "${AMI_SRC}/ami_cosem_model.c")
 target_include_directories(gurux_simulator PRIVATE "${AMI_INC}")
 set_target_properties(gurux_simulator PROPERTIES
@@ -53,3 +64,115 @@ set_target_properties(gurux_simulator PROPERTIES
 if(WIN32)
     target_link_libraries(gurux_simulator PRIVATE ws2_32)
 endif()
+
+add_executable(test_ami_port
+    test_ami_port.c
+    "${AMI_SRC}/ami_dlms_port.c"
+    "${AMI_SRC}/ami_dlms_block_transfer.c"
+    "${AMI_SRC}/ami_anti_bruteforce.c"
+    "${AMI_SRC}/ami_disconnect_control.c"
+    "${AMI_SRC}/ami_dlms_hdlc.c"
+    "${AMI_SRC}/ami_dlms_association.c"
+    "${AMI_SRC}/ami_dlms_apdu.c"
+    "${AMI_SRC}/ami_cosem_model.c")
+target_include_directories(test_ami_port PRIVATE "${AMI_INC}")
+add_test(NAME AmiDlmsPortTest COMMAND test_ami_port)
+
+add_executable(test_ami_ade9000
+    test_ami_ade9000.c
+    "${AMI_SRC}/ami_ade9000.c"
+    "${AMI_SRC}/ami_cosem_model.c")
+target_include_directories(test_ami_ade9000 PRIVATE "${AMI_INC}")
+add_test(NAME AmiAde9000Test COMMAND test_ami_ade9000)
+
+add_executable(test_ami_dlms_cipher
+    test_ami_dlms_cipher.c
+    "${AMI_SRC}/ami_dlms_cipher.c"
+    "${AMI_SRC}/ami_nvm_counter.c"
+    "${AMI_SRC}/ami_dlms_port.c"
+    "${AMI_SRC}/ami_dlms_block_transfer.c"
+    "${AMI_SRC}/ami_anti_bruteforce.c"
+    "${AMI_SRC}/ami_disconnect_control.c"
+    "${AMI_SRC}/ami_dlms_hdlc.c"
+    "${AMI_SRC}/ami_dlms_association.c"
+    "${AMI_SRC}/ami_dlms_apdu.c"
+    "${AMI_SRC}/ami_cosem_model.c"
+    "${AMI_SRC}/ami_security.c")
+target_include_directories(test_ami_dlms_cipher PRIVATE "${AMI_INC}")
+add_test(NAME AmiDlmsCipherTest COMMAND test_ami_dlms_cipher)
+
+add_executable(test_ami_nvm_counter
+    test_ami_nvm_counter.c
+    "${AMI_SRC}/ami_nvm_counter.c"
+    "${AMI_SRC}/ami_dlms_cipher.c"
+    "${AMI_SRC}/ami_dlms_port.c"
+    "${AMI_SRC}/ami_dlms_block_transfer.c"
+    "${AMI_SRC}/ami_anti_bruteforce.c"
+    "${AMI_SRC}/ami_disconnect_control.c"
+    "${AMI_SRC}/ami_dlms_hdlc.c"
+    "${AMI_SRC}/ami_dlms_association.c"
+    "${AMI_SRC}/ami_dlms_apdu.c"
+    "${AMI_SRC}/ami_cosem_model.c"
+    "${AMI_SRC}/ami_security.c")
+target_include_directories(test_ami_nvm_counter PRIVATE "${AMI_INC}")
+add_test(NAME AmiNvmCounterTest COMMAND test_ami_nvm_counter)
+
+add_executable(test_ami_key_transfer
+    test_ami_key_transfer.c
+    "${AMI_SRC}/ami_dlms_cipher.c"
+    "${AMI_SRC}/ami_nvm_counter.c"
+    "${AMI_SRC}/ami_dlms_port.c"
+    "${AMI_SRC}/ami_dlms_block_transfer.c"
+    "${AMI_SRC}/ami_anti_bruteforce.c"
+    "${AMI_SRC}/ami_disconnect_control.c"
+    "${AMI_SRC}/ami_dlms_hdlc.c"
+    "${AMI_SRC}/ami_dlms_association.c"
+    "${AMI_SRC}/ami_dlms_apdu.c"
+    "${AMI_SRC}/ami_cosem_model.c"
+    "${AMI_SRC}/ami_security.c")
+target_include_directories(test_ami_key_transfer PRIVATE "${AMI_INC}")
+add_test(NAME AmiKeyTransferTest COMMAND test_ami_key_transfer)
+
+add_executable(test_ami_anti_bruteforce
+    test_ami_anti_bruteforce.c
+    "${AMI_SRC}/ami_anti_bruteforce.c"
+    "${AMI_SRC}/ami_dlms_port.c"
+    "${AMI_SRC}/ami_dlms_block_transfer.c"
+    "${AMI_SRC}/ami_disconnect_control.c"
+    "${AMI_SRC}/ami_dlms_hdlc.c"
+    "${AMI_SRC}/ami_dlms_association.c"
+    "${AMI_SRC}/ami_dlms_apdu.c"
+    "${AMI_SRC}/ami_cosem_model.c"
+    "${AMI_SRC}/ami_security.c")
+target_include_directories(test_ami_anti_bruteforce PRIVATE "${AMI_INC}")
+add_test(NAME AmiAntiBruteforceTest COMMAND test_ami_anti_bruteforce)
+
+add_executable(test_ami_block_transfer
+    test_ami_block_transfer.c
+    "${AMI_SRC}/ami_dlms_block_transfer.c"
+    "${AMI_SRC}/ami_dlms_port.c"
+    "${AMI_SRC}/ami_anti_bruteforce.c"
+    "${AMI_SRC}/ami_disconnect_control.c"
+    "${AMI_SRC}/ami_dlms_hdlc.c"
+    "${AMI_SRC}/ami_dlms_association.c"
+    "${AMI_SRC}/ami_dlms_apdu.c"
+    "${AMI_SRC}/ami_cosem_model.c"
+    "${AMI_SRC}/ami_security.c")
+target_include_directories(test_ami_block_transfer PRIVATE "${AMI_INC}")
+add_test(NAME AmiBlockTransferTest COMMAND test_ami_block_transfer)
+
+add_executable(test_ami_disconnect_control
+    test_ami_disconnect_control.c
+    "${AMI_SRC}/ami_disconnect_control.c"
+    "${AMI_SRC}/ami_dlms_cipher.c"
+    "${AMI_SRC}/ami_nvm_counter.c"
+    "${AMI_SRC}/ami_dlms_port.c"
+    "${AMI_SRC}/ami_dlms_block_transfer.c"
+    "${AMI_SRC}/ami_anti_bruteforce.c"
+    "${AMI_SRC}/ami_dlms_hdlc.c"
+    "${AMI_SRC}/ami_dlms_association.c"
+    "${AMI_SRC}/ami_dlms_apdu.c"
+    "${AMI_SRC}/ami_cosem_model.c"
+    "${AMI_SRC}/ami_security.c")
+target_include_directories(test_ami_disconnect_control PRIVATE "${AMI_INC}")
+add_test(NAME AmiDisconnectControlTest COMMAND test_ami_disconnect_control)

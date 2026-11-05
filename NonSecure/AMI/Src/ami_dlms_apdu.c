@@ -341,21 +341,83 @@ typedef struct {
     uint8_t logical_name[AMI_COSEM_LOGICAL_NAME_LENGTH];
 } AssociationViewObject;
 
-/* Host/firmware association view: the objects this read-only meter actually
- * serves. Keep it bounded so it fits one negotiated HDLC information block. */
+/* Standard PLN Three-Phase Postpaid Association View (SPLN D3.002:2021 & IEC 62056-6-2).
+ * Large responses (> 128/512 bytes) are automatically segmented via xDLMS DataBlock Transfer. */
 static const AssociationViewObject association_view[] = {
-    {15u, 0u, {0, 0, 40, 0, 0, 255}}, /* Association LN */
-    {8u,  0u, {0, 0, 1, 0, 0, 255}},  /* Clock */
-    {3u,  0u, {1, 0, 32, 7, 0, 255}}, /* L1 voltage */
-    {3u,  0u, {1, 0, 52, 7, 0, 255}}, /* L2 voltage */
-    {3u,  0u, {1, 0, 72, 7, 0, 255}}, /* L3 voltage */
-    {3u,  0u, {1, 0, 31, 7, 0, 255}}, /* L1 current */
-    {3u,  0u, {1, 0, 51, 7, 0, 255}}, /* L2 current */
-    {3u,  0u, {1, 0, 71, 7, 0, 255}}, /* L3 current */
-    {3u,  0u, {1, 0, 1, 8, 0, 255}},  /* Active import */
-    {3u,  0u, {1, 0, 2, 8, 0, 255}},  /* Active export */
-    {7u,  0u, {0, 0, 99, 98, 0, 255}},/* Event log */
-    {7u,  0u, {1, 0, 98, 1, 0, 255}} /* Billing profile */
+    /* Core Management & Device Info */
+    {15u, 0u, {0, 0, 40, 0, 0, 255}},  /* Association LN */
+    {8u,  0u, {0, 0, 1, 0, 0, 255}},   /* Clock */
+    {1u,  0u, {0, 0, 42, 0, 0, 255}},  /* Logical Device Name */
+    {1u,  0u, {1, 0, 0, 2, 0, 255}},   /* Software/Firmware Version */
+    {1u,  0u, {0, 0, 96, 1, 0, 255}},  /* Meter Serial Number (Meter ID) */
+    {1u,  0u, {0, 0, 96, 1, 1, 255}},  /* Meter Type */
+    {64u, 0u, {0, 0, 43, 0, 0, 255}},  /* Security Setup */
+
+    /* Profiles */
+    {7u,  0u, {0, 0, 99, 98, 0, 255}}, /* Event Log Profile */
+    {7u,  0u, {1, 0, 98, 1, 0, 255}},  /* Billing Profile */
+    {7u,  0u, {1, 0, 99, 1, 0, 255}},  /* Load Profile 15-min */
+
+    /* Instantaneous Voltages (L1, L2, L3) */
+    {3u,  0u, {1, 0, 32, 7, 0, 255}},  /* Voltage L1 */
+    {3u,  0u, {1, 0, 52, 7, 0, 255}},  /* Voltage L2 */
+    {3u,  0u, {1, 0, 72, 7, 0, 255}},  /* Voltage L3 */
+
+    /* Instantaneous Currents (L1, L2, L3) */
+    {3u,  0u, {1, 0, 31, 7, 0, 255}},  /* Current L1 */
+    {3u,  0u, {1, 0, 51, 7, 0, 255}},  /* Current L2 */
+    {3u,  0u, {1, 0, 71, 7, 0, 255}},  /* Current L3 */
+
+    /* Cumulative Energy Totals (Active & Reactive) */
+    {3u,  0u, {1, 0, 1, 8, 0, 255}},   /* Active Import (+A) Total */
+    {3u,  0u, {1, 0, 2, 8, 0, 255}},   /* Active Export (-A) Total */
+    {3u,  0u, {1, 0, 3, 8, 0, 255}},   /* Reactive Import (+R) Total */
+    {3u,  0u, {1, 0, 4, 8, 0, 255}},   /* Reactive Export (-R) Total */
+
+    /* Multi-Tarif Active Energy Import (+A Tariffs 1..4: LWBP1, WBP, LWBP2, T4) */
+    {3u,  0u, {1, 0, 1, 8, 1, 255}},   /* Active Import Tarif 1 (LWBP 1) */
+    {3u,  0u, {1, 0, 1, 8, 2, 255}},   /* Active Import Tarif 2 (WBP) */
+    {3u,  0u, {1, 0, 1, 8, 3, 255}},   /* Active Import Tarif 3 (LWBP 2) */
+    {3u,  0u, {1, 0, 1, 8, 4, 255}},   /* Active Import Tarif 4 */
+
+    /* Multi-Tarif Active Energy Export (-A Tariffs 1..4) */
+    {3u,  0u, {1, 0, 2, 8, 1, 255}},   /* Active Export Tarif 1 */
+    {3u,  0u, {1, 0, 2, 8, 2, 255}},   /* Active Export Tarif 2 */
+    {3u,  0u, {1, 0, 2, 8, 3, 255}},   /* Active Export Tarif 3 */
+    {3u,  0u, {1, 0, 2, 8, 4, 255}},   /* Active Export Tarif 4 */
+
+    /* Multi-Tarif Reactive Energy Import (+R Tariffs 1..4) */
+    {3u,  0u, {1, 0, 3, 8, 1, 255}},   /* Reactive Import Tarif 1 */
+    {3u,  0u, {1, 0, 3, 8, 2, 255}},   /* Reactive Import Tarif 2 */
+    {3u,  0u, {1, 0, 3, 8, 3, 255}},   /* Reactive Import Tarif 3 */
+    {3u,  0u, {1, 0, 3, 8, 4, 255}},   /* Reactive Import Tarif 4 */
+
+    /* Power Quality: Frequency & Power Factor */
+    {3u,  0u, {1, 0, 14, 7, 0, 255}},  /* Frequency */
+    {3u,  0u, {1, 0, 13, 7, 0, 255}},  /* Power Factor Total */
+    {3u,  0u, {1, 0, 33, 7, 0, 255}},  /* Power Factor L1 */
+    {3u,  0u, {1, 0, 53, 7, 0, 255}},  /* Power Factor L2 */
+    {3u,  0u, {1, 0, 73, 7, 0, 255}},  /* Power Factor L3 */
+
+    /* Power Quality: Voltage THD (Total, L1, L2, L3) */
+    {3u,  0u, {1, 0, 12, 7, 124, 255}},/* THD Voltage Total */
+    {3u,  0u, {1, 0, 32, 7, 124, 255}},/* THD Voltage L1 */
+    {3u,  0u, {1, 0, 52, 7, 124, 255}},/* THD Voltage L2 */
+    {3u,  0u, {1, 0, 72, 7, 124, 255}},/* THD Voltage L3 */
+
+    /* Power Quality: Current THD (Total, L1, L2, L3) */
+    {3u,  0u, {1, 0, 11, 7, 124, 255}},/* THD Current Total */
+    {3u,  0u, {1, 0, 31, 7, 124, 255}},/* THD Current L1 */
+    {3u,  0u, {1, 0, 51, 7, 124, 255}},/* THD Current L2 */
+    {3u,  0u, {1, 0, 71, 7, 124, 255}},/* THD Current L3 */
+
+    /* Instantaneous Power (Total Active & Reactive Power) */
+    {3u,  0u, {1, 0, 1, 7, 0, 255}},   /* Active Power Total (+P) */
+    {3u,  0u, {1, 0, 3, 7, 0, 255}},   /* Reactive Power Total (+Q) */
+
+    /* Parameter Batas Daya (Demand Limiter) & Disconnect Control */
+    {71u, 0u, {0, 0, 17, 0, 3, 255}},  /* Power Limiter Class 71 */
+    {70u, 0u, {0, 0, 96, 3, 10, 255}}  /* Disconnect Control Class 70 */
 };
 
 static int view_put(uint8_t *out, size_t capacity, size_t *offset,
@@ -652,8 +714,39 @@ AmiDlmsApduStatus ami_dlms_process_ciphered_request(
         response_plain_length = 4u;
         service_status = AMI_DLMS_APDU_ACCESS_ERROR;
     } else {
-        service_status = process_security_key_transfer(association, cipher, workspace,
-            plaintext_length, workspace_capacity, &response_plain_length);
+        uint16_t req_class = (plaintext_length >= 5u)
+            ? (uint16_t)(((uint16_t)workspace[3] << 8) | workspace[4]) : 0u;
+        static const uint8_t s_dc_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 96, 3, 10, 255};
+        if (req_class == AMI_COSEM_DISCONNECT_CONTROL_CLASS_ID &&
+            plaintext_length >= 12u &&
+            memcmp(workspace + 5u, s_dc_ln, sizeof(s_dc_ln)) == 0) {
+            const uint8_t invoke_id = workspace[2];
+            const uint8_t method_id = workspace[11];
+            if (cipher->disconnect_control == NULL) {
+                response_plain_length = build_action_result(invoke_id, 1u, 1u, workspace, workspace_capacity);
+                service_status = AMI_DLMS_APDU_ACCESS_ERROR;
+            } else {
+                AmiDisconnectStatus dc_st = AMI_DISCONNECT_ERR_INVALID_PARAM;
+                if (method_id == 1u) {
+                    dc_st = ami_disconnect_control_remote_disconnect(cipher->disconnect_control, 0);
+                } else if (method_id == 2u) {
+                    dc_st = ami_disconnect_control_remote_reconnect(cipher->disconnect_control, 0);
+                }
+                if (dc_st == AMI_DISCONNECT_OK) {
+                    response_plain_length = build_action_result(invoke_id, 0u, 0u, workspace, workspace_capacity);
+                    service_status = AMI_DLMS_APDU_OK;
+                } else if (dc_st == AMI_DISCONNECT_ERR_NOT_PERMITTED) {
+                    response_plain_length = build_action_result(invoke_id, 1u, 3u, workspace, workspace_capacity);
+                    service_status = AMI_DLMS_APDU_ACCESS_ERROR;
+                } else {
+                    response_plain_length = build_action_result(invoke_id, 1u, 2u, workspace, workspace_capacity);
+                    service_status = AMI_DLMS_APDU_ACCESS_ERROR;
+                }
+            }
+        } else {
+            service_status = process_security_key_transfer(association, cipher, workspace,
+                plaintext_length, workspace_capacity, &response_plain_length);
+        }
     }
     if (response_plain_length == 0u) {
         secure_zeroize(workspace, workspace_capacity);
