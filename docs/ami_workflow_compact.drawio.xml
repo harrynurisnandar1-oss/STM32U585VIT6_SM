@@ -1,0 +1,178 @@
+<mxfile host="app.diagrams.net" modified="2026-11-06T15:23:00.000Z" agent="Antigravity" version="24.0.0" type="device">
+  <diagram id="flowchart-sistem-ami" name="Diagram Alir Sistem AMI (1 Halaman Word)">
+    <mxGraphModel dx="1000" dy="1150" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- 1. MULAI (Terminator) -->
+        <mxCell id="n_start" value="Mulai" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#ffffff;strokeColor=#000000;fontColor=#000000;fontFamily=Times New Roman;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="330" y="20" width="120" height="34" as="geometry" />
+        </mxCell>
+
+        <!-- 2. PROSES: SECURE BOOT & INISIALISASI -->
+        <mxCell id="n_init" value="Inisialisasi Secure Boot (TrustZone), STM32U585 HAL,&lt;br&gt;konfigurasi ADE9000, dan scheduler FreeRTOS" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontColor=#000000;fontFamily=Times New Roman;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="235" y="75" width="310" height="42" as="geometry" />
+        </mxCell>
+
+        <!-- 3. INPUT DATA (Parallelogram) -->
+        <mxCell id="n_input" value="Frame request DLMS/COSEM (HES / HHU)&lt;br&gt;&amp;amp; pembacaan sensor metrologi ADE9000" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;size=18;fillColor=#ffffff;strokeColor=#000000;fontColor=#000000;fontFamily=Times New Roman;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="230" y="138" width="320" height="42" as="geometry" />
+        </mxCell>
+
+        <!-- 4. PROSES: PARSING HDLC -->
+        <mxCell id="n_hdlc" value="Penerimaan port komunikasi dan dekode&lt;br&gt;framing HDLC (CRC-16 HCS/FCS)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontColor=#000000;fontFamily=Times New Roman;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="250" y="202" width="280" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- 5. KEPUTUSAN 1: FRAME HDLC VALID? (Diamond) -->
+        <mxCell id="n_dec_hdlc" value="Frame HDLC&lt;br&gt;valid?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontColor=#000000;fontFamily=Times New Roman;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="305" y="264" width="170" height="68" as="geometry" />
+        </mxCell>
+
+        <!-- 6. SUBPROSES: ASOSIASI ACSE & KEAMANAN TRUSTZONE -->
+        <mxCell id="n_sec_sub" value="Negosiasi asosiasi ACSE, otentikasi HLS-5 GMAC,&lt;br&gt;dekripsi AES-128-GCM &amp;amp; cek counter via TrustZone NSC" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;size=0.04;fillColor=#ffffff;strokeColor=#000000;fontColor=#000000;fontFamily=Times New Roman;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="225" y="356" width="330" height="46" as="geometry" />
+        </mxCell>
+
+        <!-- 7. KEPUTUSAN 2: OTENTIKASI & KEAMANAN VALID? (Diamond) -->
+        <mxCell id="n_dec_auth" value="Otentikasi, tag GCM,&lt;br&gt;&amp;amp; counter valid?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontColor=#000000;fontFamily=Times New Roman;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="295" y="426" width="190" height="74" as="geometry" />
+        </mxCell>
+
+        <!-- 7B. CABANG TIDAK: ANTI-BRUTE-FORCE & LOCKOUT -->
+        <mxCell id="n_lockout" value="Penanganan kegagalan keamanan:&lt;br&gt;penalti anti-brute-force / lockout" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontColor=#000000;fontFamily=Times New Roman;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="530" y="441" width="195" height="44" as="geometry" />
+        </mxCell>
+
+        <!-- 8. SUBPROSES: EKSEKUSI xDLMS APDU & MODEL COSEM -->
+        <mxCell id="n_cosem_sub" value="Pemrosesan xDLMS APDU terhadap Model Objek COSEM&lt;br&gt;(Katalog OBIS, data ADE9000, log tamper, kontrol relai)" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;size=0.04;fillColor=#ffffff;strokeColor=#000000;fontColor=#000000;fontFamily=Times New Roman;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="225" y="526" width="330" height="46" as="geometry" />
+        </mxCell>
+
+        <!-- 9. KEPUTUSAN 3: UKURAN PAYLOAD > PDU? (Diamond) -->
+        <mxCell id="n_dec_block" value="Ukuran APDU melebihi&lt;br&gt;batas frame?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontColor=#000000;fontFamily=Times New Roman;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="295" y="596" width="190" height="72" as="geometry" />
+        </mxCell>
+
+        <!-- 10. PROSES: SEGMENTASI BLOCK TRANSFER -->
+        <mxCell id="n_block" value="Segmentasi payload dengan&lt;br&gt;Block Transfer (DataBlock-G)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontColor=#000000;fontFamily=Times New Roman;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="285" y="692" width="210" height="42" as="geometry" />
+        </mxCell>
+
+        <!-- 11. SUBPROSES: ENKRIPSI RESPONS & FRAMING HDLC -->
+        <mxCell id="n_tx_sub" value="Enkripsi respons AES-128-GCM (Secure NSC)&lt;br&gt;dan pembungkusan frame respons HDLC" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;size=0.04;fillColor=#ffffff;strokeColor=#000000;fontColor=#000000;fontFamily=Times New Roman;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="245" y="758" width="290" height="44" as="geometry" />
+        </mxCell>
+
+        <!-- 12. OUTPUT DATA (Parallelogram) -->
+        <mxCell id="n_output" value="Transmisi frame respons DLMS/COSEM (Profil beban,&lt;br&gt;besaran metrologi, status relai, event log) ke Client" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;size=18;fillColor=#ffffff;strokeColor=#000000;fontColor=#000000;fontFamily=Times New Roman;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="220" y="826" width="340" height="44" as="geometry" />
+        </mxCell>
+
+        <!-- 13. SELESAI (Terminator) -->
+        <mxCell id="n_end" value="Selesai" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#ffffff;strokeColor=#000000;fontColor=#000000;fontFamily=Times New Roman;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="330" y="894" width="120" height="34" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== PANAH PENGHUBUNG (EDGES) ==================== -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;" edge="1" parent="1" source="n_start" target="n_init">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;" edge="1" parent="1" source="n_init" target="n_input">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;" edge="1" parent="1" source="n_input" target="n_hdlc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;" edge="1" parent="1" source="n_hdlc" target="n_dec_hdlc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Loop Tidak dari Frame HDLC Valid? kembali ke Input -->
+        <mxCell id="e5_no" value="Tidak" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#000000;fontFamily=Times New Roman;fontSize=10;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_dec_hdlc" target="n_input">
+          <mxGeometry x="-0.65" y="-15" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="190" y="298" />
+              <mxPoint x="190" y="159" />
+            </Array>
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Ya dari Frame HDLC Valid? ke Subproses ACSE & Security -->
+        <mxCell id="e5_yes" value="Ya" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;fontFamily=Times New Roman;fontSize=10;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_dec_hdlc" target="n_sec_sub">
+          <mxGeometry x="-0.2" y="15" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;" edge="1" parent="1" source="n_sec_sub" target="n_dec_auth">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Tidak dari Otentikasi Valid? ke Lockout -->
+        <mxCell id="e7_no" value="Tidak" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#000000;fontFamily=Times New Roman;fontSize=10;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_dec_auth" target="n_lockout">
+          <mxGeometry x="-0.2" y="10" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Dari Lockout langsung ke Pembentukan Respons Penolakan/TX -->
+        <mxCell id="e7_lock_tx" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#000000;" edge="1" parent="1" source="n_lockout" target="n_tx_sub">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="628" y="780" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Ya dari Otentikasi Valid? ke Eksekusi COSEM -->
+        <mxCell id="e7_yes" value="Ya" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;fontFamily=Times New Roman;fontSize=10;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_dec_auth" target="n_cosem_sub">
+          <mxGeometry x="-0.2" y="15" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;" edge="1" parent="1" source="n_cosem_sub" target="n_dec_block">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Ya dari Ukuran APDU > batas? ke Segmentasi Block Transfer -->
+        <mxCell id="e9_yes" value="Ya" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;fontFamily=Times New Roman;fontSize=10;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_dec_block" target="n_block">
+          <mxGeometry x="-0.2" y="15" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Tidak dari Ukuran APDU > batas? langsung bypass ke Enkripsi & TX -->
+        <mxCell id="e9_no" value="Tidak" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.25;entryDx=0;entryDy=0;strokeColor=#000000;fontFamily=Times New Roman;fontSize=10;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_dec_block" target="n_tx_sub">
+          <mxGeometry x="-0.1" y="18" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="570" y="632" />
+              <mxPoint x="570" y="769" />
+            </Array>
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;" edge="1" parent="1" source="n_block" target="n_tx_sub">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;" edge="1" parent="1" source="n_tx_sub" target="n_output">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#000000;" edge="1" parent="1" source="n_output" target="n_end">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
+
