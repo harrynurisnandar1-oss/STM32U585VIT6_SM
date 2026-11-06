@@ -886,6 +886,45 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
     - Verifikasi selective access range descriptor dan specific tamper filter query.
     - CTest Suite: **14/14 tests PASS (100% Lulus)**.
 
+## [v2.19.0] - 2026-11-06
+
+### Added & Enhanced
+- **Implementasi Profil Kualitas Daya Tegangan R/S/T (Power Quality Voltage Log Profile) (`1.0.99.14.2..4.255`)**:
+  - Menyelesaikan masalah *"Capture objects not read."* pada Gurux DLMS Director.
+  - Mengimplementasikan objek Profile Generic (Class 7) untuk pemantauan kualitas tegangan per-fasa:
+    - Fase R: `1.0.99.14.2.255` (Capture: Clock `0.0.1.0.0.255`, Event Code `0.0.96.11.0.255`, Tegangan R `1.0.32.7.0.255`).
+    - Fase S: `1.0.99.14.3.255` (Capture: Clock `0.0.1.0.0.255`, Event Code `0.0.96.11.0.255`, Tegangan S `1.0.52.7.0.255`).
+    - Fase T: `1.0.99.14.4.255` (Capture: Clock `0.0.1.0.0.255`, Event Code `0.0.96.11.0.255`, Tegangan T `1.0.72.7.0.255`).
+  - Mendaftarkan ketiga profil dan register statusnya (`1.135.32.0.0.255`, `1.135.52.0.0.255`, `1.135.72.0.0.255`) ke `association_view` pada `NonSecure/AMI/Src/ami_dlms_apdu.c`.
+- **Implementasi Instant Profile Class 7 (`1.96.98.128.0.255`)**:
+  - Mengimplementasikan 11 Capture Objects: Clock, Tegangan sesaat 3-fasa (L1, L2, L3), Arus sesaat 3-fasa (L1, L2, L3), Daya Aktif Total, Daya Reaktif Total, Power Factor Total, dan Frekuensi Jaringan.
+  - Serialisasi baris data dinamis pada `read_profile()` dengan proteksi range filtering.
+- **Dukungan Interface Class COSEM Baru**:
+  - **Class 6 (Register Activation)**: Objek `0.0.14.0.0.255` (Tariff register activation).
+  - **Class 11 (Special Days Table)**: Objek `0.0.11.0.0.255` (Special days table).
+  - **Class 20 (Activity Calendar)**: Objek `0.0.13.0.0.255` (Activity calendar).
+  - **Class 22 (Single Action Schedule)**: Objek `0.1.15.0.4.255` (Historical scheduler), `0.0.15.0.2.255` (Billing scheduler), `0.1.15.0.2.255`, dan `0.2.15.0.2.255`.
+- **Dukungan Extended Registers & Generic Data Fallback**:
+  - Register batas kualitas daya: Low voltage limit (`1.0.12.31.0.255`), Low voltage delay (`1.0.12.33.0.255`), Faktor daya batas kompensasi (`1.0.13.31.0.255`), dan Energi aktif total (`1.0.15.8.0.255`).
+  - Penambahan generic fallback pada model untuk Class 1 (Data) guna mencegah status `OBJECT_NOT_FOUND` pada objek metadata.
+
+### Changed & Fixed
+- **Pemisahan Kolom Event Log #1 vs Tamper Log (`0.0.99.98.0.255`)**:
+  - Menyelesaikan error *"The number of columns does not match"* pada Gurux DLMS Director saat membaca buffer `0.0.99.98.0.255`.
+  - Memisahkan definisi capture objects:
+    - **Event Log #1 Standar (`0.0.99.98.0.255`)**: Dikonfigurasi dengan **2 kolom** (Clock `0.0.1.0.0.255` & Event Code `0.0.96.11.0.255`) sesuai standar IEC 62056 dan template Gurux GXC.
+    - **Tamper/Alarm Logbook (`1.97.99.98.x.255`)**: Tetap menggunakan struktur **3 kolom** (Clock, Event Code, Status Register).
+  - Memperbarui serialisasi baris buffer `read_profile()` pada `NonSecure/AMI/Src/ami_cosem_model.c` agar baris `0.0.99.98.0.255` menghasilkan struktur 2 elemen.
+- **Penyelarasan Jam Simulator & Filter Range**:
+  - Mengupdate waktu RTC internal simulator pada `tests/gurux_simulator.c` ke waktu aktif pengujian (`2026-11-06 10:10:00`) agar lolos evaluasi rentang filter tanggal (*Selective Access Range*).
+  - Menghindari eliminasi record instan profile dan event log pada query selective range.
+- **Perbaikan HDLC Framing pada Test Client E2E (`docker_test/test_dlms_e2e_client.py`)**:
+  - Memperbaiki parser frame streaming `read_hdlc_frame()` dalam menangani flag transparan `0x7E` ganda (*back-to-back flags*) antar-frame HDLC.
+  - Menambahkan pengujian integrasi E2E otomatis untuk Instant Profile (Capture Objects & Buffer), Event Log #1 (verifikasi 2 kolom), dan PQ Voltage Log Profile R.
+- **Verifikasi Unit Test**:
+  - Memperbarui assert pada `tests/test_ami_cosem.c` untuk 2 kolom pada `obis_event_log` serta menambahkan pengujian `obis_pq_voltage_r`.
+  - Hasil CTest Suite: **14/14 test suites lulus 100%**.
+
 ## [v2.18.1] - 2026-11-04
 
 ### Changed & Fixed

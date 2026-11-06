@@ -108,13 +108,102 @@ static void make_development_snapshot(AmiCosemRegisterSnapshot *snapshot)
      * attribute 2 available to Gurux instead of advertising unavailable data. */
     snapshot->clock_date_time.year[0] = 0x07u;
     snapshot->clock_date_time.year[1] = 0xEAu; /* 2026 */
-    snapshot->clock_date_time.month = 10u;
-    snapshot->clock_date_time.day = 13u;
-    snapshot->clock_date_time.day_of_week = 2u;
-    snapshot->clock_date_time.hour = 12u;
+    snapshot->clock_date_time.month = 11u;     /* November */
+    snapshot->clock_date_time.day = 6u;        /* 6th */
+    snapshot->clock_date_time.day_of_week = 5u;
+    snapshot->clock_date_time.hour = 10u;
+    snapshot->clock_date_time.minute = 10u;
+    snapshot->clock_date_time.second = 0u;
     snapshot->clock_date_time.deviation[0] = 0x80u; /* unspecified */
     snapshot->clock_date_time.deviation[1] = 0x00u;
-    snapshot->valid_mask = AMI_COSEM_VALID_VOLTAGE_A |
+
+    /* Reactive energy & instantaneous power (dibutuhkan oleh 1.0.3.8.0, 1.0.4.8.0,
+     * 1.0.3.8.x dan 1.0.3.7.0 agar Gurux tidak menerima "temporary-failure"). */
+    snapshot->reactive_import_varh = 345678u;
+    snapshot->reactive_export_varh = 1234u;
+    snapshot->reactive_import_tariff_varh[0] = 120000u;
+    snapshot->reactive_import_tariff_varh[1] = 150000u;
+    snapshot->reactive_import_tariff_varh[2] = 75678u;
+    snapshot->reactive_import_tariff_varh[3] = 0u;
+    snapshot->active_power_watts = 7150u;
+    snapshot->reactive_power_vars = 1240u;
+
+    /* Security Setup (0.0.43.0.0.255) attribute 4/5: system titles */
+    static const uint8_t client_title[8] = {'G', 'R', 'X', 0x00u, 0x00u, 0x00u, 0x00u, 0x01u};
+    static const uint8_t server_title[8] = {'P', 'L', 'N', 0x26u, 0x10u, 0x28u, 0x01u, 0x01u};
+    memcpy(snapshot->client_system_title, client_title, sizeof(client_title));
+    memcpy(snapshot->server_system_title, server_title, sizeof(server_title));
+
+    /* Load Profile 15-min (1.0.99.1.0.255): satu entri contoh */
+    snapshot->load_profile_count = 1u;
+    snapshot->load_profile[0].timestamp = snapshot->clock_date_time;
+    snapshot->load_profile[0].active_import_wh = snapshot->active_import_wh;
+    snapshot->load_profile[0].active_export_wh = snapshot->active_export_wh;
+    snapshot->load_profile[0].reactive_import_varh = snapshot->reactive_import_varh;
+    snapshot->load_profile[0].reactive_export_varh = snapshot->reactive_export_varh;
+    for (size_t i = 0u; i < 3u; ++i) {
+        snapshot->load_profile[0].phase_voltage_mv[i] = snapshot->phase_voltage_millivolts[i];
+        snapshot->load_profile[0].phase_current_ma[i] = snapshot->phase_current_milliamps[i];
+    }
+    snapshot->load_profile[0].active_power_watts = snapshot->active_power_watts;
+    snapshot->load_profile[0].reactive_power_vars = snapshot->reactive_power_vars;
+    snapshot->load_profile[0].power_factor = snapshot->power_factor[0];
+    snapshot->load_profile[0].frequency_mhz = snapshot->frequency_mhz;
+
+    /* Extended SPLN registers (per-phase power/energy, apparent, quadrant, neutral).
+     * Register ini dibaca dari measurement_samples; tanpa sampel, model mengembalikan
+     * AMI_COSEM_VALUE_UNAVAILABLE -> Gurux: "Device reports a temporary failure". */
+    static const struct { uint8_t c, d; uint64_t value; } ext_samples[] = {
+        /* Neutral current / voltage (scaler -3) */
+        {91u, 7u, 300u}, {92u, 7u, 500u},
+        /* Total export / apparent power */
+        {2u, 7u, 0u}, {4u, 7u, 0u}, {9u, 7u, 7260u}, {10u, 7u, 0u},
+        /* Per-phase active power import / export (W) */
+        {21u, 7u, 2380u}, {41u, 7u, 2340u}, {61u, 7u, 2430u},
+        {22u, 7u, 0u}, {42u, 7u, 0u}, {62u, 7u, 0u},
+        /* Per-phase reactive power import / export (var) */
+        {23u, 7u, 410u}, {43u, 7u, 415u}, {63u, 7u, 415u},
+        {24u, 7u, 0u}, {44u, 7u, 0u}, {64u, 7u, 0u},
+        /* Per-phase apparent power import / export (VA) */
+        {29u, 7u, 2415u}, {49u, 7u, 2380u}, {69u, 7u, 2245u},
+        {30u, 7u, 0u}, {50u, 7u, 0u}, {70u, 7u, 0u},
+        /* Per-phase active energy import / export (Wh) */
+        {21u, 8u, 411522u}, {41u, 8u, 411523u}, {61u, 8u, 411522u},
+        {22u, 8u, 0u}, {42u, 8u, 0u}, {62u, 8u, 0u},
+        /* Per-phase reactive energy import / export (varh) */
+        {23u, 8u, 115226u}, {43u, 8u, 115226u}, {63u, 8u, 115226u},
+        {24u, 8u, 411u}, {44u, 8u, 411u}, {64u, 8u, 412u},
+        /* Per-phase apparent energy import / export (VAh) */
+        {29u, 8u, 425000u}, {49u, 8u, 423000u}, {69u, 8u, 427000u},
+        {30u, 8u, 0u}, {50u, 8u, 0u}, {70u, 8u, 0u},
+        /* Per-phase reactive energy per quadrant Q1..Q4 (varh) */
+        {25u, 8u, 100000u}, {45u, 8u, 100000u}, {65u, 8u, 100000u},
+        {26u, 8u, 15226u}, {66u, 8u, 15226u},
+        {27u, 8u, 300u}, {47u, 8u, 300u}, {67u, 8u, 300u},
+        {28u, 8u, 111u}, {48u, 8u, 111u}, {68u, 8u, 112u},
+        /* Total reactive energy per quadrant Q1..Q4 (varh) */
+        {5u, 8u, 300000u}, {6u, 8u, 45678u}, {7u, 8u, 900u}, {8u, 8u, 334u},
+    };
+    snapshot->measurement_sample_count = 0u;
+    for (size_t i = 0u; i < sizeof(ext_samples) / sizeof(ext_samples[0]) &&
+                        snapshot->measurement_sample_count < AMI_COSEM_REGISTER_SAMPLE_MAX; ++i) {
+        AmiCosemRegisterSample *s = &snapshot->measurement_samples[snapshot->measurement_sample_count++];
+        s->logical_name[0] = 1u;
+        s->logical_name[1] = 0u;
+        s->logical_name[2] = ext_samples[i].c;
+        s->logical_name[3] = ext_samples[i].d;
+        s->logical_name[4] = 0u;
+        s->logical_name[5] = 255u;
+        s->raw_value = ext_samples[i].value;
+        s->signed_value = (int32_t)ext_samples[i].value;
+        s->valid = 1u;
+    }
+
+    snapshot->valid_mask = AMI_COSEM_VALID_REACTIVE_IMPORT |
+                           AMI_COSEM_VALID_REACTIVE_EXPORT |
+                           AMI_COSEM_VALID_SECURITY_CLIENT_TITLE |
+                           AMI_COSEM_VALID_LOAD_PROFILE |
+                           AMI_COSEM_VALID_VOLTAGE_A |
                            AMI_COSEM_VALID_VOLTAGE_B |
                            AMI_COSEM_VALID_VOLTAGE_C |
                            AMI_COSEM_VALID_CURRENT_A |
@@ -208,22 +297,28 @@ static int process_i_frame(HdlcContext *hdlc, const HdlcFrame *request,
             uint32_t req_block_num = 0u;
             if (ami_bt_parse_get_next_block_request(apdu, apdu_length_in, &req_invoke_id, &req_block_num)) {
                 int is_last = 0;
+                /* If client acknowledges the block it already received (e.g. block 1 in Gurux DLMS Director),
+                 * advance to next block. If client already requested the target block (block 2), use it. */
+                uint32_t target_block = req_block_num;
+                if (target_block == s_sim_bt.current_block_number) {
+                    target_block = s_sim_bt.current_block_number + 1u;
+                }
                 AmiBtStatus bt_st = ami_bt_build_get_response_block(
-                    &s_sim_bt, req_block_num, apdu_response, sizeof(apdu_response), &apdu_length, &is_last);
+                    &s_sim_bt, target_block, apdu_response, sizeof(apdu_response), &apdu_length, &is_last);
                 if (bt_st != AMI_BT_OK) {
                     apdu_length = ami_bt_build_error_response_block(
-                        req_invoke_id, req_block_num, 2u, apdu_response, sizeof(apdu_response));
+                        req_invoke_id, target_block, 2u, apdu_response, sizeof(apdu_response));
                 }
-                fprintf(stdout, "[APDU GET-DATABLOCK] block=%u last=%d length=%u bytes\n",
-                        (unsigned)req_block_num, is_last, (unsigned)apdu_length);
+                fprintf(stdout, "[APDU GET-DATABLOCK] req=%u target=%u last=%d length=%u bytes\n",
+                        (unsigned)req_block_num, (unsigned)target_block, is_last, (unsigned)apdu_length);
                 fflush(stdout);
             }
         } else {
             apdu_status = ami_dlms_process_get_request(association, snapshot, apdu,
                 apdu_length_in, apdu_response, sizeof(apdu_response), &apdu_length);
 
-            /* If response payload exceeds 128 bytes, use block transfer */
-            if (apdu_status == AMI_DLMS_APDU_OK && apdu_length > 128u &&
+            /* If response payload exceeds HDLC frame limit (480 bytes), use block transfer */
+            if (apdu_status == AMI_DLMS_APDU_OK && apdu_length > 480u &&
                 apdu_response[0] == 0xC4u && apdu_response[1] == 0x01u && apdu_response[3] == 0x00u) {
                 uint8_t invoke_id = apdu_response[2];
                 AmiBtStatus bt_st = ami_bt_start_get_transfer(
@@ -436,14 +531,14 @@ int main(void)
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
     address.sin_port = htons(SERVER_PORT);
-    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_addr.s_addr = htonl(INADDR_ANY);
     if (bind(server, (struct sockaddr *)&address, sizeof(address)) != 0 ||
         listen(server, 1) != 0) {
-        fprintf(stderr, "Could not bind/listen on 127.0.0.1:%d.\n", SERVER_PORT);
+        fprintf(stderr, "Could not bind/listen on 0.0.0.0:%d.\n", SERVER_PORT);
         CLOSE_SOCKET(server);
         return 1;
     }
-    fprintf(stdout, "Listening for raw HDLC-over-TCP on 127.0.0.1:%d\n", SERVER_PORT);
+    fprintf(stdout, "Listening for raw HDLC-over-TCP on 0.0.0.0:%d\n", SERVER_PORT);
 
     for (;;) {
         socket_t client = accept(server, NULL, NULL);
@@ -458,5 +553,6 @@ int main(void)
         (void)serve_client(client);
         CLOSE_SOCKET(client);
         fprintf(stdout, "Client disconnected.\n");
+        fflush(stdout);
     }
 }

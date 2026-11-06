@@ -175,19 +175,29 @@ static void test_profile_generic_buffers(void)
 
     AmiCosemData out;
 
-    /* 1. General Event / Tamper log buffer & entries (3 columns) */
+    /* 1. General Event log buffer & entries (2 columns for standard event log #1) */
     assert(ami_cosem_register_read(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
         obis_event_log, 2u, &out) == AMI_COSEM_OK);
     assert(out.type == AMI_COSEM_TYPE_ENCODED && out.length > 2u);
     assert(out.value.encoded[0] == 1u && out.value.encoded[1] == 2u); /* 2 rows */
-    assert(out.value.encoded[2] == AMI_COSEM_TYPE_STRUCTURE && out.value.encoded[3] == 3u); /* 3 columns */
+    assert(out.value.encoded[2] == AMI_COSEM_TYPE_STRUCTURE && out.value.encoded[3] == 2u); /* 2 columns */
     assert(ami_cosem_register_read(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
         obis_event_log, 3u, &out) == AMI_COSEM_OK);
-    assert(out.type == AMI_COSEM_TYPE_ENCODED && out.value.encoded[0] == 1u && out.value.encoded[1] == 3u);
+    assert(out.type == AMI_COSEM_TYPE_ENCODED && out.value.encoded[0] == 1u && out.value.encoded[1] == 2u);
     assert(ami_cosem_register_read(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
         obis_event_log, 7u, &out) == AMI_COSEM_OK);
     assert(out.value.encoded[0] == AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED);
     assert(out.value.encoded[4] == 2u);
+
+    /* PQ Voltage Log Profile R (1.0.99.14.2.255) */
+    static const uint8_t obis_pq_voltage_r[6] = {1u, 0u, 99u, 14u, 2u, 255u};
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
+        obis_pq_voltage_r, 3u, &out) == AMI_COSEM_OK);
+    assert(out.type == AMI_COSEM_TYPE_ENCODED && out.value.encoded[0] == 1u && out.value.encoded[1] == 3u);
+    assert(ami_cosem_register_read(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,
+        obis_pq_voltage_r, 2u, &out) == AMI_COSEM_OK);
+    assert(out.value.encoded[0] == 1u && out.value.encoded[1] == 1u);
+    assert(out.value.encoded[2] == AMI_COSEM_TYPE_STRUCTURE && out.value.encoded[3] == 3u);
 
     /* Specific Tamper Profile 1.97.99.98.20.255 (Cover Open) */
     assert(ami_cosem_register_read(&snapshot, AMI_COSEM_PROFILE_GENERIC_CLASS_ID,

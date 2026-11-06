@@ -28,9 +28,11 @@ Tujuan utama paket pekerjaan E2 adalah menjamin interoperabilitas meter terhadap
 │              │                       │                    │            │
 │  ┌───────────▼───────────────────────▼────────────────────▼─────────┐  │
 │  │                    COSEM Object Model Layer                       │  │
-│  │  - 49 Registered PLN Objects       - Tamper Logbook (9 Modus)    │  │
+│  │  - 66 Registered PLN Objects       - Tamper Logbook (9 Modus)    │  │
 │  │  - Load Profile (23 Channels)      - Disconnect Control (Cl. 70) │  │
+│  │  - Instant Profile (11 Channels)   - PQ Voltage Profiles (R/S/T) │  │
 │  │  - Billing Profile (Class 7)       - Multi-Tariff WBP/LWBP (1..4)│  │
+│  │  - Classes 6, 11, 20, 22 Supported - Event Log #1 (2 Columns)    │  │
 │  └───────────────────────────────────┬───────────────────────────────┘  │
 │                                      │ Non-Secure Callable (NSC)       │
 ├──────────────────────────────────────┼─────────────────────────────────┤
@@ -48,11 +50,15 @@ Tujuan utama paket pekerjaan E2 adalah menjamin interoperabilitas meter terhadap
 ### 🎯 Pilar Utama Implementasi
 * **Protokol Komunikasi DLMS/COSEM & ACSE**: State machine asosiasi AARQ/AARE, negosiasi dinamis conformance block (`Get` + `SelectiveAccess`), Max PDU negotiation, serta silent-drop frame anomali sesuai uji CTT.
 * **HDLC Data Link Layer Deterministik**: Parser streaming zero-heap $O(1)$, Framing Type 3 (`0xA0`), dual-stage CRC-16 (HCS & FCS) dengan ketahanan transparent flag `0x7E`, serta auto-wrap/stripping LLC sublayer (`0xE6 0xE6 0x00` / `0xE6 0xE7 0x00`).
-* **Data Model 49 Objek Standar PLN**: 49 objek COSEM aktif siap baca via `GET` dan tersegmentasi otomatis menggunakan **General Block Transfer (GBT)** jika melebihi ukuran PDU.
+* **Data Model 66 Objek Standar PLN**: 66 objek COSEM aktif siap baca via `GET` dan tersegmentasi otomatis menggunakan **General Block Transfer (GBT)** jika melebihi ukuran PDU.
 * **Histori Profiling Class 7 & Selective Access**: 
   * **Load Profile 15-Menit (`1.0.99.1.0.255`)**: 23 kanal komprehensif (energi aktif/reaktif impor/ekspor, 4 kuadran Q1..Q4, tegangan & arus per-fasa, arus netral, daya aktif per-fasa, PF total, frekuensi, serta THD tegangan).
-  * **Tamper Event Logbook (`0.0.99.98.0.255` & `1.97.99.98.20..28.255`)**: Mendukung 9 modus tamper PLN (Cover Open, Terminal Open, Reverse Phase, Neutral Disturbance, Magnetic Tamper, Loss of Phase, Neutral Bypass, Reverse Power, dan Over Voltage/Current).
+  * **Instant Profile (`1.96.98.128.0.255`)**: 11 kanal pengukuran sesaat (Waktu, Tegangan 3-Fasa, Arus 3-Fasa, Daya Aktif/Reaktif Total, PF Total, Frekuensi).
+  * **Power Quality Voltage Log Profiles (`1.0.99.14.2..4.255`)**: Profil kualitas tegangan fase R, S, dan T (Capture: Clock, Event Code, Phase Voltage).
+  * **Event Log #1 (`0.0.99.98.0.255`)**: Logbook kejadian operasional standar 2 kolom (Clock & Event Code).
+  * **Tamper Event Logbook (`1.97.99.98.x.255`)**: 3 kolom (Clock, Event Code, Status) mendukung 9 modus tamper PLN (Cover Open, Terminal Open, Reverse Phase, Neutral Disturbance, Magnetic Tamper, Loss of Phase, Neutral Bypass, Reverse Power, dan Over Voltage/Current).
   * **Dukungan Selector**: Selector 1 (Rentang Waktu Clock) dan Selector 2 (Rentang Indeks Baris).
+* **Interface Classes Tambahan**: Register Activation (Class 6), Special Days Table (Class 11), Activity Calendar (Class 20), dan Single Action Schedule (Class 22).
 * **Keamanan Kriptografi Berlapis (SPLN D5.002:2024)**:
   * DLMS Security Suite 0 (`glo-get`, `glo-set`, `glo-action`) dengan AES-128-GCM dan Nonce 12-byte.
   * 4-Pass Mutual Authentication **HLS 5 (GMAC)** OID `2.16.756.5.8.2.5` dengan constant-time comparison dan memory zeroization.
@@ -79,8 +85,8 @@ Implementasi diklasifikasikan secara transparan berdasarkan kesiapan software da
 | **Data Link** | LLC Sublayer Handling (`0xE6 0xE6 0x00` / `0xE6 0xE7 0x00`) | 🟢 **SUDAH** | Sesuai kepatuhan IEC 62056-46 |
 | **Aplikasi** | ACSE Association Engine (AARQ/AARE, Max PDU, Conformance) | 🟢 **SUDAH** | Terverifikasi di `ami_dlms_association.c` |
 | **Data Model** | 276 Kode OBIS Standar PLN (`ami_obis_catalog.h`) | 🟢 **SUDAH** | Terpetakan dalam 22 kategori fungsional |
-| **Data Model** | Association View 49 Objek Aktif Standar PLN via `GET` | 🟢 **SUDAH** | 49 objek terdaftar dan teruji aksesnya |
-| **Data Model** | Load Profile 23-Kanal 15-Menit (`1.0.99.1.0.255`, Class 7) | 🟢 **SUDAH** | Atribut 1 s.d. 8 + Selective Access Selector 1 & 2 |
+| **Data Model** | Association View 66 Objek Aktif Standar PLN via `GET` | 🟢 **SUDAH** | 66 objek terdaftar dan teruji aksesnya |
+| **Data Model** | Load, Instant, & PQ Voltage Log Profiles (Class 7) | 🟢 **SUDAH** | Load (23-ch), Instant (11-ch), PQ Voltage R/S/T, Event Log (2-col) |
 | **Data Model** | Tamper Event Logbook (9 Modus Tamper Resmi PLN) | 🟢 **SUDAH** | Snapshot otomatis via trigger metrologi ADE9000 |
 | **Data Model** | General Block Transfer (GBT) untuk APDU Besar | 🟢 **SUDAH** | Segmentasi & rekonstruksi blok di `ami_dlms_block_transfer.c` |
 | **Beban & Tarif** | Disconnect Control Breaker (Class 70 / `0.0.96.3.10.255`) | 🟢 **SUDAH** | State machine, remote disconnect/reconnect di `ami_disconnect_control.c` |

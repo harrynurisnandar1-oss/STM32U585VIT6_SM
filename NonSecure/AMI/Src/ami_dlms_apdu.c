@@ -357,6 +357,13 @@ static const AssociationViewObject association_view[] = {
     {7u,  0u, {0, 0, 99, 98, 0, 255}}, /* Event Log Profile */
     {7u,  0u, {1, 0, 98, 1, 0, 255}},  /* Billing Profile */
     {7u,  0u, {1, 0, 99, 1, 0, 255}},  /* Load Profile 15-min */
+    {7u,  0u, {1, 96, 98, 128, 0, 255}}, /* Instant Profile */
+    {7u,  0u, {1, 0, 99, 14, 2, 255}}, /* Power quality voltage log profile R */
+    {7u,  0u, {1, 0, 99, 14, 3, 255}}, /* Power quality voltage log profile S */
+    {7u,  0u, {1, 0, 99, 14, 4, 255}}, /* Power quality voltage log profile T */
+    {1u,  0u, {1, 135, 32, 0, 0, 255}}, /* Power quality voltage register fase R */
+    {1u,  0u, {1, 135, 52, 0, 0, 255}}, /* Power quality voltage register fase S */
+    {1u,  0u, {1, 135, 72, 0, 0, 255}}, /* Power quality voltage register fase T */
 
     /* Instantaneous Voltages (L1, L2, L3) */
     {3u,  0u, {1, 0, 32, 7, 0, 255}},  /* Voltage L1 */
@@ -417,7 +424,21 @@ static const AssociationViewObject association_view[] = {
 
     /* Parameter Batas Daya (Demand Limiter) & Disconnect Control */
     {71u, 0u, {0, 0, 17, 0, 3, 255}},  /* Power Limiter Class 71 */
-    {70u, 0u, {0, 0, 96, 3, 10, 255}}  /* Disconnect Control Class 70 */
+    {70u, 0u, {0, 0, 96, 3, 10, 255}}, /* Disconnect Control Class 70 */
+
+    /* Energy Total, Power Quality Limits & Parameters */
+    {3u,  0u, {1, 0, 15, 8, 0, 255}},   /* Combined Active Energy Total */
+    {3u,  0u, {1, 0, 12, 31, 0, 255}},  /* Low Voltage Limit */
+    {3u,  0u, {1, 0, 12, 33, 0, 255}},  /* Low Voltage Delay */
+    {1u,  0u, {1, 0, 12, 32, 0, 255}},  /* Low Voltage Event Count */
+    {3u,  0u, {1, 0, 13, 31, 0, 255}},  /* Power Factor Compensation Limit */
+
+    /* Tariff, Calendar & Schedulers */
+    {6u,  0u, {0, 0, 14, 0, 0, 255}},   /* Tariff Register Activation */
+    {11u, 0u, {0, 0, 11, 0, 0, 255}},   /* Special Days Table */
+    {20u, 0u, {0, 0, 13, 0, 0, 255}},   /* Activity Calendar */
+    {22u, 0u, {0, 1, 15, 0, 4, 255}},   /* Historical Billing Scheduler */
+    {22u, 0u, {0, 0, 15, 0, 2, 255}}    /* Billing Scheduler */
 };
 
 static int view_put(uint8_t *out, size_t capacity, size_t *offset,

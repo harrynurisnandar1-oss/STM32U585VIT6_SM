@@ -208,7 +208,7 @@ static int build_aare(uint8_t *out, size_t capacity, size_t *out_length,
     uint8_t conf2 = 0x14u; /* Get (0x10) + Selective-access (0x04) only */
     if (conformance_present && proposed_conformance != NULL) {
         conf0 = (uint8_t)(proposed_conformance[0] & 0x00u);
-        conf1 = (uint8_t)(proposed_conformance[1] & 0x00u);
+        conf1 = (uint8_t)(proposed_conformance[1] & 0x50u); /* Allow Block transfer with GET (0x10) and SET (0x40) */
         conf2 = (uint8_t)(proposed_conformance[2] & 0x14u);
     }
     uint8_t initiate_response_field[24];

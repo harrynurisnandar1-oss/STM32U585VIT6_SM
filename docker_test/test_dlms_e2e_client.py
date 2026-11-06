@@ -54,7 +54,7 @@ def read_hdlc_frame(sock: socket.socket, timeout: float = 3.0) -> bytes:
             if not started:
                 started = True
                 buf = bytearray([0x7E])
-            else:
+            elif len(buf) > 1:
                 buf.append(0x7E)
                 return bytes(buf)
         elif started:
@@ -141,8 +141,90 @@ def main():
     assert b"\xC4\x01\xC2\x00" in get_clk_resp, f"Invalid GET response: {get_clk_resp.hex()}"
     print(f"    [PASS] Clock Response received: {get_clk_resp.hex()}")
 
-    # 5. Send DISC
-    print("[5] Sending DISC (Disconnect)...")
+    # 5. Send GET-Request-Normal for Instant Profile Capture Objects (1.96.98.128.0.255 Attr 3)
+    print("[5] Reading Instant Profile Capture Objects (OBIS 1.96.98.128.0.255, Class 7, Attr 3)...")
+    get_inst_cap = (
+        b"\xE6\xE6\x00"
+        b"\xC0\x01\xC3"
+        b"\x00\x07"
+        b"\x01\x60\x62\x80\x00\xFF"  # 1.96.98.128.0.255
+        b"\x03"                      # Attribute 3
+        b"\x00"
+    )
+    sock.sendall(build_hdlc_frame(dst_sap=1, src_sap=16, control=0x16, payload=get_inst_cap))
+    inst_cap_resp = read_hdlc_frame(sock)
+    assert len(inst_cap_resp) > 0, "No response for Instant Profile Capture Objects"
+    assert b"\xC4\x01\xC3\x00" in inst_cap_resp, f"Failed reading Instant Profile Capture Objects: {inst_cap_resp.hex()}"
+    print(f"    [PASS] Instant Profile Capture Objects received ({len(inst_cap_resp)} bytes)")
+
+    # 6. Send GET-Request-Normal for Instant Profile Buffer (1.96.98.128.0.255 Attr 2)
+    print("[6] Reading Instant Profile Buffer (OBIS 1.96.98.128.0.255, Class 7, Attr 2)...")
+    get_inst_buf = (
+        b"\xE6\xE6\x00"
+        b"\xC0\x01\xC4"
+        b"\x00\x07"
+        b"\x01\x60\x62\x80\x00\xFF"  # 1.96.98.128.0.255
+        b"\x02"                      # Attribute 2
+        b"\x00"                      # All entries
+    )
+    sock.sendall(build_hdlc_frame(dst_sap=1, src_sap=16, control=0x18, payload=get_inst_buf))
+    inst_buf_resp = read_hdlc_frame(sock)
+    assert len(inst_buf_resp) > 0, "No response for Instant Profile Buffer"
+    assert b"\xC4\x01\xC4\x00" in inst_buf_resp, f"Failed reading Instant Profile Buffer: {inst_buf_resp.hex()}"
+    print(f"    [PASS] Instant Profile Buffer received ({len(inst_buf_resp)} bytes)")
+
+    # 7. Read Event Log #1 Buffer (OBIS 0.0.99.98.0.255, Class 7, Attr 2) - should have 2 columns
+    print("[7] Reading Event Log #1 Buffer (OBIS 0.0.99.98.0.255, Class 7, Attr 2)...")
+    get_evt_buf = (
+        b"\xE6\xE6\x00"
+        b"\xC0\x01\xC5"
+        b"\x00\x07"
+        b"\x00\x00\x63\x62\x00\xFF"  # 0.0.99.98.0.255
+        b"\x02"                      # Attribute 2
+        b"\x00"
+    )
+    sock.sendall(build_hdlc_frame(dst_sap=1, src_sap=16, control=0x1A, payload=get_evt_buf))
+    evt_buf_resp = read_hdlc_frame(sock)
+    assert len(evt_buf_resp) > 0, "No response for Event Log #1 Buffer"
+    assert b"\xC4\x01\xC5\x00" in evt_buf_resp, f"Failed reading Event Log #1 Buffer: {evt_buf_resp.hex()}"
+    # Structure of 2 elements should be present: 0x02, 0x02 (Type Structure=0x02, length=2)
+    assert b"\x02\x02" in evt_buf_resp, f"Event log #1 row does not have 2 columns: {evt_buf_resp.hex()}"
+    print(f"    [PASS] Event Log #1 Buffer received with 2 columns ({len(evt_buf_resp)} bytes)")
+
+    # 8. Read PQ Voltage Log Profile R Capture Objects (OBIS 1.0.99.14.2.255 Attr 3)
+    print("[8] Reading PQ Voltage Log Profile R Capture Objects (OBIS 1.0.99.14.2.255, Class 7, Attr 3)...")
+    get_pq_cap = (
+        b"\xE6\xE6\x00"
+        b"\xC0\x01\xC6"
+        b"\x00\x07"
+        b"\x01\x00\x63\x0E\x02\xFF"  # 1.0.99.14.2.255
+        b"\x03"                      # Attribute 3
+        b"\x00"
+    )
+    sock.sendall(build_hdlc_frame(dst_sap=1, src_sap=16, control=0x1C, payload=get_pq_cap))
+    pq_cap_resp = read_hdlc_frame(sock)
+    assert len(pq_cap_resp) > 0, "No response for PQ Voltage Log Profile R Capture Objects"
+    assert b"\xC4\x01\xC6\x00" in pq_cap_resp, f"Failed reading PQ Voltage Capture Objects: {pq_cap_resp.hex()}"
+    print(f"    [PASS] PQ Voltage Capture Objects received ({len(pq_cap_resp)} bytes)")
+
+    # 9. Read PQ Voltage Log Profile R Buffer (OBIS 1.0.99.14.2.255 Attr 2)
+    print("[9] Reading PQ Voltage Log Profile R Buffer (OBIS 1.0.99.14.2.255, Class 7, Attr 2)...")
+    get_pq_buf = (
+        b"\xE6\xE6\x00"
+        b"\xC0\x01\xC7"
+        b"\x00\x07"
+        b"\x01\x00\x63\x0E\x02\xFF"  # 1.0.99.14.2.255
+        b"\x02"                      # Attribute 2
+        b"\x00"
+    )
+    sock.sendall(build_hdlc_frame(dst_sap=1, src_sap=16, control=0x1E, payload=get_pq_buf))
+    pq_buf_resp = read_hdlc_frame(sock)
+    assert len(pq_buf_resp) > 0, "No response for PQ Voltage Log Profile R Buffer"
+    assert b"\xC4\x01\xC7\x00" in pq_buf_resp, f"Failed reading PQ Voltage Buffer: {pq_buf_resp.hex()}"
+    print(f"    [PASS] PQ Voltage Buffer received ({len(pq_buf_resp)} bytes)")
+
+    # 10. Send DISC
+    print("[10] Sending DISC (Disconnect)...")
     disc_frame = build_hdlc_frame(dst_sap=1, src_sap=16, control=0x53)
     sock.sendall(disc_frame)
     disc_resp = read_hdlc_frame(sock)

@@ -63,7 +63,7 @@ Implementasi protokol dan arsitektur keamanan DLMS/COSEM diselaraskan secara ket
 
 ---
 
-## Objek Terdaftar dalam Association View (49 Objek Aktif)
+## Objek Terdaftar dalam Association View (66 Objek Aktif)
 
 Association View adalah daftar otoritatif yang diumumkan meter kepada DLMS Client/HES sesuai standar SPLN D3.002:2021, SPLN D3.006-2:2021, dan IEC 62056-6-2:
 
@@ -76,50 +76,67 @@ Association View adalah daftar otoritatif yang diumumkan meter kepada DLMS Clien
 | 5 | 1 | `0.0.96.1.0.255` | Meter Serial Number (Meter ID) |
 | 6 | 1 | `0.0.96.1.1.255` | Meter Type |
 | 7 | 64 | `0.0.43.0.0.255` | Security Setup |
-| 8 | 7 | `0.0.99.98.0.255` | Event Profile (Log kejadian operasional & proteksi) |
+| 8 | 7 | `0.0.99.98.0.255` | Event Profile (Log kejadian operasional #1 - 2 kolom) |
 | 9 | 7 | `1.0.98.1.0.255` | Billing Profile (Data penagihan historikal bulanan) |
-| 10 | 7 | `1.0.99.1.0.255` | Load Profile 15-menit |
-| 11 | 3 | `1.0.32.7.0.255` | Tegangan sesaat Fase R (Phase A Voltage) |
-| 12 | 3 | `1.0.52.7.0.255` | Tegangan sesaat Fase S (Phase B Voltage) |
-| 13 | 3 | `1.0.72.7.0.255` | Tegangan sesaat Fase T (Phase C Voltage) |
-| 14 | 3 | `1.0.31.7.0.255` | Arus sesaat Fase R (Phase A Current) |
-| 15 | 3 | `1.0.51.7.0.255` | Arus sesaat Fase S (Phase B Current) |
-| 16 | 3 | `1.0.71.7.0.255` | Arus sesaat Fase T (Phase C Current) |
-| 17 | 3 | `1.0.1.8.0.255` | Energi aktif impor total (+A) |
-| 18 | 3 | `1.0.2.8.0.255` | Energi aktif ekspor total (-A) |
-| 19 | 3 | `1.0.3.8.0.255` | Energi reaktif impor total (+R) |
-| 20 | 3 | `1.0.4.8.0.255` | Energi reaktif ekspor total (-R) |
-| 21 | 3 | `1.0.1.8.1.255` | Energi aktif impor Tarif 1 (LWBP 1) |
-| 22 | 3 | `1.0.1.8.2.255` | Energi aktif impor Tarif 2 (WBP) |
-| 23 | 3 | `1.0.1.8.3.255` | Energi aktif impor Tarif 3 (LWBP 2) |
-| 24 | 3 | `1.0.1.8.4.255` | Energi aktif impor Tarif 4 |
-| 25 | 3 | `1.0.2.8.1.255` | Energi aktif ekspor Tarif 1 |
-| 26 | 3 | `1.0.2.8.2.255` | Energi aktif ekspor Tarif 2 |
-| 27 | 3 | `1.0.2.8.3.255` | Energi aktif ekspor Tarif 3 |
-| 28 | 3 | `1.0.2.8.4.255` | Energi aktif ekspor Tarif 4 |
-| 29 | 3 | `1.0.3.8.1.255` | Energi reaktif impor Tarif 1 |
-| 30 | 3 | `1.0.3.8.2.255` | Energi reaktif impor Tarif 2 |
-| 31 | 3 | `1.0.3.8.3.255` | Energi reaktif impor Tarif 3 |
-| 32 | 3 | `1.0.3.8.4.255` | Energi reaktif impor Tarif 4 |
-| 33 | 3 | `1.0.14.7.0.255` | Frekuensi Jaringan (Hz) |
-| 34 | 3 | `1.0.13.7.0.255` | Power Factor Total |
-| 35 | 3 | `1.0.33.7.0.255` | Power Factor Fase R (L1) |
-| 36 | 3 | `1.0.53.7.0.255` | Power Factor Fase S (L2) |
-| 37 | 3 | `1.0.73.7.0.255` | Power Factor Fase T (L3) |
-| 38 | 3 | `1.0.12.7.124.255` | THD Tegangan Total (%) |
-| 39 | 3 | `1.0.32.7.124.255` | THD Tegangan Fase R (L1) |
-| 40 | 3 | `1.0.52.7.124.255` | THD Tegangan Fase S (L2) |
-| 41 | 3 | `1.0.72.7.124.255` | THD Tegangan Fase T (L3) |
-| 42 | 3 | `1.0.11.7.124.255` | THD Arus Total (%) |
-| 43 | 3 | `1.0.31.7.124.255` | THD Arus Fase R (L1) |
-| 44 | 3 | `1.0.51.7.124.255` | THD Arus Fase S (L2) |
-| 45 | 3 | `1.0.71.7.124.255` | THD Arus Fase T (L3) |
-| 46 | 3 | `1.0.1.7.0.255` | Daya Aktif Sesaat Total (+P, Watt) |
-| 47 | 3 | `1.0.3.7.0.255` | Daya Reaktif Sesaat Total (+Q, var) |
-| 48 | 71 | `0.0.17.0.3.255` | Demand Limiter Class 71 (Parameter Batas Daya) |
-| 49 | 70 | `0.0.96.3.10.255` | Disconnect Control Class 70 (Kendali Pemutusan Beban) |
+| 10 | 7 | `1.0.99.1.0.255` | Load Profile 15-menit (23 kanal) |
+| 11 | 7 | `1.96.98.128.0.255` | Instant Profile (11 kanal pengukuran sesaat) |
+| 12 | 7 | `1.0.99.14.2.255` | Power Quality Voltage Log Profile Fase R (Sag/Swell R) |
+| 13 | 7 | `1.0.99.14.3.255` | Power Quality Voltage Log Profile Fase S (Sag/Swell S) |
+| 14 | 7 | `1.0.99.14.4.255` | Power Quality Voltage Log Profile Fase T (Sag/Swell T) |
+| 15 | 1 | `1.135.32.0.0.255` | Power Quality Voltage Register Fase R |
+| 16 | 1 | `1.135.52.0.0.255` | Power Quality Voltage Register Fase S |
+| 17 | 1 | `1.135.72.0.0.255` | Power Quality Voltage Register Fase T |
+| 18 | 3 | `1.0.32.7.0.255` | Tegangan sesaat Fase R (Phase A Voltage) |
+| 19 | 3 | `1.0.52.7.0.255` | Tegangan sesaat Fase S (Phase B Voltage) |
+| 20 | 3 | `1.0.72.7.0.255` | Tegangan sesaat Fase T (Phase C Voltage) |
+| 21 | 3 | `1.0.31.7.0.255` | Arus sesaat Fase R (Phase A Current) |
+| 22 | 3 | `1.0.51.7.0.255` | Arus sesaat Fase S (Phase B Current) |
+| 23 | 3 | `1.0.71.7.0.255` | Arus sesaat Fase T (Phase C Current) |
+| 24 | 3 | `1.0.1.8.0.255` | Energi aktif impor total (+A) |
+| 25 | 3 | `1.0.2.8.0.255` | Energi aktif ekspor total (-A) |
+| 26 | 3 | `1.0.3.8.0.255` | Energi reaktif impor total (+R) |
+| 27 | 3 | `1.0.4.8.0.255` | Energi reaktif ekspor total (-R) |
+| 28 | 3 | `1.0.1.8.1.255` | Energi aktif impor Tarif 1 (LWBP 1) |
+| 29 | 3 | `1.0.1.8.2.255` | Energi aktif impor Tarif 2 (WBP) |
+| 30 | 3 | `1.0.1.8.3.255` | Energi aktif impor Tarif 3 (LWBP 2) |
+| 31 | 3 | `1.0.1.8.4.255` | Energi aktif impor Tarif 4 |
+| 32 | 3 | `1.0.2.8.1.255` | Energi aktif ekspor Tarif 1 |
+| 33 | 3 | `1.0.2.8.2.255` | Energi aktif ekspor Tarif 2 |
+| 34 | 3 | `1.0.2.8.3.255` | Energi aktif ekspor Tarif 3 |
+| 35 | 3 | `1.0.2.8.4.255` | Energi aktif ekspor Tarif 4 |
+| 36 | 3 | `1.0.3.8.1.255` | Energi reaktif impor Tarif 1 |
+| 37 | 3 | `1.0.3.8.2.255` | Energi reaktif impor Tarif 2 |
+| 38 | 3 | `1.0.3.8.3.255` | Energi reaktif impor Tarif 3 |
+| 39 | 3 | `1.0.3.8.4.255` | Energi reaktif impor Tarif 4 |
+| 40 | 3 | `1.0.14.7.0.255` | Frekuensi Jaringan (Hz) |
+| 41 | 3 | `1.0.13.7.0.255` | Power Factor Total |
+| 42 | 3 | `1.0.33.7.0.255` | Power Factor Fase R (L1) |
+| 43 | 3 | `1.0.53.7.0.255` | Power Factor Fase S (L2) |
+| 44 | 3 | `1.0.73.7.0.255` | Power Factor Fase T (L3) |
+| 45 | 3 | `1.0.12.7.124.255` | THD Tegangan Total (%) |
+| 46 | 3 | `1.0.32.7.124.255` | THD Tegangan Fase R (L1) |
+| 47 | 3 | `1.0.52.7.124.255` | THD Tegangan Fase S (L2) |
+| 48 | 3 | `1.0.72.7.124.255` | THD Tegangan Fase T (L3) |
+| 49 | 3 | `1.0.11.7.124.255` | THD Arus Total (%) |
+| 50 | 3 | `1.0.31.7.124.255` | THD Arus Fase R (L1) |
+| 51 | 3 | `1.0.51.7.124.255` | THD Arus Fase S (L2) |
+| 52 | 3 | `1.0.71.7.124.255` | THD Arus Fase T (L3) |
+| 53 | 3 | `1.0.1.7.0.255` | Daya Aktif Sesaat Total (+P, Watt) |
+| 54 | 3 | `1.0.3.7.0.255` | Daya Reaktif Sesaat Total (+Q, var) |
+| 55 | 71 | `0.0.17.0.3.255` | Demand Limiter Class 71 (Parameter Batas Daya) |
+| 56 | 70 | `0.0.96.3.10.255` | Disconnect Control Class 70 (Kendali Pemutusan Beban) |
+| 57 | 3 | `1.0.15.8.0.255` | Energi Aktif Total Gabungan (+A + -A) |
+| 58 | 3 | `1.0.12.31.0.255` | Batas Tegangan Rendah (Low Voltage Limit) |
+| 59 | 3 | `1.0.12.33.0.255` | Tunda Validasi Tegangan Rendah (Low Voltage Validation Delay) |
+| 60 | 1 | `1.0.12.32.0.255` | Jumlah Kejadian Tegangan Rendah (Low Voltage Event Count) |
+| 61 | 3 | `1.0.13.31.0.255` | Faktor Daya Batas Kompensasi |
+| 62 | 6 | `0.0.14.0.0.255` | Tariff Register Activation (Aktivasi Register Tarif) |
+| 63 | 11 | `0.0.11.0.0.255` | Special Days Table (Tabel Hari Libur/Khusus) |
+| 64 | 20 | `0.0.13.0.0.255` | Activity Calendar (Kalender Aktivitas Tarif) |
+| 65 | 22 | `0.1.15.0.4.255` | Single Action Schedule (Penjadwal Data Historikal) |
+| 66 | 22 | `0.0.15.0.2.255` | Single Action Schedule (Penjadwal Penagihan) |
 
-*Catatan Objek:* Katalog lengkap mencakup 276 OBIS (`ami_obis_catalog.h`). Seluruh 49 objek yang diekspos pada Association View telah memiliki pemetaan data model riil dan terverifikasi secara fungsional melalui test suite host. Respons object list yang besar (1427 bytes) secara otomatis disegmentasi via xDLMS DataBlock Transfer (GBT).
+*Catatan Objek:* Katalog lengkap mencakup 276 OBIS (`ami_obis_catalog.h`). Seluruh 66 objek yang diekspos pada Association View telah memiliki pemetaan data model riil dan terverifikasi secara fungsional melalui test suite host. Respons object list yang besar secara otomatis disegmentasi via xDLMS DataBlock Transfer (GBT).
 
 ---
 

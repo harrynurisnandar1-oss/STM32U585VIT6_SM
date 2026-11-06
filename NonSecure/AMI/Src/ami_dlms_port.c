@@ -254,13 +254,19 @@ static AmiDlmsPortStatus dispatch_i_frame(AmiDlmsPortContext *ctx, const HdlcFra
             uint32_t req_block_num = 0u;
             if (ami_bt_parse_get_next_block_request(apdu, apdu_len, &req_invoke_id, &req_block_num)) {
                 int is_last = 0;
+                /* If client acknowledges the block it already received (e.g. block 1 in Gurux DLMS Director),
+                 * advance to next block. If client already requested the target block (block 2), use it. */
+                uint32_t target_block = req_block_num;
+                if (target_block == ctx->block_transfer.current_block_number) {
+                    target_block = ctx->block_transfer.current_block_number + 1u;
+                }
                 AmiBtStatus bt_st = ami_bt_build_get_response_block(
-                    &ctx->block_transfer, req_block_num,
+                    &ctx->block_transfer, target_block,
                     apdu_response, sizeof(apdu_response),
                     &apdu_resp_len, &is_last);
                 if (bt_st != AMI_BT_OK) {
                     apdu_resp_len = ami_bt_build_error_response_block(
-                        req_invoke_id, req_block_num,
+                        req_invoke_id, target_block,
                         2u, /* temporary-failure / data-block-unavailable */
                         apdu_response, sizeof(apdu_response));
                 }

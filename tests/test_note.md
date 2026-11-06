@@ -19,11 +19,11 @@ ctest --test-dir tests/build -R AmiDlmsApduTest --output-on-failure
 ```
 
 Daftar 14 suite ditentukan di `tests/CMakeLists.txt`:
-1. `AmiCosemTest`: Validasi data model COSEM, 49 objek PLN, Load Profile 23-kanal 15-menit, Tamper Logbook 3 capture objects (9 Modus Tamper), Multi-tarif, Power Quality, Limiter (Class 71), Disconnect Control (Class 70).
+1. `AmiCosemTest`: Validasi data model COSEM: Load Profile 23-kanal 15-menit, Instant Profile 11-kanal (`1.96.98.128.0.255`), Event Log #1 standar 2 capture objects (`0.0.99.98.0.255`), Tamper Logbook 3 capture objects (9 Modus Tamper), Power Quality Voltage Log Profiles R/S/T (`1.0.99.14.2..4.255`), Class 6/11/20/22 objects, Multi-tarif, Power Quality, Limiter (Class 71), Disconnect Control (Class 70).
 2. `AmiSecurityTest`: Validasi algoritma AES-128 NIST SP 800-38D KAT, GMAC, dan constant-time compare.
 3. `AmiDlmsAssociationTest`: State machine asosiasi AARQ/AARE, negosiasi conformance, dan handling disconnect.
 4. `AmiFirmwareAuthPolicyTest`: Penegakan kebijakan keamanan fail-closed firmware target (blokir No-Auth/LLS, wajib HLS5 16-byte challenge, secure boot manifest check).
-5. `AmiDlmsApduTest`: xDLMS GET/SET/ACTION normal, ciphered APDU, dan verifikasi keterbacaan 49 objek Association View.
+5. `AmiDlmsApduTest`: xDLMS GET/SET/ACTION normal, ciphered APDU, dan verifikasi keterbacaan seluruh objek aktif Association View (termasuk Instant Profile dan PQ Voltage Log Profiles).
 6. `AmiDlmsHdlcTest`: Parser streaming HDLC zero-heap, CRC-16 HCS/FCS, resiliensi flag transparent 0x7E, dan LLC framing.
 7. `AmiDlmsPortTest`: Layer transport port, buffer circular UART, dan integrasi cipher backend.
 8. `AmiAde9000Test`: Driver metrologi SPI ADE9000, register scaling, penanganan error fail-closed SPI, dan feeder snapshot.
@@ -34,7 +34,7 @@ Daftar 14 suite ditentukan di `tests/CMakeLists.txt`:
 13. `AmiBlockTransferTest`: General Block Transfer (GBT) xDLMS Datablock untuk transmisi payload profil/buffer besar.
 14. `AmiDisconnectControlTest`: State machine Disconnect Control Class 70 (Disconnected, Connected, Ready) dan Action method.
 
-`AmiDlmsApduTest` juga memeriksa bahwa seluruh 49 objek yang diumumkan melalui Association View saat ini berhasil menjawab GET attribute 2 menggunakan snapshot pengujian. Baseline objek/protokol yang dites didokumentasikan di [docs/security-rules/PROTOCOL_PROFILE.md](../docs/security-rules/PROTOCOL_PROFILE.md).
+`AmiDlmsApduTest` juga memeriksa bahwa seluruh objek yang diumumkan melalui Association View berhasil menjawab GET attribute 2 menggunakan snapshot pengujian. Baseline objek/protokol yang dites didokumentasikan di [docs/security-rules/PROTOCOL_PROFILE.md](../docs/security-rules/PROTOCOL_PROFILE.md).
 
 ## Simulator Gurux
 
