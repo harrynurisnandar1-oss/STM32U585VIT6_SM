@@ -941,5 +941,4 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 - **Verifikasi Unit Test**:
   - Memperbarui assert pada `tests/test_ami_cosem.c` untuk 2 kolom pada `obis_event_log` serta menambahkan pengujian `obis_pq_voltage_r`.
   - Hasil CTest Suite: **14/14 test suites lulus 100%**.
-
-
+  
