@@ -2,7 +2,6 @@ name: Publish Simulator Container to GHCR
 
 on:
   push:
-    branches: [ "main", "master" ]
     tags: [ "v*" ]
   workflow_dispatch:
 
@@ -37,10 +36,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-            type=ref,event=branch
             type=semver,pattern={{version}}
-            type=sha,format=short
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
 
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
