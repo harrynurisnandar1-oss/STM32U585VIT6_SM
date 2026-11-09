@@ -180,9 +180,10 @@ docker run --rm stm32u585vit6sm:latest ./run_all_docker_tests.sh
 │   ├── test_ami_trustzone_boundary.c # Pengujian batas memori CMSE NonSecure/Secure
 │   └── host-tools/gurux_simulator.c# Simulator HDLC-over-TCP port 4059
 ├── docker_test/                    # Lingkungan pengujian terisolasi Docker
-├── docs/                           # Dokumentasi teknis & catatan perubahan
-│   ├── security-rules/             # Spesifikasi protokol, arsitektur, ancaman
-│   └── ChangeLOG.md                # Riwayat perubahan dan rilis versi
+├── docs/                           # Dokumentasi teknis mendalam
+│   └── security-rules/             # Spesifikasi protokol, arsitektur, ancaman
+├── CHANGELOG.md                    # Riwayat lengkap perubahan dan rilis versi
+├── CODE_OF_CONDUCT.md              # Pedoman perilaku dan etika kontributor
 └── STM32U585VIT6_SM.gxc            # Profil workspace Gurux DLMSDirector
 ```
 
@@ -194,4 +195,5 @@ docker run --rm stm32u585vit6sm:latest ./run_all_docker_tests.sh
 * 🛡️ [`docs/security-rules/SECURITY_ARCHITECTURE.md`](docs/security-rules/SECURITY_ARCHITECTURE.md) — Arsitektur pemisahan TrustZone Secure vs NonSecure.
 * 📋 [`docs/security-rules/SECURITY_CHECKLIST.md`](docs/security-rules/SECURITY_CHECKLIST.md) — Daftar uji kepatuhan keamanan rilis firmware.
 * 🔍 [`docs/security-rules/Threat_MODEL.md`](docs/security-rules/Threat_MODEL.md) — Analisis model mitigasi ancaman (T1 s.d. T12).
-* 📝 [`docs/ChangeLOG.md`](docs/ChangeLOG.md) — Catatan riwayat versi pengembangan proyek.
+* 📝 [`CHANGELOG.md`](CHANGELOG.md) — Catatan riwayat versi pengembangan proyek.
+* 🤝 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) — Pedoman perilaku dan etika kontributor.
