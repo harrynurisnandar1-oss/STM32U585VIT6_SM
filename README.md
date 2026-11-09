@@ -2,7 +2,7 @@
 
 [![Tests](https://img.shields.io/badge/CTest%20Host-15%2F15%20Passing-brightgreen?style=flat-square&logo=cmake)](tests/)
 [![Docker Tests](https://img.shields.io/badge/Docker%20E2E-100%25%20PASS-blue?style=flat-square&logo=docker)](Dockerfile)
-[![Coverage](https://img.shields.io/badge/Code%20Coverage-79.2%25%20(LCOV)-informational?style=flat-square&logo=codecov)](tests/)
+[![Coverage](https://img.shields.io/badge/Code%20Coverage-79.2%25%20(LCOV)-informational?style=flat-square&logo=codecov)](docs/COVERAGE.md)
 [![Standard](https://img.shields.io/badge/Standard-SPLN%20D3.006%3A2021-orange?style=flat-square)](dokumen_PLN/)
 [![Security Suite](https://img.shields.io/badge/Security-Suite%200%20%7C%20HLS5%20GMAC-red?style=flat-square)](docs/security-rules/)
 [![Architecture](https://img.shields.io/badge/Target-ARM%20Cortex--M33%20TrustZone-purple?style=flat-square)](Secure/)

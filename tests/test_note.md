@@ -116,9 +116,10 @@ ctest --test-dir tests/build_cov
 lcov --capture --directory tests/build_cov --output-file tests/build_cov/coverage_raw.info --ignore-errors inconsistent,gcov
 lcov --extract tests/build_cov/coverage_raw.info '*/NonSecure/AMI/*' '*/Secure/*' --output-file tests/build_cov/coverage_filtered.info --ignore-errors unused,inconsistent
 lcov --list tests/build_cov/coverage_filtered.info
+python3 tests/scripts/lcov_to_markdown.py tests/build_cov/coverage_filtered.info docs/COVERAGE.md
 ```
 
-Hasil coverage firmware saat ini:
+Hasil coverage firmware saat ini tersimpan otomatis di [docs/COVERAGE.md](../docs/COVERAGE.md):
 - **Total Line Coverage**: **79.2%** (2.600 / 3.281 baris).
 - **Total Function Coverage**: **95.7%** (154 / 161 fungsi).
 - Modul keamanan kritis (`ami_security.c`, `ami_dlms_hdlc.c`, `ami_dlms_cipher.c`) mencapai line coverage **> 89%**.
