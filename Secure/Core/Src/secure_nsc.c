@@ -72,6 +72,10 @@ static void secure_memzero(void *ptr, size_t size)
   while (size--) {
     *p++ = 0u;
   }
+#if defined(__GNUC__) || defined(__clang__)
+  /* Prevent compiler dead-store elimination at -O2/-O3 optimization */
+  __asm__ __volatile__("" : : "r"(ptr) : "memory");
+#endif
 }
 
 static void derive_device_unique_kek(uint8_t out_kek[16])
@@ -137,6 +141,11 @@ static int validate_ns_buffer(const void *ptr, size_t size, int is_write)
     return 0;
   }
   if (ptr == NULL || size == 0) {
+    return -1;
+  }
+  /* Check for integer overflow in pointer arithmetic */
+  uintptr_t uptr = (uintptr_t)ptr;
+  if (uptr + size < uptr) {
     return -1;
   }
 #if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)

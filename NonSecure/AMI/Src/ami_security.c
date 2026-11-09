@@ -39,6 +39,10 @@ static void secure_zeroize(void *ptr, size_t len)
     if (ptr == NULL || len == 0u) return;
     volatile uint8_t *p = (volatile uint8_t *)ptr;
     while (len--) *p++ = 0u;
+#if defined(__GNUC__) || defined(__clang__)
+    /* Memory barrier to prevent compiler dead-store elimination at -O2/-O3 */
+    __asm__ __volatile__("" : : "r"(ptr) : "memory");
+#endif
 }
 
 static int constant_time_memcmp(const void *a, const void *b, size_t len)

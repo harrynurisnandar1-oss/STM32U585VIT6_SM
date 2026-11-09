@@ -1,7 +1,8 @@
 # ⚡ STM32U585VIT6 + ADE9000 3-Phase AMI Smart Meter
 
-[![Tests](https://img.shields.io/badge/CTest%20Host-14%2F14%20Passing-brightgreen?style=flat-square&logo=cmake)](tests/)
+[![Tests](https://img.shields.io/badge/CTest%20Host-15%2F15%20Passing-brightgreen?style=flat-square&logo=cmake)](tests/)
 [![Docker Tests](https://img.shields.io/badge/Docker%20E2E-100%25%20PASS-blue?style=flat-square&logo=docker)](Dockerfile)
+[![Coverage](https://img.shields.io/badge/Code%20Coverage-79.2%25%20(LCOV)-informational?style=flat-square&logo=codecov)](tests/)
 [![Standard](https://img.shields.io/badge/Standard-SPLN%20D3.006%3A2021-orange?style=flat-square)](dokumen_PLN/)
 [![Security Suite](https://img.shields.io/badge/Security-Suite%200%20%7C%20HLS5%20GMAC-red?style=flat-square)](docs/security-rules/)
 [![Architecture](https://img.shields.io/badge/Target-ARM%20Cortex--M33%20TrustZone-purple?style=flat-square)](Secure/)
@@ -74,7 +75,7 @@ Tujuan utama paket pekerjaan E2 adalah menjamin interoperabilitas meter terhadap
 Implementasi diklasifikasikan secara transparan berdasarkan kesiapan software dan ketergantungan perangkat keras target:
 
 > **Ringkasan Status:**
-> * 🟢 **Software, Protokol, dan Data Model (Host & Docker)**: **100% SELESAI & TERVERIFIKASI** (14/14 CTest PASS).
+> * 🟢 **Software, Protokol, dan Data Model (Host & Docker)**: **100% SELESAI & TERVERIFIKASI** (15/15 CTest PASS, 79.2% LCOV Coverage).
 > * 🟡 **Driver Firmware Target (STM32U585 & ADE9000)**: **KODE SELESAI** (Siap uji flashing pada hardware fisik).
 > * ⚪ **Sertifikasi Formal Laboratorium**: **MENUNGGU UJI LAB** (DLMS UA CTT Tool & Uji Interop HES).
 
@@ -98,7 +99,8 @@ Implementasi diklasifikasikan secara transparan berdasarkan kesiapan software da
 | **Keamanan** | Anti-Brute-Force Lockout (Backoff Eksponensial Progresif) | 🟢 **SUDAH** | Penalti 5s, 10s, 20s, 40s & lockout 5x (`ami_anti_bruteforce.c`) |
 | **TrustZone** | Partisi SAU, GTZC (TZSC/MPCBB/TZIC), & NonSecure Callable (NSC) | 🟢 **SUDAH** | Range check `cmse_check_address_range` di `secure_nsc.c` |
 | **Key Management** | Master Key (KEK) per-device & Remote Key Wrap RFC 3394 atomik | 🟢 **SUDAH** | Update batch GUEK, GBEK, AK all-or-nothing rollback |
-| **Testing** | CTest Host Native Unit Testing (14 Test Suites) | 🟢 **SUDAH** | 14/14 tests PASS (100% Lulus) |
+| **Testing** | CTest Host Native Unit Testing (15 Test Suites) | 🟢 **SUDAH** | 15/15 tests PASS (100% Lulus) |
+| **Testing** | 4 Kriteria Verifikasi Pengujian Keamanan | 🟢 **SUDAH** | Coverage (79.2%), Negative/1-bit flip, Zeroize Barrier, TrustZone CMSE |
 | **Testing** | Single Unified Docker Test Container & E2E DLMS Simulator | 🟢 **SUDAH** | Otomasi pengujian Linux x86_64 Alpine + Python client |
 | **Target Driver** | Driver UART DMA Circular Buffer & IDLE line interrupt | 🟡 **KODE SELESAI** | Menunggu verifikasi osiloskop / kabel serial board |
 | **Target Driver** | Driver Metrologi ADE9000 SPI Fail-Closed & Scaling 3-Fasa | 🟡 **KODE SELESAI** | Menunggu uji kalibrasi analog IC ADE9000 |
@@ -114,7 +116,7 @@ Implementasi diklasifikasikan secara transparan berdasarkan kesiapan software da
 Repositori ini dirancang *reproducible* dan dapat langsung diverifikasi di lingkungan host Windows maupun Linux/Docker container.
 
 ### 1. Uji Unit Host Native (CTest)
-Menjalankan seluruh 14 test suite secara deterministik:
+Menjalankan seluruh 15 test suite secara deterministik:
 ```powershell
 # Konfigurasi dan kompilasi menggunakan Ninja
 cmake -S tests -B tests/build -G Ninja
@@ -123,7 +125,18 @@ cmake --build tests/build --parallel
 # Jalankan seluruh test suite
 ctest --test-dir tests/build --output-on-failure
 ```
-*Hasil: Seluruh 14 test suite lulus 100% (Passed).*
+*Hasil: Seluruh 15 test suite lulus 100% (Passed).*
+
+Untuk menjalankan analisis **Code Coverage LCOV**:
+```powershell
+cmake -S tests -B tests/build_cov -G Ninja -DENABLE_COVERAGE=ON
+cmake --build tests/build_cov
+ctest --test-dir tests/build_cov
+lcov --capture --directory tests/build_cov --output-file tests/build_cov/coverage_raw.info --ignore-errors inconsistent,gcov
+lcov --extract tests/build_cov/coverage_raw.info '*/NonSecure/AMI/*' '*/Secure/*' --output-file tests/build_cov/coverage_filtered.info --ignore-errors unused,inconsistent
+lcov --list tests/build_cov/coverage_filtered.info
+```
+*Hasil: Line Coverage 79.2% (2.600/3.281 baris) & Function Coverage 95.7% (154/161 fungsi).*
 
 ### 2. Simulator DLMS Host untuk Gurux DLMSDirector
 Untuk menguji konektivitas visual dengan software industri **GXDLMSDirector**:
@@ -161,9 +174,10 @@ docker run --rm stm32u585vit6sm:latest ./run_all_docker_tests.sh
 ├── Secure/                         # Ruang eksekusi Secure World (TrustZone)
 │   └── Core/Src/secure_nsc.c       # Gerbang NonSecure Callable (NSC) & Kriptografi
 ├── Secure_nsclib/                  # Header publik antarmuka NSC
-├── tests/                          # 14 Test Suite Host CTest & Simulator
-│   ├── test_ami_cosem.c            # Verifikasi 49 objek COSEM & Load Profile
+├── tests/                          # 15 Test Suite Host CTest & Simulator
+│   ├── test_ami_cosem.c            # Verifikasi 66 objek COSEM & Load Profile
 │   ├── test_ami_anti_bruteforce.c  # Pengujian lockout & backoff eksponensial
+│   ├── test_ami_trustzone_boundary.c # Pengujian batas memori CMSE NonSecure/Secure
 │   └── host-tools/gurux_simulator.c# Simulator HDLC-over-TCP port 4059
 ├── docker_test/                    # Lingkungan pengujian terisolasi Docker
 ├── docs/                           # Dokumentasi teknis & catatan perubahan

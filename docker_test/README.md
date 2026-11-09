@@ -1,11 +1,11 @@
 # Docker Host Test Harness (Single Unified Container: stm32u585vit6sm)
 
-Direktori ini menyediakan script pendukung untuk pengujian container Docker tunggal (**stm32u585vit6sm**) yang didefinisikan pada [`Dockerfile`](../Dockerfile) dan diorkestrasi via [`compose.yaml`](../compose.yaml) di root repository. Seluruh pengujian logika host, 14 test suite CTest, dan uji end-to-end (E2E) DLMS/COSEM HDLC-over-TCP dijalankan dalam 1 container mandiri tanpa memerlukan toolchain embedded STM32 atau hardware fisik.
+Direktori ini menyediakan script pendukung untuk pengujian container Docker tunggal (**stm32u585vit6sm**) yang didefinisikan pada [`Dockerfile`](../Dockerfile) dan diorkestrasi via [`compose.yaml`](../compose.yaml) di root repository. Seluruh pengujian logika host, 15 test suite CTest, dan uji end-to-end (E2E) DLMS/COSEM HDLC-over-TCP dijalankan dalam 1 container mandiri tanpa memerlukan toolchain embedded STM32 atau hardware fisik.
 
 ## Cakupan Pengujian
 
 Container Docker dibangun menggunakan multi-stage build Alpine Linux yang aman, terisolasi, dan sangat ringan:
-1. **14 CTest Unit Test Suites** (100% CTest suites dari `tests/CMakeLists.txt`):
+1. **15 CTest Unit Test Suites** (100% CTest suites dari `tests/CMakeLists.txt`):
    - `test_dlms_port`
    - `test_cosem`
    - `test_security`
@@ -20,6 +20,7 @@ Container Docker dibangun menggunakan multi-stage build Alpine Linux yang aman, 
    - `test_load_profile_capture`
    - `test_tamper_log`
    - `test_disconnect_control`
+   - `test_ami_trustzone_boundary` (Validasi batas memori CMSE NSC & overflow pointer)
 2. **E2E DLMS Simulator & Client Integration**:
    - `gurux_simulator` (HDLC-over-TCP listener port 4059).
    - `test_dlms_e2e_client.py` (SNRM/UA, AARQ/AARE, GET Request/Response).

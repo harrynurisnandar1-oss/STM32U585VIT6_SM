@@ -153,14 +153,14 @@ static void test_association_ln_object_list(void)
         0x00u, 0x00u, 0x28u, 0x00u, 0x00u, 0xFFu,
         0x02u, 0x00u
     };
-    uint8_t response[1536u];
+    uint8_t response[2048u];
     size_t response_length = 0u;
     assert(ami_dlms_process_get_request(&association, &snapshot, request,
         sizeof(request), response, sizeof(response), &response_length) == AMI_DLMS_APDU_OK);
     assert(response_length > 6u && response[0] == 0xC4u &&
            response[1] == 0x01u && response[2] == 0xC1u &&
            response[3] == 0u && response[4] == 1u);
-    assert(response[5] == 49u); /* 49 standard PLN objects (Association, clock, profiles, multi-tariff, PQ, limiter, etc.) */
+    assert(response[5] == 66u); /* 66 standard PLN objects in Association View */
 
     /* Association object followed by voltage L1; each advertises attr 2 RO. */
     const uint8_t association_ln[] = {9u, 6u, 0u, 0u, 40u, 0u, 0u, 255u};
@@ -321,7 +321,7 @@ static void test_profile_entry_selective_access(void)
         sizeof(request), response, sizeof(response), &response_length) == AMI_DLMS_APDU_OK);
     assert(response_length > 6u && response[0] == 0xC4u && response[4] == 1u);
     assert(response[5] == 1u); /* exactly one row returned */
-    assert(response[6] == AMI_COSEM_TYPE_STRUCTURE && response[7] == 3u);
+    assert(response[6] == AMI_COSEM_TYPE_STRUCTURE && response[7] == 2u); /* 2 columns (clock, event_code) */
     assert(response[22] == AMI_COSEM_TYPE_UNSIGNED);
     assert(response[23] == 2u);
 }
@@ -363,7 +363,7 @@ static void test_profile_clock_range_selective_access(void)
         sizeof(request), response, sizeof(response), &response_length) == AMI_DLMS_APDU_OK);
     assert(response_length > 6u && response[0] == 0xC4u && response[4] == 1u);
     assert(response[5] == 1u); /* only the matching date is returned */
-    assert(response[6] == AMI_COSEM_TYPE_STRUCTURE && response[7] == 3u);
+    assert(response[6] == AMI_COSEM_TYPE_STRUCTURE && response[7] == 2u); /* 2 columns (clock, event_code) */
     assert(response[22] == AMI_COSEM_TYPE_UNSIGNED);
     assert(response[23] == 4u);
 }

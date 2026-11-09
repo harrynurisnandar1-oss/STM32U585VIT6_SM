@@ -1008,20 +1008,34 @@ AmiCosemStatus ami_cosem_register_read_selected(
             }
             return AMI_COSEM_ATTRIBUTE_NOT_FOUND;
         }
-        /* Default handler for other PLN Data objects (counters, flags, registers) */
-        if (attribute_id == 1u) {
-            out->type = AMI_COSEM_TYPE_OCTET_STRING;
-            out->length = AMI_COSEM_LOGICAL_NAME_LENGTH;
-            memcpy(out->value.logical_name, logical_name, AMI_COSEM_LOGICAL_NAME_LENGTH);
-            return AMI_COSEM_OK;
+
+        /* Specific recognized PLN Class 1 Data objects */
+        static const uint8_t pq_v_r_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {1, 135, 32, 0, 0, 255};
+        static const uint8_t pq_v_s_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {1, 135, 52, 0, 0, 255};
+        static const uint8_t pq_v_t_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {1, 135, 72, 0, 0, 255};
+        static const uint8_t low_v_evt_cnt_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {1, 0, 12, 32, 0, 255};
+
+        if (memcmp(logical_name, pq_v_r_ln, sizeof(pq_v_r_ln)) == 0 ||
+            memcmp(logical_name, pq_v_s_ln, sizeof(pq_v_s_ln)) == 0 ||
+            memcmp(logical_name, pq_v_t_ln, sizeof(pq_v_t_ln)) == 0 ||
+            memcmp(logical_name, low_v_evt_cnt_ln, sizeof(low_v_evt_cnt_ln)) == 0) {
+            if (attribute_id == 1u) {
+                out->type = AMI_COSEM_TYPE_OCTET_STRING;
+                out->length = AMI_COSEM_LOGICAL_NAME_LENGTH;
+                memcpy(out->value.logical_name, logical_name, AMI_COSEM_LOGICAL_NAME_LENGTH);
+                return AMI_COSEM_OK;
+            }
+            if (attribute_id == 2u) {
+                out->type = AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED;
+                out->length = sizeof(uint32_t);
+                out->value.double_long_unsigned = 0u;
+                return AMI_COSEM_OK;
+            }
+            return AMI_COSEM_ATTRIBUTE_NOT_FOUND;
         }
-        if (attribute_id == 2u) {
-            out->type = AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED;
-            out->length = sizeof(uint32_t);
-            out->value.double_long_unsigned = 0u;
-            return AMI_COSEM_OK;
-        }
-        return AMI_COSEM_ATTRIBUTE_NOT_FOUND;
+
+        /* Unrecognized logical name for Class 1 Data */
+        return AMI_COSEM_OBJECT_NOT_FOUND;
     }
 
     if (class_id == AMI_COSEM_LIMITER_CLASS_ID) {

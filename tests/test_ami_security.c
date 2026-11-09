@@ -475,6 +475,54 @@ static void test_software_backend_adapter(void) {
     printf("  [PASS] test_software_backend_adapter\n");
 }
 
+static void test_gmac_exhaustive_bit_flip_tampering(void) {
+    const uint8_t key[16] = {
+        0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6,
+        0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF, 0x4F, 0x3C
+    };
+    const uint8_t iv[12] = {
+        'P', 'L', 'N', '1', '2', '3', '4', '5', 0x00, 0x00, 0x00, 0x01
+    };
+    const uint8_t aad[33] = {
+        0x10, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+        0xC0, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7,
+        0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE, 0xCF
+    };
+    uint8_t original_tag[16] = {0};
+    assert(ami_sec_aes_128_gmac(key, iv, 12, aad, sizeof(aad), original_tag, sizeof(original_tag)) == AMI_SEC_OK);
+
+    /* Test 1: Flip each of the 16 tag bytes one by one */
+    for (size_t byte_idx = 0; byte_idx < 16; ++byte_idx) {
+        uint8_t tampered_tag[16];
+        memcpy(tampered_tag, original_tag, 16);
+        tampered_tag[byte_idx] ^= 0x01u; /* 1-bit flip */
+        assert(memcmp(tampered_tag, original_tag, 16) != 0);
+    }
+
+    /* Test 2: Tamper with AAD bit-by-bit and verify GMAC tag mismatch */
+    for (size_t aad_idx = 0; aad_idx < sizeof(aad); ++aad_idx) {
+        uint8_t tampered_aad[sizeof(aad)];
+        memcpy(tampered_aad, aad, sizeof(aad));
+        tampered_aad[aad_idx] ^= 0x80u;
+        uint8_t new_tag[16] = {0};
+        assert(ami_sec_aes_128_gmac(key, iv, 12, tampered_aad, sizeof(aad), new_tag, sizeof(new_tag)) == AMI_SEC_OK);
+        assert(memcmp(new_tag, original_tag, 16) != 0);
+    }
+
+    /* Test 3: Tamper with IV / Invocation Counter and verify GMAC tag mismatch */
+    for (size_t iv_idx = 0; iv_idx < 12; ++iv_idx) {
+        uint8_t tampered_iv[12];
+        memcpy(tampered_iv, iv, 12);
+        tampered_iv[iv_idx] ^= 0x55u;
+        uint8_t new_tag[16] = {0};
+        assert(ami_sec_aes_128_gmac(key, tampered_iv, 12, aad, sizeof(aad), new_tag, sizeof(new_tag)) == AMI_SEC_OK);
+        assert(memcmp(new_tag, original_tag, 16) != 0);
+    }
+
+    printf("  [PASS] test_gmac_exhaustive_bit_flip_tampering\n");
+}
+
 int main(void) {
     printf("========================================\n");
     printf("   RUNNING AMI SECURITY UNIT TESTS      \n");
@@ -490,6 +538,7 @@ int main(void) {
     test_dlms_hls5_gmac_calculate_and_verify();
     test_dlms_hls5_gmac_callback_integration();
     test_software_backend_adapter();
+    test_gmac_exhaustive_bit_flip_tampering();
 
     printf("\n>>> ALL SECURITY & HLS 5 GMAC TESTS PASSED SUCCESSFULLY! <<<\n\n");
     return 0;

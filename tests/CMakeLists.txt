@@ -6,6 +6,15 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 enable_testing()
 
+option(ENABLE_COVERAGE "Enable code coverage instrumentation (gcov/lcov)" OFF)
+if(ENABLE_COVERAGE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        message(STATUS "Enabling code coverage instrumentation (--coverage)")
+        add_compile_options(--coverage -O0 -g)
+        add_link_options(--coverage)
+    endif()
+endif()
+
 set(AMI_INC "${CMAKE_CURRENT_LIST_DIR}/../NonSecure/AMI/Inc")
 set(AMI_SRC "${CMAKE_CURRENT_LIST_DIR}/../NonSecure/AMI/Src")
 
@@ -176,3 +185,9 @@ add_executable(test_ami_disconnect_control
     "${AMI_SRC}/ami_security.c")
 target_include_directories(test_ami_disconnect_control PRIVATE "${AMI_INC}")
 add_test(NAME AmiDisconnectControlTest COMMAND test_ami_disconnect_control)
+
+add_executable(test_ami_trustzone_boundary
+    test_ami_trustzone_boundary.c)
+target_include_directories(test_ami_trustzone_boundary PRIVATE "${AMI_INC}")
+add_test(NAME AmiTrustZoneBoundaryTest COMMAND test_ami_trustzone_boundary)
+

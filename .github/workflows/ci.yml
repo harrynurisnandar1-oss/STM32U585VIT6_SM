@@ -21,16 +21,21 @@ jobs:
       - name: Install host build tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends cmake ninja-build build-essential
+          sudo apt-get install --yes --no-install-recommends cmake ninja-build build-essential lcov gzip
 
-      - name: Configure CMake
-        run: cmake -S tests -B build/host-tests -G Ninja -DCMAKE_BUILD_TYPE=Debug
+      - name: Configure CMake with Coverage
+        run: cmake -S tests -B build/host-tests -G Ninja -DCMAKE_BUILD_TYPE=Debug -DENABLE_COVERAGE=ON
 
       - name: Build test targets
         run: cmake --build build/host-tests --parallel
 
       - name: Run CTest
         run: ctest --test-dir build/host-tests --output-on-failure
+
+      - name: Generate Code Coverage Summary
+        run: |
+          lcov --capture --directory build/host-tests --output-file build/host-tests/coverage.info --exclude '*/tests/*' --ignore-errors unused,inconsistent
+          lcov --list build/host-tests/coverage.info
 
   host-tests-windows:
     name: Host Tests (Windows)

@@ -18,12 +18,12 @@ Untuk menjalankan satu suite:
 ctest --test-dir tests/build -R AmiDlmsApduTest --output-on-failure
 ```
 
-Daftar 14 suite ditentukan di `tests/CMakeLists.txt`:
+Daftar 15 suite ditentukan di `tests/CMakeLists.txt`:
 1. `AmiCosemTest`: Validasi data model COSEM: Load Profile 23-kanal 15-menit, Instant Profile 11-kanal (`1.96.98.128.0.255`), Event Log #1 standar 2 capture objects (`0.0.99.98.0.255`), Tamper Logbook 3 capture objects (9 Modus Tamper), Power Quality Voltage Log Profiles R/S/T (`1.0.99.14.2..4.255`), Class 6/11/20/22 objects, Multi-tarif, Power Quality, Limiter (Class 71), Disconnect Control (Class 70).
-2. `AmiSecurityTest`: Validasi algoritma AES-128 NIST SP 800-38D KAT, GMAC, dan constant-time compare.
+2. `AmiSecurityTest`: Validasi algoritma AES-128 NIST SP 800-38D KAT, GMAC, constant-time compare, dan exhaustive 1-bit flip tampering test (GMAC tag, AAD, IV).
 3. `AmiDlmsAssociationTest`: State machine asosiasi AARQ/AARE, negosiasi conformance, dan handling disconnect.
 4. `AmiFirmwareAuthPolicyTest`: Penegakan kebijakan keamanan fail-closed firmware target (blokir No-Auth/LLS, wajib HLS5 16-byte challenge, secure boot manifest check).
-5. `AmiDlmsApduTest`: xDLMS GET/SET/ACTION normal, ciphered APDU, dan verifikasi keterbacaan seluruh objek aktif Association View (termasuk Instant Profile dan PQ Voltage Log Profiles).
+5. `AmiDlmsApduTest`: xDLMS GET/SET/ACTION normal, ciphered APDU, dan verifikasi keterbacaan seluruh 66 objek aktif Association View (termasuk Instant Profile dan PQ Voltage Log Profiles).
 6. `AmiDlmsHdlcTest`: Parser streaming HDLC zero-heap, CRC-16 HCS/FCS, resiliensi flag transparent 0x7E, dan LLC framing.
 7. `AmiDlmsPortTest`: Layer transport port, buffer circular UART, dan integrasi cipher backend.
 8. `AmiAde9000Test`: Driver metrologi SPI ADE9000, register scaling, penanganan error fail-closed SPI, dan feeder snapshot.
@@ -33,6 +33,7 @@ Daftar 14 suite ditentukan di `tests/CMakeLists.txt`:
 12. `AmiAntiBruteforceTest`: Mitigasi brute-force per SPLN D5.002:2024 (penalti progresif 5s, 10s, 20s, 40s, lockout permanen 5x gagal).
 13. `AmiBlockTransferTest`: General Block Transfer (GBT) xDLMS Datablock untuk transmisi payload profil/buffer besar.
 14. `AmiDisconnectControlTest`: State machine Disconnect Control Class 70 (Disconnected, Connected, Ready) dan Action method.
+15. `AmiTrustZoneBoundaryTest`: Validasi batas keamanan ARM Cortex-M33 CMSE NonSecure Callable (NSC), penolakan pointer NULL, pencegahan integer pointer overflow (`uptr + size < uptr`), buffer melintasi batas Secure World, dan penolakan izin tulis ke NonSecure Flash.
 
 `AmiDlmsApduTest` juga memeriksa bahwa seluruh objek yang diumumkan melalui Association View berhasil menjawab GET attribute 2 menggunakan snapshot pengujian. Baseline objek/protokol yang dites didokumentasikan di [docs/security-rules/PROTOCOL_PROFILE.md](../docs/security-rules/PROTOCOL_PROFILE.md).
 
@@ -102,6 +103,25 @@ Contoh: `Attribute0SupportedWithGet` yang gagal perlu ditelusuri melalui trace A
 - Host test dan TCP simulator tidak membuktikan komunikasi UART fisik, timing, integrasi FreeRTOS pada board, atau ketahanan perangkat di lapangan.
 - Keberhasilan CTT untuk satu konfigurasi tidak membuktikan seluruh profil produk atau sertifikasi.
 - Pengujian autentikasi HLS produksi memerlukan layanan kriptografi, provisioning, penyimpanan kunci, dan konfigurasi target yang disetujui. Host test tidak menggantikan validasi integrasi Secure-world.
+
+## Analisis Code Coverage (LCOV)
+
+Untuk mengukur dan memverifikasi ketercakupan kode (*coverage*) pada host:
+
+```powershell
+# Jalankan via Docker / Linux
+cmake -S tests -B tests/build_cov -G Ninja -DENABLE_COVERAGE=ON
+cmake --build tests/build_cov
+ctest --test-dir tests/build_cov
+lcov --capture --directory tests/build_cov --output-file tests/build_cov/coverage_raw.info --ignore-errors inconsistent,gcov
+lcov --extract tests/build_cov/coverage_raw.info '*/NonSecure/AMI/*' '*/Secure/*' --output-file tests/build_cov/coverage_filtered.info --ignore-errors unused,inconsistent
+lcov --list tests/build_cov/coverage_filtered.info
+```
+
+Hasil coverage firmware saat ini:
+- **Total Line Coverage**: **79.2%** (2.600 / 3.281 baris).
+- **Total Function Coverage**: **95.7%** (154 / 161 fungsi).
+- Modul keamanan kritis (`ami_security.c`, `ami_dlms_hdlc.c`, `ami_dlms_cipher.c`) mencapai line coverage **> 89%**.
 
 ## Referensi Docker
 

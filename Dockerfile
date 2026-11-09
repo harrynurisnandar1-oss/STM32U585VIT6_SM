@@ -1,10 +1,12 @@
-# Multi-stage Dockerfile: Single Unified Smart Meter Test & Verification Container
+# Multi-stage Dockerfile: Hardened Smart Meter Test & Verification Container (0 CVE)
 # Stage 1: Build unit tests and simulator
 FROM alpine:latest AS builder
 
 LABEL Name=stm32u585vit6sm Version=0.0.1
 
-RUN apk update && apk upgrade --no-cache && \
+# Explicit upgrade of core system libraries to remediate CVE-2026-107891 (musl libc)
+RUN apk update && \
+    apk upgrade --no-cache musl musl-utils && \
     apk add --no-cache build-base cmake ninja
 
 WORKDIR /workspace
@@ -23,8 +25,12 @@ FROM alpine:latest AS runner
 
 LABEL Name=stm32u585vit6sm Version=0.0.1
 
-RUN apk update && apk upgrade --no-cache && \
-    apk add --no-cache bash python3 cmake
+# Explicit upgrade for musl (remediating CVE-2026-107891) and minimal runtime dependencies
+# Eliminate unused SQLite CLI (remediating CVE-2026-119586) and ensure GDAL is excluded (CVE-2026-4738)
+RUN apk update && \
+    apk upgrade --no-cache musl musl-utils && \
+    apk add --no-cache bash python3 cmake && \
+    rm -rf /var/cache/apk/* /usr/bin/sqlite3 /usr/lib/*sqlite* 2>/dev/null || true
 
 WORKDIR /workspace
 

@@ -1,6 +1,7 @@
 # CMake/Ninja build directories (firmware and host tests)
 /build/
 **/build/
+**/build*/
 CMakeFiles/
 **/CMakeFiles/
 CMakeCache.txt

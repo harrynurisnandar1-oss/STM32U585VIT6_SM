@@ -3,11 +3,15 @@
 #include <limits.h>
 #include <string.h>
 
-/* Volatile stores prevent the compiler from removing sensitive-data wipes. */
+/* Volatile stores and memory barrier prevent the compiler from removing sensitive-data wipes. */
 static void secure_zeroize(void *memory, size_t length)
 {
+    if (memory == NULL || length == 0u) return;
     volatile uint8_t *bytes = (volatile uint8_t *)memory;
     while (length-- != 0u) *bytes++ = 0u;
+#if defined(__GNUC__) || defined(__clang__)
+    __asm__ __volatile__("" : : "r"(memory) : "memory");
+#endif
 }
 
 #define GET_REQUEST_TAG 0xC0u

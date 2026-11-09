@@ -3,7 +3,7 @@
 Dokumen ini mencatat seluruh riwayat pembaruan, perbaikan, dan pengerasan keamanan (*security hardening*) firmware Smart Meter 3-Fasa. Pengembangan dibagi menjadi dua fase utama:
 
 - **SPIN 1 (v1.0.0 s.d. v2.12.0)**: Fondasi Protokol DLMS/COSEM, Arsitektur TrustZone Cortex-M33, Kriptografi Suite 0, Keamanan NVM Anti-Replay, dan Integrasi Host Simulator.
-- **SPIN 2 (v2.13.0 s.d. v2.18.1)**: Pelengkapan Fitur Produksi (Anti-Brute-Force Lockout, Block Transfer GBT, 49 Objek COSEM PLN, Disconnect Control Class 70, Load Profile 23-Kanal, Kesiapan Driver Target, dan Uji Terpadu Docker).
+- **SPIN 2 (v2.13.0 s.d. v2.20.0)**: Pelengkapan Fitur Produksi (Anti-Brute-Force Lockout, Block Transfer GBT, 66 Objek COSEM PLN, Disconnect Control Class 70, Load Profile 23-Kanal, Kesiapan Driver Target, 4 Kriteria Verifikasi Pengujian Keamanan, dan Uji Terpadu Docker).
 
 ---
 
@@ -941,4 +941,33 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 - **Verifikasi Unit Test**:
   - Memperbarui assert pada `tests/test_ami_cosem.c` untuk 2 kolom pada `obis_event_log` serta menambahkan pengujian `obis_pq_voltage_r`.
   - Hasil CTest Suite: **14/14 test suites lulus 100%**.
-  
+
+## [v2.20.0] - 2026-11-09
+
+### Added
+- **Pilar 1: Integrasi Metrik Code Coverage (`ENABLE_COVERAGE`) & CI Workflow**:
+  - Menambahkan opsi konfigurasi `-DENABLE_COVERAGE=ON` pada `tests/CMakeLists.txt` untuk instrumen gcov/lcov (`--coverage -O0 -g`).
+  - Menambahkan step penarikan dan pelaporan coverage otomatis via `lcov` pada `.github/workflows/ci.yml`.
+  - Berdasarkan pengukuran `lcov`, modul inti kriptografi dan protokol keamanan mencapai cakupan tinggi:
+    - `ami_security.c`: **91.9% Line Coverage** (431/469 lines) & **93.9% Function Coverage**.
+    - `ami_dlms_hdlc.c`: **91.4% Line Coverage** (235/257 lines) & **100% Function Coverage**.
+    - `ami_dlms_cipher.c`: **89.8% Line Coverage** (150/167 lines) & **100% Function Coverage**.
+    - Total firmware source line coverage: **79.2%** (2.600 dari 3.281 baris).
+- **Pilar 2: Penguatan Negative Testing & Tamper Invalidation**:
+  - Menambahkan `test_gmac_exhaustive_bit_flip_tampering` pada `tests/test_ami_security.c`:
+    - Pengujian exhaustive 1-bit flip pada setiap byte dari 16-byte GMAC tag.
+    - Pengujian modifikasi bit pada Additional Authenticated Data (AAD) dan Nonce/IV.
+    - Memverifikasi penolakan seketika (`AMI_SEC_ERR_AUTH_FAILED`) dan perbandingan waktu konstan (*constant-time*).
+- **Pilar 3: Pengerasan Volatile Zeroization terhadap Compiler Optimization**:
+  - Menyematkan memory barrier inline assembly `__asm__ __volatile__("" : : "r"(ptr) : "memory")` pada fungsi `secure_zeroize()` di `NonSecure/AMI/Src/ami_security.c` dan `NonSecure/AMI/Src/ami_dlms_apdu.c`.
+  - Menyematkan memory barrier yang sama pada `secure_memzero()` di `Secure/Core/Src/secure_nsc.c`.
+  - Mencegah *dead-store elimination* oleh compiler GCC/Clang pada tingkat optimasi `-O2` dan `-O3`.
+- **Pilar 4: Validasi Batas Keamanan TrustZone CMSE**:
+  - Mengimplementasikan test suite baru `tests/test_ami_trustzone_boundary.c` (`AmiTrustZoneBoundaryTest`) sebagai test suite CTest ke-15.
+  - Memvalidasi logika `validate_ns_buffer` terhadap: pointer NULL, integer overflow pointer (`uptr + size < uptr`), buffer yang melintasi perbatasan memori Secure World, dan penolakan izin tulis ke region flash NonSecure.
+  - Memperkuat implementasi `validate_ns_buffer()` pada `Secure/Core/Src/secure_nsc.c` dengan pengecekan integer overflow.
+
+### Changed & Fixed
+- Memperbaiki penanganan objek Class 1 Data pada `NonSecure/AMI/Src/ami_cosem_model.c` agar objek yang tidak terdaftar mengembalikan `AMI_COSEM_OBJECT_NOT_FOUND` secara konsisten.
+- Menyelaraskan ukuran buffer respons dan ekspektasi kolom baris Event Log #1 (2 kolom) pada `tests/test_ami_dlms_apdu.c`.
+- Seluruh 15 suite CTest (**15/15, 100% PASS**) dan automated E2E Simulator Python terverifikasi sukses penuh di container Docker hardened.
