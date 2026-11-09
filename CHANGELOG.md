@@ -1,9 +1,48 @@
-# Firmware Release Changelog: STM32U585VIT6 + ADE9000 Smart Meter
+# 📋 Firmware Release Changelog: STM32U585VIT6 + ADE9000 Smart Meter
 
-Dokumen ini mencatat seluruh riwayat pembaruan, perbaikan, dan pengerasan keamanan (*security hardening*) firmware Smart Meter 3-Fasa. Pengembangan dibagi menjadi dua fase utama:
+Dokumen ini mencatat seluruh riwayat pembaruan fitur, perbaikan bug, pengerasan keamanan (*security hardening*), dan verifikasi pengujian firmware Smart Meter 3-Fasa.
 
-- **SPIN 1 (v1.0.0 s.d. v2.12.0)**: Fondasi Protokol DLMS/COSEM, Arsitektur TrustZone Cortex-M33, Kriptografi Suite 0, Keamanan NVM Anti-Replay, dan Integrasi Host Simulator.
-- **SPIN 2 (v2.13.0 s.d. v2.20.0)**: Pelengkapan Fitur Produksi (Anti-Brute-Force Lockout, Block Transfer GBT, 66 Objek COSEM PLN, Disconnect Control Class 70, Load Profile 23-Kanal, Kesiapan Driver Target, 4 Kriteria Verifikasi Pengujian Keamanan, dan Uji Terpadu Docker).
+---
+
+## 📌 Ringkasan Fase Pengembangan (Spin 1 vs Spin 2)
+
+* **🚀 [SPIN 1 (v1.0.0 s.d. v2.12.0)](#-spin-1--fondasi-protokol-arsitektur-trustzone--integrasi-awal)**:
+  * Fondasi protokol komunikasi DLMS/COSEM (IEC 62056) & ACSE Association.
+  * Parser streaming HDLC Frame Format 3 zero-heap dengan validasi CRC-16 (HCS/FCS).
+  * Arsitektur keamanan ARM Cortex-M33 TrustZone (pemisahan Secure vs NonSecure).
+  * Kriptografi DLMS Security Suite 0 (AES-128-GCM) & Otentikasi HLS 5 (GMAC).
+  * Manajemen kunci terisolasi (Master Key KEK & Remote Key Wrap RFC 3394).
+  * Wear-leveling NVM Invocation Counter anti-replay & integrasi host simulator TCP (port 4059).
+
+* **🏭 [SPIN 2 (v2.13.0 s.d. v2.20.0)](#-spin-2--pelengkapan-fitur-produksi-kesiapan-mains-board--sertifikasi)**:
+  * Anti-Brute-Force & Lockout progresif eksponensial (SPLN D5.002:2024).
+  * General Block Transfer (GBT) untuk segmentasi data profil dan objek besar.
+  * Ekspansi Data Model COSEM PLN hingga **66 objek aktif** pada Association View.
+  * Logika pemutus beban Disconnect Control Breaker (Class 70) dengan multi-mode.
+  * Histori Profiling Class 7: Load Profile 15-menit (23-kanal), Billing bulanan, Tamper Logbook (9 modus), PQ Voltage Log (R/S/T), dan Instant Profile (11 kanal).
+  * Kesiapan driver target (HAL UART circular DMA non-blocking & SPI ADE9000 fail-closed).
+  * Pengerasan keamanan 4 Pilar: Code Coverage 79.2% (91.9% crypto), Exhaustive Bit-Flip Negative Testing, Compiler Memory Barrier Zeroization, dan TrustZone Boundary Overflow Checks.
+  * Verifikasi hermetis Docker Alpine Linux (15/15 CTest Suites lulus 100% + Python E2E Client).
+
+---
+
+## 📑 Daftar Isi Cepat (*Quick Jump*)
+
+| Fase | Rentang Rilis | Sorotan Utama |
+|---|---|---|
+| **SPIN 2** | [v2.20.0](#v2200---2026-11-09) *(Terbaru)* | 4 Pilar Keamanan, Code Coverage 79.2%, 15/15 CTest PASS, TrustZone boundary check |
+| | [v2.19.0](#v2190---2026-11-06) | Profil Kualitas Tegangan R/S/T, Instant Profile 11-kanal, Calendar/Schedule Class |
+| | [v2.18.1](#v2181---2026-11-04) | Remediasi SIGFPE division-by-zero, Docker runner cmake, unit test resilience |
+| | [v2.18.0](#v2180---2026-11-04) | Load Profile 23-kanal 15-menit & Tamper Logbook 9 Modus PLN |
+| | [v2.17.0](#v2170---2026-11-04) | Driver UART DMA IDLE line, SPI ADE9000 return-code guard, HLS5 proof NSC |
+| | [v2.16.0](#v2160---2026-11-03) | Disconnect Control Breaker Class 70 (Mode 1..6, remote/manual disconnect) |
+| | [v2.15.0](#v2150---2026-11-03) | Ekspansi Association View dari 13 menjadi 49 Objek Aktif Standar PLN |
+| | [v2.14.0](#v2140---2026-11-03) | xDLMS Datablock Transfer / General Block Transfer (GBT) payload besar |
+| | [v2.13.0](#v2130---2026-11-03) | Anti-Brute-Force Lockout SPLN D5.002:2024 (Penalti 5s..40s & Hard Lockout 5x) |
+| **SPIN 1** | [v2.12.0](#v2120---2026-11-03) | Remediasi CIA Triad: MPCBB SRAM3, anti TOCTOU, TRNG fail-secure |
+| | [v2.6.0 s.d. v2.11.0](#v260---2026-11-02) | Suite 0 Ciphered APDU (AES-GCM), NVM Anti-Replay Counter, NSC Gateway |
+| | [v2.0.0 s.d. v2.5.2](#v200---2026-10-13) | LLC Sublayer wrapping, HDLC Parameter Handshake, Standalone TCP Simulator |
+| | [v1.0.0 s.d. v1.4.1](#v100-added-08102026) | Fondasi BER-TLV AARQ/AARE, HLS 5 Challenge, Class 64 Security Setup |
 
 ---
 
