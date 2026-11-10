@@ -65,34 +65,34 @@ jobs:
             NonSecure/build/*.map
           retention-days: 7
 
-  test-native-arm64:
-    name: Native ARM64 Host Verification (14 CTest Suites)
-    runs-on: ubuntu-24.04-arm
+  test-host-verification:
+    name: Host Protocol & CTest Verification (15 CTest Suites)
+    runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Verify Native ARM64 Architecture
+      - name: Verify Architecture
         run: |
           echo "=== CPU ARCHITECTURE ==="
           uname -m
           lscpu || cat /proc/cpuinfo | grep "model name" | head -n 4
 
-      - name: Install Host Build Dependencies (ARM64)
+      - name: Install Host Build Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends cmake ninja-build build-essential python3
 
-      - name: Configure CMake for ARM64 Native Environment
+      - name: Configure CMake for Host Environment
         run: |
-          cmake -S tests -B build/arm64-tests -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake -S tests -B build/tests -G Ninja -DCMAKE_BUILD_TYPE=Release
 
-      - name: Compile 14 Test Suites & Simulator (ARM64)
+      - name: Compile 15 Test Suites & Simulator
         run: |
-          cmake --build build/arm64-tests --parallel
+          cmake --build build/tests --parallel
 
-      - name: Execute 14 CTest Suites on Physical ARM64 Hardware
+      - name: Execute 15 CTest Suites
         run: |
-          ctest --test-dir build/arm64-tests --output-on-failure --verbose
+          ctest --test-dir build/tests --output-on-failure --verbose

@@ -15,7 +15,7 @@
     <DateTimeSkips>256</DateTimeSkips>
     <ClientAddress>22</ClientAddress>
     <MacDestinationAddress>0</MacDestinationAddress>
-    <PduSize>500</PduSize>
+    <PduSize>512</PduSize>
     <InactivityTimeout>0</InactivityTimeout>
     <FrameDelay>0</FrameDelay>
     <ObjectDelay>0</ObjectDelay>
@@ -38,6 +38,7 @@
         <Description>Ch. 0 Current association</Description>
         <Attributes>
           <Item>
+            <Name>Logical Name</Name>
             <Index>1</Index>
             <Type>OctetString</Type>
             <Access>0</Access>
@@ -47,7 +48,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Object List</Name>
             <Index>2</Index>
+            <Type>Array</Type>
             <Access>1</Access>
             <Access3>0</Access3>
             <Values />
@@ -55,7 +58,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Associated partners Id</Name>
             <Index>3</Index>
+            <Type>Structure</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -63,7 +68,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Application Context Name</Name>
             <Index>4</Index>
+            <Type>Structure</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -71,7 +78,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>xDLMS Context Info</Name>
             <Index>5</Index>
+            <Type>Structure</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -79,7 +88,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Authentication Mechanism Name</Name>
             <Index>6</Index>
+            <Type>Structure</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -87,7 +98,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Secret</Name>
             <Index>7</Index>
+            <Type>OctetString</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -95,7 +108,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Association Status</Name>
             <Index>8</Index>
+            <Type>Enum</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -105,6 +120,7 @@
         </Attributes>
         <Methods>
           <Item>
+            <Name>Reply to HLS authentication</Name>
             <Index>1</Index>
             <Type>OctetString</Type>
             <Values />
@@ -112,18 +128,21 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Change HLS secret</Name>
             <Index>2</Index>
             <Values />
             <UIValueType>0</UIValueType>
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Add object</Name>
             <Index>3</Index>
             <Values />
             <UIValueType>0</UIValueType>
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Remove object</Name>
             <Index>4</Index>
             <Values />
             <UIValueType>0</UIValueType>
@@ -364,6 +383,7 @@
         <Description>Ch. 0 Security setup  #0</Description>
         <Attributes>
           <Item>
+            <Name>Logical Name</Name>
             <Index>1</Index>
             <Type>OctetString</Type>
             <Access>0</Access>
@@ -373,7 +393,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Security Policy</Name>
             <Index>2</Index>
+            <Type>Enum</Type>
             <Access>1</Access>
             <Access3>0</Access3>
             <Values />
@@ -381,7 +403,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Security Suite</Name>
             <Index>3</Index>
+            <Type>Enum</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -389,7 +413,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Client System Title</Name>
             <Index>4</Index>
+            <Type>OctetString</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -397,7 +423,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Server System Title</Name>
             <Index>5</Index>
+            <Type>OctetString</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -407,6 +435,7 @@
         </Attributes>
         <Methods>
           <Item>
+            <Name>Security activate</Name>
             <Index>1</Index>
             <Type>OctetString</Type>
             <Values />
@@ -414,6 +443,7 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Key transfer</Name>
             <Index>2</Index>
             <Values />
             <UIValueType>0</UIValueType>
@@ -4476,6 +4506,7 @@
         <Description>Ch. 0 Sum Li Active power+ (QI+QIV) Time integral 1 Rate 0 (0 is total)</Description>
         <Attributes>
           <Item>
+            <Name>Logical Name</Name>
             <Index>1</Index>
             <Type>OctetString</Type>
             <Access>0</Access>
@@ -4485,6 +4516,7 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Value</Name>
             <Index>2</Index>
             <Type>UInt64</Type>
             <UIType>String</UIType>
@@ -4495,7 +4527,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Scaler and Unit</Name>
             <Index>3</Index>
+            <Type>Structure</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -4505,6 +4539,7 @@
         </Attributes>
         <Methods>
           <Item>
+            <Name>Reset</Name>
             <Index>1</Index>
             <Type>OctetString</Type>
             <Values />
@@ -6278,6 +6313,7 @@
         <Description>Ch. 0 Activity calendar  #1</Description>
         <Attributes>
           <Item>
+            <Name>Logical Name</Name>
             <Index>1</Index>
             <Type>OctetString</Type>
             <Access>0</Access>
@@ -6287,7 +6323,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Active calendar name</Name>
             <Index>2</Index>
+            <Type>OctetString</Type>
             <Access>1</Access>
             <Access3>0</Access3>
             <Values />
@@ -6295,7 +6333,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Active season profile</Name>
             <Index>3</Index>
+            <Type>Array</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -6303,7 +6343,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Active week profile table</Name>
             <Index>4</Index>
+            <Type>Array</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -6311,7 +6353,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Active day profile table</Name>
             <Index>5</Index>
+            <Type>Array</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -6319,7 +6363,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Passive calendar name</Name>
             <Index>6</Index>
+            <Type>OctetString</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -6327,7 +6373,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Passive season profile</Name>
             <Index>7</Index>
+            <Type>Array</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -6335,7 +6383,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Passive week profile table</Name>
             <Index>8</Index>
+            <Type>Array</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -6343,7 +6393,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Passive day profile table</Name>
             <Index>9</Index>
+            <Type>Array</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -6351,7 +6403,9 @@
             <AccessSelector>0</AccessSelector>
           </Item>
           <Item>
+            <Name>Time</Name>
             <Index>10</Index>
+            <Type>OctetString</Type>
             <Access>0</Access>
             <Access3>0</Access3>
             <Values />
@@ -6361,6 +6415,7 @@
         </Attributes>
         <Methods>
           <Item>
+            <Name>Activate passive calendar</Name>
             <Index>1</Index>
             <Type>OctetString</Type>
             <Values />
