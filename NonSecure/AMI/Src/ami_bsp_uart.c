@@ -2,7 +2,7 @@
 #include "ami_dlms_port.h"
 #include <string.h>
 
-#if defined(STM32U585xx) || defined(USE_HAL_DRIVER)
+#if (defined(STM32U585xx) || defined(USE_HAL_DRIVER)) && defined(HAL_UART_MODULE_ENABLED)
 #include "stm32u5xx_hal.h"
 
 static UART_HandleTypeDef *s_active_uart = NULL;

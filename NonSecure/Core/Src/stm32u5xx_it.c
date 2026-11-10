@@ -104,6 +104,7 @@ void UsageFault_Handler(void)
 /******************************************************************************/
 
 /* USER CODE BEGIN 1 */
+#ifdef HAL_UART_MODULE_ENABLED
 /**
   * @brief HAL UART Reception Event Callback (Rx to IDLE line).
   * Automatically invoked by STM32 HAL when UART IDLE line event occurs.
@@ -112,4 +113,5 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 {
   ami_bsp_uart_rx_event_isr(huart, Size);
 }
+#endif /* HAL_UART_MODULE_ENABLED */
 /* USER CODE END 1 */
