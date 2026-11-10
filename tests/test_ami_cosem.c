@@ -416,7 +416,8 @@ static void test_limiter_and_disconnect_control(void)
 
     /* Class 70 Disconnect Control */
     assert(ami_cosem_register_read(&snapshot, AMI_COSEM_DISCONNECT_CONTROL_CLASS_ID, obis_discon, 2u, &out) == AMI_COSEM_OK);
-    assert(out.value.unsigned_integer == 1u);
+    assert(out.type == AMI_COSEM_TYPE_ENCODED && out.length == 2u);
+    assert(out.value.encoded[0] == 0x03u && out.value.encoded[1] == 1u);
 
     assert(ami_cosem_register_read(&snapshot, AMI_COSEM_DISCONNECT_CONTROL_CLASS_ID, obis_discon, 4u, &out) == AMI_COSEM_OK);
     assert(out.value.unsigned_integer == 2u);
