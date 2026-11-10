@@ -317,6 +317,17 @@ static int process_i_frame(HdlcContext *hdlc, const HdlcFrame *request,
             apdu_status = ami_dlms_process_get_request(association, snapshot, apdu,
                 apdu_length_in, apdu_response, sizeof(apdu_response), &apdu_length);
 
+            /* Safety fallback: if processing returned length 0, never send empty APDU */
+            if (apdu_length == 0u) {
+                apdu_response[0] = 0xC4u; /* GetResponse */
+                apdu_response[1] = 0x01u; /* GetResponseNormal */
+                apdu_response[2] = apdu_length_in > 2u ? apdu[2] : 0u; /* invoke_id */
+                apdu_response[3] = 0x01u; /* data-access-result choice: error */
+                apdu_response[4] = 0x04u; /* object-undefined */
+                apdu_length = 5u;
+                fprintf(stdout, "[APDU GET] Safety fallback applied: object-undefined (5 bytes)\n");
+            }
+
             /* If response payload exceeds HDLC frame limit (480 bytes), use block transfer */
             if (apdu_status == AMI_DLMS_APDU_OK && apdu_length > 480u &&
                 apdu_response[0] == 0xC4u && apdu_response[1] == 0x01u && apdu_response[3] == 0x00u) {
@@ -430,7 +441,9 @@ static int serve_client(socket_t client)
     make_development_snapshot(&snapshot);
     ami_disconnect_control_sync_snapshot(&s_sim_dc, &snapshot);
     fprintf(stdout, "Gurux client connected; development no-auth profile active.\n");
+    fflush(stdout);
 
+    unsigned byte_count = 0;
     for (;;) {
         uint8_t byte;
 #ifdef _WIN32
@@ -442,15 +455,37 @@ static int serve_client(socket_t client)
         if (received < 0) {
 #ifndef _WIN32
             if (errno == EINTR) continue;
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                fprintf(stderr, "Client socket timeout reached.\n");
+                return 0;
+            }
+#else
+            if (WSAGetLastError() == WSAETIMEDOUT) {
+                fprintf(stderr, "Client socket timeout reached.\n");
+                return 0;
+            }
 #endif
             perror("recv");
             return 0;
         }
 
-        static unsigned byte_count = 0;
-        if (byte_count++ == 0) {
-            fprintf(stdout, "[First byte received from Gurux: 0x%02X]\n", byte);
+        if (byte_count++ < 16) {
+            fprintf(stdout, "[RX byte #%u: 0x%02X ('%c')]\n",
+                    byte_count, byte, (byte >= 32 && byte <= 126) ? (char)byte : '.');
             fflush(stdout);
+        }
+
+        /* Detect if an HTTP browser (Chrome/Edge) or non-DLMS client connects by mistake */
+        if (byte_count == 4 && hdlc.frame_length == 0u) {
+            /* If the stream started with "GET " or "POST" */
+            if (byte == ' ' || byte == 'T') {
+                fprintf(stderr, "\n[PERINGATAN] Client mengirim request HTTP (bukan DLMS HDLC). Browser Anda sedang membuka port ini!\n");
+                const char *http_resp = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n"
+                                        "Ini adalah Smart Meter DLMS HDLC Simulator Port 4059.\r\n"
+                                        "Silakan tutup tab browser ini dan sambungkan melalui software GXDLMSDirector.\r\n";
+                (void)send(client, http_resp, (int)strlen(http_resp), 0);
+                return 0;
+            }
         }
 
         if (byte == AMI_HDLC_FLAG && hdlc.frame_length != 0u) {
@@ -533,7 +568,7 @@ int main(void)
     address.sin_port = htons(SERVER_PORT);
     address.sin_addr.s_addr = htonl(INADDR_ANY);
     if (bind(server, (struct sockaddr *)&address, sizeof(address)) != 0 ||
-        listen(server, 1) != 0) {
+        listen(server, 8) != 0) {
         fprintf(stderr, "Could not bind/listen on 0.0.0.0:%d.\n", SERVER_PORT);
         CLOSE_SOCKET(server);
         return 1;
@@ -550,6 +585,18 @@ int main(void)
         (void)setsockopt(client, IPPROTO_TCP, TCP_NODELAY, (const char *)&nodelay, sizeof(nodelay));
         int sndbuf = 0;
         (void)setsockopt(client, SOL_SOCKET, SO_SNDBUF, (const char *)&sndbuf, sizeof(sndbuf));
+
+        /* Set 180-second timeout on receive so GXDLMSDirector user has ample time between operations */
+#ifdef _WIN32
+        DWORD timeout_ms = 180000;
+        (void)setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout_ms, sizeof(timeout_ms));
+#else
+        struct timeval tv;
+        tv.tv_sec = 180;
+        tv.tv_usec = 0;
+        (void)setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof(tv));
+#endif
+
         (void)serve_client(client);
         CLOSE_SOCKET(client);
         fprintf(stdout, "Client disconnected.\n");

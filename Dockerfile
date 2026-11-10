@@ -10,9 +10,10 @@ WORKDIR /workspace
 COPY NonSecure /workspace/NonSecure
 COPY tests /workspace/tests
 
-# Compile only target gurux_simulator with Release optimizations
+# Compile tests, verify suite passes, and strip target gurux_simulator
 RUN cmake -S tests -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && \
-    cmake --build build --target gurux_simulator && \
+    cmake --build build && \
+    ctest --test-dir build --output-on-failure && \
     (strip --strip-all build/host-tools/gurux_simulator 2>/dev/null || strip --strip-all build/gurux_simulator 2>/dev/null || true)
 
 # Stage 2: Minimal hardened micro-container (Only Alpine + simulator binary)

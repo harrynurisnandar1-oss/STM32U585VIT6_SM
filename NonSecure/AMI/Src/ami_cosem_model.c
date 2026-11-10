@@ -914,26 +914,47 @@ AmiCosemStatus ami_cosem_register_read_selected(
     if (snapshot == NULL || logical_name == NULL || out == NULL) {
         return AMI_COSEM_INVALID_ARGUMENT;
     }
-    if (class_id != AMI_COSEM_REGISTER_CLASS_ID &&
-        class_id != AMI_COSEM_EXTENDED_REGISTER_CLASS_ID &&
-        class_id != AMI_COSEM_PROFILE_GENERIC_CLASS_ID &&
-        class_id != AMI_COSEM_CLOCK_CLASS_ID &&
-        class_id != AMI_COSEM_SECURITY_SETUP_CLASS_ID &&
-        class_id != AMI_COSEM_LIMITER_CLASS_ID &&
-        class_id != AMI_COSEM_DISCONNECT_CONTROL_CLASS_ID &&
-        class_id != AMI_COSEM_REGISTER_ACTIVATION_CLASS_ID &&
-        class_id != AMI_COSEM_SPECIAL_DAYS_TABLE_CLASS_ID &&
-        class_id != AMI_COSEM_ACTIVITY_CALENDAR_CLASS_ID &&
-        class_id != AMI_COSEM_ACTION_SCHEDULE_CLASS_ID &&
-        class_id != 1u /* Data */) {
-        return AMI_COSEM_OBJECT_NOT_FOUND;
-    }
 
     if (selection != NULL && class_id != AMI_COSEM_PROFILE_GENERIC_CLASS_ID) {
         return AMI_COSEM_SCOPE_VIOLATED;
     }
 
-    if (class_id == 1u) {
+    /* Standard singleton objects - recognized by OBIS Logical Name first */
+    static const uint8_t ldn_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 42, 0, 0, 255};
+    static const uint8_t fw_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {1, 0, 0, 2, 0, 255};
+    static const uint8_t meter_id_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 96, 1, 0, 255};
+    static const uint8_t meter_type_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 96, 1, 1, 255};
+    static const uint8_t limiter_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 17, 0, 3, 255};
+    static const uint8_t disconnect_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 96, 3, 10, 255};
+    static const uint8_t reg_activation_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 14, 0, 0, 255};
+    static const uint8_t special_days_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 11, 0, 0, 255};
+    static const uint8_t activity_calendar_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 13, 0, 0, 255};
+    static const uint8_t action_sched_bill_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 15, 0, 2, 255};
+    static const uint8_t action_sched_hist_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 1, 15, 0, 4, 255};
+
+    int is_security_setup = (memcmp(logical_name, security_setup_logical_name, AMI_COSEM_LOGICAL_NAME_LENGTH) == 0) ||
+                            (class_id == AMI_COSEM_SECURITY_SETUP_CLASS_ID) || (class_id == 100u);
+    int is_special_days = (memcmp(logical_name, special_days_ln, AMI_COSEM_LOGICAL_NAME_LENGTH) == 0) ||
+                          (class_id == AMI_COSEM_SPECIAL_DAYS_TABLE_CLASS_ID) || (class_id == 17u);
+    int is_activity_calendar = (memcmp(logical_name, activity_calendar_ln, AMI_COSEM_LOGICAL_NAME_LENGTH) == 0) ||
+                               (class_id == AMI_COSEM_ACTIVITY_CALENDAR_CLASS_ID) || (class_id == 32u);
+    int is_limiter = (memcmp(logical_name, limiter_ln, AMI_COSEM_LOGICAL_NAME_LENGTH) == 0) ||
+                     (class_id == AMI_COSEM_LIMITER_CLASS_ID) || (class_id == 0x71u);
+    int is_disconnect = (memcmp(logical_name, disconnect_ln, AMI_COSEM_LOGICAL_NAME_LENGTH) == 0) ||
+                        (class_id == AMI_COSEM_DISCONNECT_CONTROL_CLASS_ID) || (class_id == 0x70u);
+    int is_action_schedule = (memcmp(logical_name, action_sched_bill_ln, AMI_COSEM_LOGICAL_NAME_LENGTH) == 0) ||
+                             (memcmp(logical_name, action_sched_hist_ln, AMI_COSEM_LOGICAL_NAME_LENGTH) == 0) ||
+                             (class_id == AMI_COSEM_ACTION_SCHEDULE_CLASS_ID) || (class_id == 0x22u);
+    int is_reg_activation = (memcmp(logical_name, reg_activation_ln, AMI_COSEM_LOGICAL_NAME_LENGTH) == 0) ||
+                            (class_id == AMI_COSEM_REGISTER_ACTIVATION_CLASS_ID);
+    int is_clock = (memcmp(logical_name, clock_logical_name, AMI_COSEM_LOGICAL_NAME_LENGTH) == 0) ||
+                   (class_id == AMI_COSEM_CLOCK_CLASS_ID);
+
+    if (class_id == 1u ||
+        memcmp(logical_name, ldn_ln, sizeof(ldn_ln)) == 0 ||
+        memcmp(logical_name, fw_ln, sizeof(fw_ln)) == 0 ||
+        memcmp(logical_name, meter_id_ln, sizeof(meter_id_ln)) == 0 ||
+        memcmp(logical_name, meter_type_ln, sizeof(meter_type_ln)) == 0) {
         static const uint8_t ldn_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 42, 0, 0, 255};
         static const uint8_t fw_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {1, 0, 0, 2, 0, 255};
         static const uint8_t meter_id_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 96, 1, 0, 255};
@@ -1038,11 +1059,7 @@ AmiCosemStatus ami_cosem_register_read_selected(
         return AMI_COSEM_OBJECT_NOT_FOUND;
     }
 
-    if (class_id == AMI_COSEM_LIMITER_CLASS_ID) {
-        static const uint8_t limiter_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 17, 0, 3, 255};
-        if (memcmp(logical_name, limiter_ln, AMI_COSEM_LOGICAL_NAME_LENGTH) != 0) {
-            return AMI_COSEM_OBJECT_NOT_FOUND;
-        }
+    if (is_limiter) {
         memset(out, 0, sizeof(*out));
         switch (attribute_id) {
         case 1:
@@ -1100,11 +1117,7 @@ AmiCosemStatus ami_cosem_register_read_selected(
         }
     }
 
-    if (class_id == AMI_COSEM_DISCONNECT_CONTROL_CLASS_ID) {
-        static const uint8_t disconnect_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] = {0, 0, 96, 3, 10, 255};
-        if (memcmp(logical_name, disconnect_ln, AMI_COSEM_LOGICAL_NAME_LENGTH) != 0) {
-            return AMI_COSEM_OBJECT_NOT_FOUND;
-        }
+    if (is_disconnect) {
         memset(out, 0, sizeof(*out));
         switch (attribute_id) {
         case 1:
@@ -1113,10 +1126,11 @@ AmiCosemStatus ami_cosem_register_read_selected(
             memcpy(out->value.logical_name, disconnect_ln, AMI_COSEM_LOGICAL_NAME_LENGTH);
             return AMI_COSEM_OK;
         case 2:
-            /* output_state: boolean */
-            out->type = AMI_COSEM_TYPE_UNSIGNED;
-            out->length = 1u;
-            out->value.unsigned_integer = snapshot->disconnect_output_state ? 1u : 0u;
+            /* output_state: boolean (DLMS AXDR type 3) */
+            out->type = AMI_COSEM_TYPE_ENCODED;
+            out->length = 2u;
+            out->value.encoded[0] = 0x03u; /* boolean */
+            out->value.encoded[1] = snapshot->disconnect_output_state ? 0x01u : 0x00u;
             return AMI_COSEM_OK;
         case 3:
             /* control_state: enum (0 = disconnected, 1 = connected, 2 = ready_for_reconnection) */
@@ -1139,9 +1153,7 @@ AmiCosemStatus ami_cosem_register_read_selected(
         return read_profile(snapshot, logical_name, attribute_id, selection, out);
     }
 
-    if (class_id == AMI_COSEM_SECURITY_SETUP_CLASS_ID) {
-        if (memcmp(logical_name, security_setup_logical_name,
-                   AMI_COSEM_LOGICAL_NAME_LENGTH) != 0) return AMI_COSEM_OBJECT_NOT_FOUND;
+    if (is_security_setup) {
         memset(out, 0, sizeof(*out));
         switch (attribute_id) {
         case 1:
@@ -1184,12 +1196,7 @@ AmiCosemStatus ami_cosem_register_read_selected(
         }
     }
 
-    if (class_id == AMI_COSEM_CLOCK_CLASS_ID) {
-        if (memcmp(logical_name, clock_logical_name,
-                   AMI_COSEM_LOGICAL_NAME_LENGTH) != 0) {
-            return AMI_COSEM_OBJECT_NOT_FOUND;
-        }
-
+    if (is_clock) {
         memset(out, 0, sizeof(*out));
         if (attribute_id == 1u) {
             out->type = AMI_COSEM_TYPE_OCTET_STRING;
@@ -1222,7 +1229,7 @@ AmiCosemStatus ami_cosem_register_read_selected(
         }
     }
 
-    if (class_id == AMI_COSEM_REGISTER_ACTIVATION_CLASS_ID) {
+    if (is_reg_activation) {
         memset(out, 0, sizeof(*out));
         switch (attribute_id) {
         case 1:
@@ -1268,7 +1275,7 @@ AmiCosemStatus ami_cosem_register_read_selected(
         }
     }
 
-    if (class_id == AMI_COSEM_SPECIAL_DAYS_TABLE_CLASS_ID) {
+    if (is_special_days) {
         memset(out, 0, sizeof(*out));
         switch (attribute_id) {
         case 1:
@@ -1288,7 +1295,7 @@ AmiCosemStatus ami_cosem_register_read_selected(
         }
     }
 
-    if (class_id == AMI_COSEM_ACTIVITY_CALENDAR_CLASS_ID) {
+    if (is_activity_calendar) {
         memset(out, 0, sizeof(*out));
         switch (attribute_id) {
         case 1:
@@ -1331,7 +1338,7 @@ AmiCosemStatus ami_cosem_register_read_selected(
         }
     }
 
-    if (class_id == AMI_COSEM_ACTION_SCHEDULE_CLASS_ID) {
+    if (is_action_schedule) {
         memset(out, 0, sizeof(*out));
         switch (attribute_id) {
         case 1:

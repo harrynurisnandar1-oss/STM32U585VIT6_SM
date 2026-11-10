@@ -223,8 +223,41 @@ def main():
     assert b"\xC4\x01\xC7\x00" in pq_buf_resp, f"Failed reading PQ Voltage Buffer: {pq_buf_resp.hex()}"
     print(f"    [PASS] PQ Voltage Buffer received ({len(pq_buf_resp)} bytes)")
 
-    # 10. Send DISC
-    print("[10] Sending DISC (Disconnect)...")
+    # 10. Read Activity Calendar Name Active (OBIS 0.0.13.0.0.255, Class 20, Attr 2) - Previously caused Invalid PDU
+    print("[10] Reading Activity Calendar Name Active (OBIS 0.0.13.0.0.255, Class 20, Attr 2)...")
+    get_cal_apdu = (
+        b"\xE6\xE6\x00"
+        b"\xC0\x01\xC8"
+        b"\x00\x14"                  # Class 20
+        b"\x00\x00\x0D\x00\x00\xFF"  # 0.0.13.0.0.255
+        b"\x02"                      # Attribute 2
+        b"\x00"
+    )
+    sock.sendall(build_hdlc_frame(dst_sap=1, src_sap=16, control=0x30, payload=get_cal_apdu))
+    cal_resp = read_hdlc_frame(sock)
+    assert len(cal_resp) > 0, "No response for Activity Calendar Attr 2"
+    assert b"\xC4\x01\xC8\x00" in cal_resp, f"Failed reading Activity Calendar Name: {cal_resp.hex()}"
+    assert b"SEASON_ACTIVE" in cal_resp, f"Calendar name SEASON_ACTIVE not found: {cal_resp.hex()}"
+    print(f"    [PASS] Activity Calendar Name 'SEASON_ACTIVE' received ({len(cal_resp)} bytes)")
+
+    # 11. Read Billing Scheduler Script (OBIS 0.0.15.0.2.255, Class 22, Attr 2)
+    print("[11] Reading Billing Scheduler (OBIS 0.0.15.0.2.255, Class 22, Attr 2)...")
+    get_sched_apdu = (
+        b"\xE6\xE6\x00"
+        b"\xC0\x01\xC9"
+        b"\x00\x16"                  # Class 22
+        b"\x00\x00\x0F\x00\x02\xFF"  # 0.0.15.0.2.255
+        b"\x02"                      # Attribute 2
+        b"\x00"
+    )
+    sock.sendall(build_hdlc_frame(dst_sap=1, src_sap=16, control=0x32, payload=get_sched_apdu))
+    sched_resp = read_hdlc_frame(sock)
+    assert len(sched_resp) > 0, "No response for Billing Scheduler Attr 2"
+    assert b"\xC4\x01\xC9\x00" in sched_resp, f"Failed reading Billing Scheduler: {sched_resp.hex()}"
+    print(f"    [PASS] Billing Scheduler received ({len(sched_resp)} bytes)")
+
+    # 12. Send DISC
+    print("[12] Sending DISC (Disconnect)...")
     disc_frame = build_hdlc_frame(dst_sap=1, src_sap=16, control=0x53)
     sock.sendall(disc_frame)
     disc_resp = read_hdlc_frame(sock)

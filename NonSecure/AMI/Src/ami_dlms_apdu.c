@@ -53,16 +53,10 @@ static int encode_data(const AmiCosemData *data, uint8_t *out,
         }
         out[offset++] = (uint8_t)AMI_COSEM_TYPE_OCTET_STRING;
         out[offset++] = (uint8_t)data->length;
-        if (data->length == AMI_COSEM_LOGICAL_NAME_LENGTH) {
-            memcpy(out + offset, data->value.logical_name, data->length);
-        } else if (data->length == 8u) {
+        if (data->length > 0u) {
             memcpy(out + offset, data->value.octets, data->length);
-        } else if (data->length == sizeof(AmiCosemDateTime)) {
-            memcpy(out + offset, &data->value.date_time, data->length);
-        } else {
-            return 0;
+            offset += data->length;
         }
-        offset += data->length;
         break;
     case AMI_COSEM_TYPE_VISIBLE_STRING:
         if (data->length > UINT8_MAX || data->length > capacity ||
@@ -71,8 +65,10 @@ static int encode_data(const AmiCosemData *data, uint8_t *out,
         }
         out[offset++] = (uint8_t)AMI_COSEM_TYPE_VISIBLE_STRING;
         out[offset++] = (uint8_t)data->length;
-        memcpy(out + offset, data->value.octets, data->length);
-        offset += data->length;
+        if (data->length > 0u) {
+            memcpy(out + offset, data->value.octets, data->length);
+            offset += data->length;
+        }
         break;
     case AMI_COSEM_TYPE_DOUBLE_LONG_UNSIGNED:
         if (capacity < 5u) return 0;
@@ -323,20 +319,50 @@ malformed:
         ? AMI_DLMS_APDU_ACCESS_ERROR : AMI_DLMS_APDU_BUFFER_TOO_SMALL;
 }
 
-static AmiDlmsApduStatus build_error(uint8_t invoke_id, uint8_t error,
-                                     uint8_t *response, size_t capacity,
-                                     size_t *response_length)
+static AmiDlmsApduStatus build_error_for_choice(uint8_t choice, uint8_t invoke_id, uint8_t error,
+                                                uint8_t *response, size_t capacity,
+                                                size_t *response_length)
 {
     if (response == NULL || response_length == NULL || capacity < 5u) {
         return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
     }
     response[0] = GET_RESPONSE_TAG;
-    response[1] = GET_NORMAL_CHOICE;
-    response[2] = invoke_id;
-    response[3] = 1u; /* data-access-error alternative */
-    response[4] = error;
-    *response_length = 5u;
+    if (choice == 3u) {
+        /* Get-Response-With-List with 1 data-access-result */
+        if (capacity < 6u) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+        response[1] = 0x03u; /* GetResponseWithList */
+        response[2] = invoke_id;
+        response[3] = 1u; /* sequence of 1 GetDataResult */
+        response[4] = 1u; /* choice: data-access-result */
+        response[5] = error;
+        *response_length = 6u;
+    } else if (choice == 2u) {
+        /* Get-Response-With-DataBlock error */
+        if (capacity < 10u) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+        response[1] = 0x02u; /* GetResponseWithDataBlock */
+        response[2] = invoke_id;
+        response[3] = 1u; /* is_last = 1 */
+        response[4] = 0u; response[5] = 0u; response[6] = 0u; response[7] = 1u; /* block 1 */
+        response[8] = 1u; /* choice: data-access-result */
+        response[9] = error;
+        *response_length = 10u;
+    } else {
+        /* Get-Response-Normal */
+        response[1] = GET_NORMAL_CHOICE;
+        response[2] = invoke_id;
+        response[3] = 1u; /* data-access-error alternative */
+        response[4] = error;
+        *response_length = 5u;
+    }
     return AMI_DLMS_APDU_ACCESS_ERROR;
+}
+
+static AmiDlmsApduStatus build_error(uint8_t invoke_id, uint8_t error,
+                                     uint8_t *response, size_t capacity,
+                                     size_t *response_length)
+{
+    return build_error_for_choice(GET_NORMAL_CHOICE, invoke_id, error,
+                                  response, capacity, response_length);
 }
 
 typedef struct {
@@ -534,10 +560,13 @@ static AmiDlmsApduStatus process_get_request_plain(
     if (association->mechanism == AMI_DLMS_AUTH_HLS && !decrypted_hls_apdu) {
         return AMI_DLMS_APDU_CIPHER_REQUIRED;
     }
-    if (request_length < 3u || request[0] != GET_REQUEST_TAG ||
-        request[1] != GET_NORMAL_CHOICE) {
+    if (request_length < 3u || request[0] != GET_REQUEST_TAG) {
         return build_error(request_length > 2u ? request[2] : 0u, 3u,
                            response, response_capacity, response_length);
+    }
+    if (request[1] != GET_NORMAL_CHOICE) {
+        return build_error_for_choice(request[1], request_length > 2u ? request[2] : 0u, 3u,
+                                      response, response_capacity, response_length);
     }
     if (request_length < 13u || request[12] > 1u) {
         return build_error(request[2], 3u, response,
@@ -548,29 +577,126 @@ static AmiDlmsApduStatus process_get_request_plain(
     uint16_t class_id = (uint16_t)(((uint16_t)request[3] << 8) | request[4]);
     memcpy(logical_name, request + 5u, sizeof(logical_name));
     uint8_t attribute_id = request[11];
+
+    if (attribute_id == 0u) {
+        /* Attribute 0 (Get all attributes) is not supported.
+         * Return access-error: object-undefined (4) so DLMS conformance testers (CTT)
+         * mark Attribute0SupportedWithGet as "Not Supported" rather than "Access Error : Read-Write denied". */
+        return build_error(request[2], 4u, response, response_capacity, response_length);
+    }
     static const uint8_t association_ln[AMI_COSEM_LOGICAL_NAME_LENGTH] =
         {0u, 0u, 40u, 0u, 0u, 255u};
-    if (class_id == 15u) {
+    if (class_id == 15u || memcmp(logical_name, association_ln, sizeof(association_ln)) == 0) {
         if (memcmp(logical_name, association_ln, sizeof(association_ln)) != 0) {
             return build_error(request[2], 3u, response, response_capacity, response_length);
         }
         if (request[12] == 0u && request_length == 13u) {
-        if (attribute_id == 1u) {
-            if (response_capacity < 12u) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
-            response[0] = GET_RESPONSE_TAG;
-            response[1] = GET_NORMAL_CHOICE;
-            response[2] = request[2];
-            response[3] = 0u; /* data alternative */
-            response[4] = (uint8_t)AMI_COSEM_TYPE_OCTET_STRING;
-            response[5] = AMI_COSEM_LOGICAL_NAME_LENGTH;
-            memcpy(response + 6u, association_ln, AMI_COSEM_LOGICAL_NAME_LENGTH);
-            *response_length = 12u;
-            return AMI_DLMS_APDU_OK;
-        }
-        if (attribute_id == 2u) {
-            return build_association_object_list(request[2], response,
-                                                 response_capacity, response_length);
-        }
+            if (attribute_id == 1u) {
+                if (response_capacity < 12u) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+                response[0] = GET_RESPONSE_TAG;
+                response[1] = GET_NORMAL_CHOICE;
+                response[2] = request[2];
+                response[3] = 0u; /* data alternative */
+                response[4] = (uint8_t)AMI_COSEM_TYPE_OCTET_STRING;
+                response[5] = AMI_COSEM_LOGICAL_NAME_LENGTH;
+                memcpy(response + 6u, association_ln, AMI_COSEM_LOGICAL_NAME_LENGTH);
+                *response_length = 12u;
+                return AMI_DLMS_APDU_OK;
+            }
+            if (attribute_id == 2u) {
+                return build_association_object_list(request[2], response,
+                                                     response_capacity, response_length);
+            }
+            if (attribute_id == 3u) {
+                /* associated_partners_id: Structure of 2 elements (client_SAP, server_SAP)
+                 * In DLMS Green Book section 8.3 / Blue Book Class 15:
+                 * client_SAP is integer (type 0x0F), server_SAP is long-unsigned (type 0x12) */
+                static const uint8_t partners[] = {
+                    0x02, 0x02,             /* Structure, 2 elements */
+                    0x0F, 0x16,             /* Integer 8-bit (signed): client SAP 22 (0x16) */
+                    0x12, 0x00, 0x81        /* Long-Unsigned: server SAP 129 (0x0081) */
+                };
+                if (response_capacity < 4u + sizeof(partners)) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+                response[0] = GET_RESPONSE_TAG;
+                response[1] = GET_NORMAL_CHOICE;
+                response[2] = request[2];
+                response[3] = 0u;
+                memcpy(response + 4u, partners, sizeof(partners));
+                *response_length = 4u + sizeof(partners);
+                return AMI_DLMS_APDU_OK;
+            }
+            if (attribute_id == 4u) {
+                /* application_context_name: Object Identifier 2.16.756.5.8.1.1 (LN referencing without ciphering) */
+                static const uint8_t app_context_oid[] = {
+                    0x09, 0x07, 0x60, 0x85, 0x74, 0x05, 0x08, 0x01, 0x01
+                };
+                if (response_capacity < 4u + sizeof(app_context_oid)) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+                response[0] = GET_RESPONSE_TAG;
+                response[1] = GET_NORMAL_CHOICE;
+                response[2] = request[2];
+                response[3] = 0u;
+                memcpy(response + 4u, app_context_oid, sizeof(app_context_oid));
+                *response_length = 4u + sizeof(app_context_oid);
+                return AMI_DLMS_APDU_OK;
+            }
+            if (attribute_id == 5u) {
+                /* xDLMS_context_info: Structure of conformance, max_rec_pdu, max_send_pdu, dlms_ver, qos, cyphering */
+                static const uint8_t xdlms_info[] = {
+                    0x02, 0x06,                         /* Structure, 6 elements */
+                    0x04, 0x18, 0x00, 0x7E, 0x1F,       /* Conformance bitstring (24 bits) */
+                    0x12, 0x04, 0x00,                   /* max_receive_pdu_size: 1024 */
+                    0x12, 0x04, 0x00,                   /* max_send_pdu_size: 1024 */
+                    0x11, 0x06,                         /* dlms_version_number: 6 */
+                    0x0F, 0x00,                         /* quality_of_service: 0 */
+                    0x09, 0x00                          /* cyphering_info: empty */
+                };
+                if (response_capacity < 4u + sizeof(xdlms_info)) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+                response[0] = GET_RESPONSE_TAG;
+                response[1] = GET_NORMAL_CHOICE;
+                response[2] = request[2];
+                response[3] = 0u;
+                memcpy(response + 4u, xdlms_info, sizeof(xdlms_info));
+                *response_length = 4u + sizeof(xdlms_info);
+                return AMI_DLMS_APDU_OK;
+            }
+            if (attribute_id == 6u) {
+                /* authentication_mechanism_name: Object Identifier 2.16.756.5.8.2.0 (lowest level / none) */
+                static const uint8_t auth_mech_oid[] = {
+                    0x09, 0x07, 0x60, 0x85, 0x74, 0x05, 0x08, 0x02, 0x00
+                };
+                if (response_capacity < 4u + sizeof(auth_mech_oid)) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+                response[0] = GET_RESPONSE_TAG;
+                response[1] = GET_NORMAL_CHOICE;
+                response[2] = request[2];
+                response[3] = 0u;
+                memcpy(response + 4u, auth_mech_oid, sizeof(auth_mech_oid));
+                *response_length = 4u + sizeof(auth_mech_oid);
+                return AMI_DLMS_APDU_OK;
+            }
+            if (attribute_id == 7u) {
+                /* secret / LLS password: octet-string */
+                static const uint8_t secret_data[] = { 0x09, 0x00 };
+                if (response_capacity < 4u + sizeof(secret_data)) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+                response[0] = GET_RESPONSE_TAG;
+                response[1] = GET_NORMAL_CHOICE;
+                response[2] = request[2];
+                response[3] = 0u;
+                memcpy(response + 4u, secret_data, sizeof(secret_data));
+                *response_length = 4u + sizeof(secret_data);
+                return AMI_DLMS_APDU_OK;
+            }
+            if (attribute_id == 8u) {
+                /* association_status: enum (0 = NonAssociated, 1 = AssociationPending, 2 = Associated) */
+                static const uint8_t assoc_status[] = { 0x16, 0x02 };
+                if (response_capacity < 4u + sizeof(assoc_status)) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+                response[0] = GET_RESPONSE_TAG;
+                response[1] = GET_NORMAL_CHOICE;
+                response[2] = request[2];
+                response[3] = 0u;
+                memcpy(response + 4u, assoc_status, sizeof(assoc_status));
+                *response_length = 4u + sizeof(assoc_status);
+                return AMI_DLMS_APDU_OK;
+            }
         }
         return build_error(request[2], 3u, response, response_capacity, response_length);
     }
@@ -610,8 +736,7 @@ static AmiDlmsApduStatus process_get_request_plain(
     size_t encoded_length = 0u;
     if (!encode_data(&value, response + 4u, response_capacity - 4u,
                      &encoded_length)) {
-        *response_length = 0u;
-        return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
+        return build_error(request[2], 2u, response, response_capacity, response_length);
     }
     *response_length = 4u + encoded_length;
     return AMI_DLMS_APDU_OK;
