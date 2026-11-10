@@ -2,7 +2,17 @@ name: Host Unit Tests CI
 
 on:
   push:
+    branches: [ "main", "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.gitignore'
   pull_request:
+    branches: [ "main", "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.gitignore'
   workflow_dispatch:
 
 permissions:
@@ -10,7 +20,7 @@ permissions:
 
 jobs:
   host-tests-linux:
-    name: Host Tests (Ubuntu Linux)
+    name: Host Tests & Coverage (Ubuntu Linux)
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -29,29 +39,10 @@ jobs:
       - name: Build test targets
         run: cmake --build build/host-tests --parallel
 
-      - name: Run CTest
-        run: ctest --test-dir build/host-tests --output-on-failure
+      - name: Run CTest (15 Test Suites)
+        run: ctest --test-dir build/host-tests --output-on-failure --verbose
 
       - name: Generate Code Coverage Summary
         run: |
           lcov --capture --directory build/host-tests --output-file build/host-tests/coverage.info --exclude '*/tests/*' --ignore-errors unused,inconsistent,mismatch,empty || true
           lcov --list build/host-tests/coverage.info || true
-
-  host-tests-windows:
-    name: Host Tests (Windows)
-    runs-on: windows-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Configure CMake
-        run: cmake -S tests -B build/host-tests -G "Visual Studio 17 2022" -A x64
-
-      - name: Build test targets
-        run: cmake --build build/host-tests --config Debug --parallel
-
-      - name: Run CTest
-        run: ctest --test-dir build/host-tests -C Debug --output-on-failure
-

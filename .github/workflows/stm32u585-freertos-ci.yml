@@ -1,10 +1,18 @@
-name: STM32U585 FreeRTOS Firmware & ARM Native CI
+name: STM32U585 FreeRTOS Firmware ARM CI
 
 on:
   push:
-    branches: [ "main", "master", ]
+    branches: [ "main", "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.gitignore'
   pull_request:
-    branches: [ "main", "master", ]
+    branches: [ "main", "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.gitignore'
   workflow_dispatch:
 
 permissions:
@@ -46,8 +54,10 @@ jobs:
 
       - name: Display Memory Footprint (Size)
         run: |
-          arm-none-eabi-size Secure/build/STM32U585VIT6_SM_S.elf
-          arm-none-eabi-size NonSecure/build/STM32U585VIT6_SM_NS.elf
+          echo "=== SECURE FIRMWARE FOOTPRINT ==="
+          arm-none-eabi-size Secure/build/STM32U585VIT6_SM_S.elf || true
+          echo "=== NON-SECURE FIRMWARE FOOTPRINT ==="
+          arm-none-eabi-size NonSecure/build/STM32U585VIT6_SM_NS.elf || true
 
       - name: Upload Firmware Artifacts
         uses: actions/upload-artifact@v4
@@ -64,35 +74,3 @@ jobs:
             NonSecure/build/*.hex
             NonSecure/build/*.map
           retention-days: 7
-
-  test-host-verification:
-    name: Host Protocol & CTest Verification (15 CTest Suites)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Verify Architecture
-        run: |
-          echo "=== CPU ARCHITECTURE ==="
-          uname -m
-          lscpu || cat /proc/cpuinfo | grep "model name" | head -n 4
-
-      - name: Install Host Build Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends cmake ninja-build build-essential python3
-
-      - name: Configure CMake for Host Environment
-        run: |
-          cmake -S tests -B build/tests -G Ninja -DCMAKE_BUILD_TYPE=Release
-
-      - name: Compile 15 Test Suites & Simulator
-        run: |
-          cmake --build build/tests --parallel
-
-      - name: Execute 15 CTest Suites
-        run: |
-          ctest --test-dir build/tests --output-on-failure --verbose

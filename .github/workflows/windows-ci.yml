@@ -2,9 +2,17 @@ name: Windows Native CI
 
 on:
   push:
-    branches: [ "main", "master"]
+    branches: [ "main", "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.gitignore'
   pull_request:
     branches: [ "main", "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.gitignore'
   workflow_dispatch:
 
 permissions:
@@ -12,7 +20,7 @@ permissions:
 
 jobs:
   windows-build-and-test:
-    name: Build & Test Native Windows
+    name: Build & Test Native Windows (MSVC / Ninja)
     runs-on: windows-latest
     timeout-minutes: 15
 
@@ -35,6 +43,6 @@ jobs:
         run: |
           cmake --build tests/build --parallel
 
-      - name: Run CTest Suite
+      - name: Run CTest Suite (15 Test Suites)
         run: |
           ctest --test-dir tests/build --output-on-failure --verbose

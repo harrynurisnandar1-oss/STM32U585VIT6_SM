@@ -3,8 +3,16 @@ name: C/C++ CodeQL Static Analysis
 on:
   push:
     branches: [ "main", "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.gitignore'
   pull_request:
     branches: [ "main", "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.gitignore'
   schedule:
     # Menjalankan pemindaian otomatis setiap hari Senin pukul 02:00 UTC
     - cron: '0 2 * * 1'
@@ -45,4 +53,3 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:c-cpp"
-
