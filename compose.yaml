@@ -7,3 +7,4 @@ services:
       dockerfile: ./Dockerfile
     ports:
       - "4059:4059"
+    restart: unless-stopped

@@ -111,7 +111,18 @@ Implementasi diklasifikasikan secara transparan berdasarkan kesiapan software da
 
 ---
 
-## 🚀 Panduan Cepat Menjalankan Pengujian
+## 🗺️ Roadmap & Fase Pengembangan (Fase Awal s.d. Tape-Out)
+
+Rencana kerja 26-minggu paket E2 (Protokol & Data Model Smart Meter AMI 3-Fasa) mengadopsi rilis bertahap dari tahap *blind development* hingga penyerahan produksi (*Final Tape-Out & Handoff*):
+
+| Fase & Durasi | Target Hardware | Fokus & Aktivitas Utama | Pintu Gerbang (*Milestone*) | Status Kesiapan |
+| :--- | :--- | :--- | :--- | :---: |
+| **Fase 1: Inisiasi & Fondasi**<br>*(Minggu 1–5)* | Host PC & Dev Board STM32U575VGT6 | Implementasi tumpukan dasar DLMS/COSEM, ACSE (AARQ/AARE), HDLC streaming zero-heap, partisi TrustZone SAU/GTZC, AES-128-GCM Suite 0, HLS 5 GMAC, serta mock register metrologi AFE ADE9000. | **Gate G0 (W1)**<br>**Gate G1 (W5)** | 🟢 **100% SELESAI** |
+| **Fase 2: Bring-Up Spin 1**<br>*(Minggu 6–10)* | Hardware Spin 1 (*Low Voltage*, 8–10 unit) | Porting HAL UART/SPI ke target riil STM32U585, ekspansi 66 objek COSEM aktif, xDLMS General Block Transfer (GBT), proteksi anti-brute-force lockout (SPLN D5.002:2024), Disconnect Control Breaker Class 70, dan verifikasi Docker 15/15 CTest PASS (coverage 79.2%). | **Gate G2 (W10)**<br>*(Spin 1 Alive)* | 🟢 **100% SELESAI** |
+| **Fase 3: Integrasi & Freeze**<br>*(Minggu 11–16)* | Hardware Spin 1 & Modul Sensor | Integrasi Tamper Manager 9-modus (SPLN D3.006:2021 Tabel 6), realisasi engine dinamis Time-of-Use ToU (minimal 8 tarif, 8 jadwal, 4 tipe kalender), Flash NVM wear-leveling, dan pembekuan set pembacaan DLMS (*DLMS Read-Set Freeze*). | **Gate G3 (W16)**<br>*(Release Spin 2)* | 🟡 **SEDANG BERJALAN** *(Transisi W10–W11)* |
+| **Fase 4: Mains & Tape-Out**<br>*(Minggu 17–26)* | Hardware Spin 2 (*Full Mains* 230/400V) | Eksekusi Safety Gate G-S, kalibrasi metrologi akurasi Kelas 0.5S/0.2S (Fluke 6100B), verifikasi End-to-End dengan HES/MDMS PLN, uji resmi DLMS CTT v3.x 100% PASS, Soak Test 24/7 ($-25^\circ\text{C}$ s.d. $+70^\circ\text{C}$), dan serah terima akhir (*Final Tape-Out / Handoff*). | **Safety Gate G-S (W19)**<br>**Gate G4 (W21)**<br>**Gate G5 (W26 - Tape-Out)** | ⚪ **MENUNGGU SPIN 2** |
+
+---
 
 Repositori ini dirancang *reproducible* dan dapat langsung diverifikasi di lingkungan host Windows maupun Linux/Docker container.
 

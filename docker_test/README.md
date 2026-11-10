@@ -1,51 +1,61 @@
-# Docker Host Test Harness (Single Unified Container: stm32u585vit6sm)
+# Panduan Koneksi GXDLMSDirector ke Docker Simulator
 
-Direktori ini menyediakan script pendukung untuk pengujian container Docker tunggal (**stm32u585vit6sm**) yang didefinisikan pada [`Dockerfile`](../Dockerfile) dan diorkestrasi via [`compose.yaml`](../compose.yaml) di root repository. Seluruh pengujian logika host, 15 test suite CTest, dan uji end-to-end (E2E) DLMS/COSEM HDLC-over-TCP dijalankan dalam 1 container mandiri tanpa memerlukan toolchain embedded STM32 atau hardware fisik.
+Container Docker `stm32u585vit6sm` kini berukuran sangat kecil (**< 10 MB**) dan berfungsi khusus menjalankan **Gurux DLMS/COSEM HDLC-over-TCP Simulator** pada port `4059`.
 
-## Cakupan Pengujian
+Seluruh aplikasi pengujian seperti **GXDLMSDirector** (atau skrip uji Python) dijalankan langsung dari **PC Windows Host Anda**, tanpa membebani container.
 
-Container Docker dibangun menggunakan multi-stage build Alpine Linux yang aman, terisolasi, dan sangat ringan:
-1. **15 CTest Unit Test Suites** (100% CTest suites dari `tests/CMakeLists.txt`):
-   - `test_dlms_port`
-   - `test_cosem`
-   - `test_security`
-   - `test_association`
-   - `test_apdu`
-   - `test_hdlc`
-   - `test_auth_policy`
-   - `test_sha256_mock`
-   - `test_security_nsc_mock`
-   - `test_dlms_pipeline`
-   - `test_cosem_compliance`
-   - `test_load_profile_capture`
-   - `test_tamper_log`
-   - `test_disconnect_control`
-   - `test_ami_trustzone_boundary` (Validasi batas memori CMSE NSC & overflow pointer)
-2. **E2E DLMS Simulator & Client Integration**:
-   - `gurux_simulator` (HDLC-over-TCP listener port 4059).
-   - `test_dlms_e2e_client.py` (SNRM/UA, AARQ/AARE, GET Request/Response).
+---
 
-## Cara Menjalankan
+## 1. Menjalankan Simulator di Docker
 
-### 1. Menggunakan Docker Compose (Direkomendasikan)
-Dari root repository:
-```bash
-docker compose up --build --abort-on-container-exit
-```
-
-### 2. Build & Run Langsung via Docker CLI
-Dari root repository:
-```bash
-docker build -t stm32u585vit6sm .
-docker run --rm -p 4059:4059 stm32u585vit6sm
-```
-
-### 3. Menggunakan Script Helper Windows
+Dari root repository atau folder ini:
 ```powershell
 .\docker_test\run_docker_tests.bat
 ```
+Atau via Docker Compose:
+```bash
+docker compose up -d
+```
+Simulator akan langsung aktif di latar belakang mendengarkan pada port `127.0.0.1:4059`.
 
-## Batas Tanggung Jawab
+---
 
-Container ini memverifikasi logika protokol DLMS/COSEM, state machine asosiasi, parsing APDU, capture buffer load profile, tamper events, serta simulasi HDLC-over-TCP.
-Pengujian akurasi metrologi energi nyata, interrupt hardware, driver UART fisik, dan Secure Engine HW (TrustZone / SAU) diverifikasi langsung pada hardware unit STM32U585.
+## 2. Pengaturan Koneksi di GXDLMSDirector (Windows)
+
+Buka aplikasi **GXDLMSDirector** di PC Windows Anda, lalu buat device baru dengan konfigurasi berikut:
+
+1. **General Settings**:
+   - **Manufacturer**: `Generic` (atau `Gurux`)
+   - **Authentication**: `None` (untuk pengujian fungsional dasar) atau `High (GMAC)`
+   - **Logical Name Referencing (LN)**: Centang (`True`)
+   - **Interface Type**: `HDLC`
+   - **Client Address**: `16` (Hex `0x10` - Management Client) atau `1` (Public)
+   - **Server Address**: `1` (Logical Address 1)
+
+2. **Communication (Media)**:
+   - Pilih **Media**: `Network` (TCP/IP)
+   - **Host Name / IP Address**: `127.0.0.1` (atau `localhost`)
+   - **Port**: `4059`
+
+3. **Koneksi**:
+   - Klik tombol **Connect**.
+   - Setelah status berubah menjadi *Connected*, klik kanan pada nama perangkat lalu pilih **Read Objects / Association View**.
+   - Seluruh **49 Objek OBIS**, Load Profile 23 kanal, dan Tamper Log akan terbaca secara interaktif.
+
+---
+
+## 3. Menjalankan Uji Klien Python dari Windows Host (Opsional)
+
+Jika Anda ingin menjalankan script automated test client dari Windows host:
+```powershell
+python .\docker_test\test_dlms_e2e_client.py
+```
+
+---
+
+## 4. Menghentikan Simulator
+
+Untuk menghentikan container simulator:
+```bash
+docker compose down
+```
