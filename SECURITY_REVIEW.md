@@ -146,3 +146,74 @@ flowchart TD
 3. **Pola Salin Descriptor NSC (I5)**: Lindungi gateway NSC dari potensi manipulasi DMA asinkron dengan menyalin descriptor ke memori Secure terlebih dahulu.
 4. **Verifikasi Rantai Booting (I6)**: Tinjau option bytes hardware (`RDP Level 0.5/1`, `TZEN=1`, `SECBOOTADD0`), manifest header, dan mekanisme signing firmware.
 5. **Uji Bangku Laboratorium Berizin**: Lakukan validasi empiris atas retensi domain baterai, MPCBB SRAM3, peripheral TRNG, dan ketahanan terhadap malformed APDU.
+
+---
+
+## 6. Adendum Audit Menyeluruh — 16 November 2026
+
+Adendum ini menambahkan temuan berdasarkan tinjauan statis source dan konfigurasi terbaru. Isi bagian sebelumnya tidak diubah. Tidak dilakukan pengujian pada board atau penetrasi terhadap perangkat live; hasil uji host bukan bukti validasi hardware.
+
+| # | Severity | File | Lines | Vulnerability | Confidence |
+|---|----------|------|-------|---------------|------------|
+| 1 | 🟠 HIGH | [ami_dlms_port.c](./NonSecure/AMI/Src/ami_dlms_port.c) | 178-204 | Perintah pemutus/penyambung breaker plaintext dapat melewati pemeriksaan HLS dan ciphered APDU | 10/10 |
+| 2 | 🟠 HIGH | [secure_nsc.c](./Secure/Core/Src/secure_nsc.c) | 149, 415-455, 699-734, 1083-1162 | Pemanggil NonSecure dapat membentuk otorisasi transfer key Secure menggunakan token tetap dan proof yang tidak terikat sesi | 9/10 |
+| 3 | 🟠 HIGH | [main.c](./Secure/Core/Src/main.c), [CMakeLists.txt](./Secure/CMakeLists.txt) | 203-214; 48-50 | Secure boot dapat menerima image NonSecure tanpa manifest/tanda tangan ketika strict boot tidak diaktifkan | 10/10 |
+| 4 | 🟡 MEDIUM | [secure_nsc.c](./Secure/Core/Src/secure_nsc.c), [main.c](./Secure/Core/Src/main.c) | secure_nsc.c: 88-96, 114-156, 189-207, 468-494; main.c: 351-362 | Kunci wrapping keystore dapat diturunkan dari UID publik dan konstanta build | 9/10 |
+| 5 | 🟡 MEDIUM | [main.c](./Secure/Core/Src/main.c) | 169-200 | Epoch anti-rollback tidak terikat pada data yang ditandatangani | 9/10 |
+| 6 | 🟡 MEDIUM | [ami_dlms_port.c](./NonSecure/AMI/Src/ami_dlms_port.c), [secure_nsc.c](./Secure/Core/Src/secure_nsc.c) | ami_dlms_port.c: 19-35; secure_nsc.c: 724-726, 1118-1120 | Jalur asosiasi HLS normal tidak menetapkan status Secure yang dibutuhkan sehingga key-transfer klien sah ditolak | 10/10 |
+
+### 6.1 Detail Temuan
+
+#### A2. Aksi breaker plaintext melewati autentikasi ciphered
+
+- **Severity**: HIGH — **Confidence**: 10/10
+- **Lokasi**: [ami_dlms_port.c](./NonSecure/AMI/Src/ami_dlms_port.c), baris 178-204.
+- **Dampak**: Aksi disconnect/reconnect dapat diproses tanpa tag GCM atau pemeriksaan invocation counter, meskipun asosiasi berada dalam status `ASSOCIATED`.
+- **Kondisi pemicu**: Kirim HDLC I-frame dengan SAP/alamat yang diterima dan APDU aksi Class 70 plaintext. Cabang pemroses memeriksa status asosiasi lalu memanggil aksi breaker, tanpa mewajibkan HLS/ciphering.
+- **Perbaikan**: Wajibkan semua aksi operasional melewati jalur authenticated-ciphered dan menolak aksi plaintext pada asosiasi HLS. Tambahkan regresi yang menguji frame plaintext dan ciphered.
+
+#### A3. Pemanggil NonSecure dapat mengotorisasi transfer key di Secure
+
+- **Severity**: HIGH — **Confidence**: 9/10
+- **Lokasi**: [secure_nsc.c](./Secure/Core/Src/secure_nsc.c), baris 149, 415-455, 699-734, 1083-1162.
+- **Dampak**: Pada perangkat yang belum diprovisi, pemanggil NSC dapat mengatur key operasional pilihan sendiri tanpa peer HLS yang terautentikasi.
+- **Kondisi pemicu**: Entry point provisi menerima token tetap `0x504C4E31`; alur proof menerima challenge dari pemanggil dan tidak mengikatnya pada challenge/sesi aktif yang dikelola Secure. Transfer key menerima SAP default `0`.
+- **Perbaikan**: Ganti token tetap dengan mekanisme provisi pabrik terautentikasi. Kelola challenge, status sesi, peer identity, dan SAP di Secure; ikat otorisasi transfer ke asosiasi yang telah diverifikasi Secure, bukan nilai yang diberikan pemanggil.
+
+#### A4. Secure boot mengizinkan image NonSecure tanpa tanda tangan pada konfigurasi build
+
+- **Severity**: HIGH — **Confidence**: 10/10
+- **Lokasi**: [main.c](./Secure/Core/Src/main.c), baris 203-214; [CMakeLists.txt](./Secure/CMakeLists.txt), baris 48-50.
+- **Dampak**: Image NonSecure yang tidak ditandatangani dapat dijalankan jika memiliki vector table yang masuk akal.
+- **Kondisi pemicu**: Manifest tidak ada atau magic-nya salah dan `AMI_STRICT_SECURE_BOOT` tidak aktif. Konfigurasi Secure yang diperiksa tidak mengaktifkan definisi strict tersebut.
+- **Perbaikan**: Jadikan verifikasi strict sebagai default pada build deployable dan gagal tertutup untuk manifest hilang, tidak valid, atau tidak bertanda tangan. Pisahkan build development yang permissive secara eksplisit dari konfigurasi rilis.
+
+#### C4. Wrapping key keystore dapat diturunkan dari UID publik
+
+- **Severity**: MEDIUM — **Confidence**: 9/10
+- **Lokasi**: [secure_nsc.c](./Secure/Core/Src/secure_nsc.c), baris 88-96, 114-156, 189-207, 468-494; [main.c](./Secure/Core/Src/main.c), baris 351-362.
+- **Dampak**: Salinan flash keystore dapat dibuka jika penyerang memperoleh UID perangkat. UID tersedia untuk NonSecure dan wrapping key diturunkan dengan XOR UID dan konstanta compile-time.
+- **Kondisi pemicu**: Penyerang memperoleh dump flash dan UID, misalnya pada perangkat dengan readout protection belum diterapkan. Kode yang diperiksa hanya mengubah proteksi tersebut ketika macro opt-in aktif.
+- **Perbaikan**: Gunakan hardware unique secret yang tidak dapat diekspor dengan KDF standar untuk derivasi wrapping key dan terapkan readout protection produksi melalui konfigurasi provisioning yang terverifikasi.
+
+#### I7. Epoch anti-rollback tidak tercakup tanda tangan image
+
+- **Severity**: MEDIUM — **Confidence**: 9/10
+- **Lokasi**: [main.c](./Secure/Core/Src/main.c), baris 169-200.
+- **Dampak**: Pemeriksaan anti-rollback dapat dilewati meskipun strict boot aktif, dengan menaikkan epoch image lama yang tanda tangannya masih valid.
+- **Kondisi pemicu**: Hash image tidak mencakup manifest, sementara tanda tangan ECDSA hanya memverifikasi `computed_hash`; `version_epoch` diperiksa terpisah dan tidak ikut ditandatangani.
+- **Perbaikan**: Tanda tangani representasi manifest kanonis yang mencakup epoch dan seluruh field keamanan relevan, lalu uji bahwa perubahan field tersebut membatalkan verifikasi.
+
+#### P1. Key-transfer klien sah ditolak oleh jalur asosiasi normal
+
+- **Severity**: MEDIUM — **Confidence**: 10/10
+- **Lokasi**: [ami_dlms_port.c](./NonSecure/AMI/Src/ami_dlms_port.c), baris 19-35; [secure_nsc.c](./Secure/Core/Src/secure_nsc.c), baris 724-726 dan 1118-1120.
+- **Dampak**: HES yang berhasil menyelesaikan asosiasi HLS dapat gagal melakukan key-transfer melalui jalur DLMS normal.
+- **Kondisi pemicu**: Callback HLS target menggunakan `SECURE_DLMS_HLS5_CalculateProof`, tetapi alur asosiasi tidak memanggil `SECURE_DLMS_HLS5_Verify`; fungsi Verify adalah jalur yang menetapkan `s_hls_authenticated_session`, yang diwajibkan oleh `SECURE_DLMS_TransferKeys_Atomic`.
+- **Perbaikan**: Verifikasi proof HLS yang diterima di Secure dan ikat hasilnya pada sesi/asosiasi aktual sebelum transfer key diizinkan. Tambahkan uji integrasi untuk jalur sukses dan kegagalan otorisasi.
+
+### 6.2 Catatan Validasi
+
+- Jalur ciphered APDU memverifikasi GCM sebelum menerima invocation counter dan meneruskan request; temuan A2 adalah pengecualian pada jalur aksi breaker plaintext.
+- Driver counter NonSecure mengakses register TAMP secara langsung, sementara konfigurasi Secure menandai TAMP sebagai Secure. Dampak target belum disimpulkan tanpa validasi hardware; jangan mengandalkan backend counter tersebut sebelum akses dan retensinya diuji pada board.
+- Suite host yang tersedia lulus **16/16** pada 16 November 2026. Hasil ini tidak menguji perilaku TrustZone, TAMP, proteksi flash, atau aksi breaker pada hardware.
