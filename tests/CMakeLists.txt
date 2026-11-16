@@ -6,6 +6,11 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 enable_testing()
 
+if(MSVC)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS WIN32_LEAN_AND_MEAN)
+    add_compile_options(/W3)
+endif()
+
 option(ENABLE_COVERAGE "Enable code coverage instrumentation (gcov/lcov)" OFF)
 if(ENABLE_COVERAGE)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")

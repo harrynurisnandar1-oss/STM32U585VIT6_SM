@@ -28,15 +28,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install Ninja build tool
+      - name: Install ARM GNU Embedded Toolchain & Ninja
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends ninja-build
-
-      - name: Install Official ARM GNU Embedded Toolchain
-        uses: carlosperate/arm-none-eabi-gcc-action@v1
-        with:
-          release: '13.3.Rel1'
+          sudo apt-get install --yes --no-install-recommends ninja-build gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi
 
       - name: Verify Arm Toolchain & Standard C Libraries
         run: |
@@ -46,11 +41,11 @@ jobs:
 
       - name: Configure CMake with ARM Toolchain Preset
         run: |
-          cmake --preset Debug
+          cmake --preset Debug -DCMAKE_GENERATOR=Ninja
 
       - name: Build Firmware
         run: |
-          cmake --build --preset Debug --parallel
+          cmake --build build/Debug --parallel
 
       - name: Display Memory Footprint (Size)
         run: |

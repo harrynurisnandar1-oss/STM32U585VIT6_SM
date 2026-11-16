@@ -39,10 +39,10 @@ jobs:
       - name: Build test targets
         run: cmake --build build/host-tests --parallel
 
-      - name: Run CTest (15 Test Suites)
+      - name: Run CTest (16 Test Suites)
         run: ctest --test-dir build/host-tests --output-on-failure --verbose
 
       - name: Generate Code Coverage Summary
         run: |
-          lcov --capture --directory build/host-tests --output-file build/host-tests/coverage.info --exclude '*/tests/*' --ignore-errors unused,inconsistent,mismatch,empty || true
+          lcov --capture --directory build/host-tests --output-file build/host-tests/coverage.info --exclude '*/tests/*' --ignore-errors gcov,source,unused,inconsistent,mismatch,empty || true
           lcov --list build/host-tests/coverage.info || true
