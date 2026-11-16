@@ -1,0 +1,38 @@
+# CMake generated Testfile for 
+# Source directory: E:/Magang_Hub/STM32U585VIT6_SM/tests
+# Build directory: E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host
+# 
+# This file includes the relevant testing commands required for 
+# testing this directory and lists subdirectories to be tested as well.
+add_test([=[AmiCosemTest]=] "E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host/test_ami_cosem.exe")
+set_tests_properties([=[AmiCosemTest]=] PROPERTIES  _BACKTRACE_TRIPLES "E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;25;add_test;E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;0;")
+add_test([=[AmiSecurityTest]=] "E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host/test_ami_security.exe")
+set_tests_properties([=[AmiSecurityTest]=] PROPERTIES  _BACKTRACE_TRIPLES "E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;31;add_test;E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;0;")
+add_test([=[AmiDlmsAssociationTest]=] "E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host/test_ami_dlms_association.exe")
+set_tests_properties([=[AmiDlmsAssociationTest]=] PROPERTIES  _BACKTRACE_TRIPLES "E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;38;add_test;E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;0;")
+add_test([=[AmiFirmwareAuthPolicyTest]=] "E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host/test_ami_firmware_auth_policy.exe")
+set_tests_properties([=[AmiFirmwareAuthPolicyTest]=] PROPERTIES  _BACKTRACE_TRIPLES "E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;45;add_test;E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;0;")
+add_test([=[AmiDlmsApduTest]=] "E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host/test_ami_dlms_apdu.exe")
+set_tests_properties([=[AmiDlmsApduTest]=] PROPERTIES  _BACKTRACE_TRIPLES "E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;54;add_test;E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;0;")
+add_test([=[AmiDlmsHdlcTest]=] "E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host/test_ami_dlms_hdlc.exe")
+set_tests_properties([=[AmiDlmsHdlcTest]=] PROPERTIES  _BACKTRACE_TRIPLES "E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;60;add_test;E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;0;")
+add_test([=[AmiDlmsPortTest]=] "E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host/test_ami_port.exe")
+set_tests_properties([=[AmiDlmsPortTest]=] PROPERTIES  _BACKTRACE_TRIPLES "E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;88;add_test;E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;0;")
+add_test([=[AmiAde9000Test]=] "E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host/test_ami_ade9000.exe")
+set_tests_properties([=[AmiAde9000Test]=] PROPERTIES  _BACKTRACE_TRIPLES "E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;95;add_test;E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;0;")
+add_test([=[AmiDlmsCipherTest]=] "E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host/test_ami_dlms_cipher.exe")
+set_tests_properties([=[AmiDlmsCipherTest]=] PROPERTIES  _BACKTRACE_TRIPLES "E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;111;add_test;E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;0;")
+add_test([=[AmiNvmCounterTest]=] "E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host/test_ami_nvm_counter.exe")
+set_tests_properties([=[AmiNvmCounterTest]=] PROPERTIES  _BACKTRACE_TRIPLES "E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;127;add_test;E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;0;")
+add_test([=[AmiKeyTransferTest]=] "E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host/test_ami_key_transfer.exe")
+set_tests_properties([=[AmiKeyTransferTest]=] PROPERTIES  _BACKTRACE_TRIPLES "E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;143;add_test;E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;0;")
+add_test([=[AmiAntiBruteforceTest]=] "E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host/test_ami_anti_bruteforce.exe")
+set_tests_properties([=[AmiAntiBruteforceTest]=] PROPERTIES  _BACKTRACE_TRIPLES "E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;157;add_test;E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;0;")
+add_test([=[AmiBlockTransferTest]=] "E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host/test_ami_block_transfer.exe")
+set_tests_properties([=[AmiBlockTransferTest]=] PROPERTIES  _BACKTRACE_TRIPLES "E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;171;add_test;E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;0;")
+add_test([=[AmiDisconnectControlTest]=] "E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host/test_ami_disconnect_control.exe")
+set_tests_properties([=[AmiDisconnectControlTest]=] PROPERTIES  _BACKTRACE_TRIPLES "E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;187;add_test;E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;0;")
+add_test([=[AmiTrustZoneBoundaryTest]=] "E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host/test_ami_trustzone_boundary.exe")
+set_tests_properties([=[AmiTrustZoneBoundaryTest]=] PROPERTIES  _BACKTRACE_TRIPLES "E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;192;add_test;E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;0;")
+add_test([=[AmiBootCryptoTest]=] "E:/Magang_Hub/STM32U585VIT6_SM/tests/build_host/test_ami_boot_crypto.exe")
+set_tests_properties([=[AmiBootCryptoTest]=] PROPERTIES  _BACKTRACE_TRIPLES "E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;200;add_test;E:/Magang_Hub/STM32U585VIT6_SM/tests/CMakeLists.txt;0;")
