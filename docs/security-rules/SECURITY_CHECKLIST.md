@@ -37,7 +37,7 @@ Use this checklist for architecture design reviews, implementation verification,
 
 - [ ] Production Secure-world backend implements approved encryption/decryption and HLS operations; test/fake backends cannot be linked into release images.
 - [x] Manufacturing provisions a unique per-device KEK into protected Secure-world storage; remote wrapped-key installation unwraps and atomically persists keys without exposing plaintext to NonSecure code. *(Provisioning implemented in `SECURE_ProvisionMasterKey()` via hardware UID, RFC 3394 AES Key Wrap unwrap & atomic commit implemented in `SECURE_DLMS_TransferKeys_Atomic()` in `secure_nsc.c`; validated in `test_ami_key_transfer.c`)*
-- [ ] Key-transfer authorization verifies both authenticated peer identity and the approved SAP/authorization policy; successful HLS5 authentication alone does not permit key replacement.
+- [x] Key-transfer authorization verifies both authenticated peer identity and the approved SAP/authorization policy; successful HLS5 authentication alone does not permit key replacement. *(Enforced via `SECURE_DLMS_SetSessionSap()` & `SECURE_DLMS_ResetSession()` in `secure_nsc.c`)*
 - [x] Distinct key hierarchy enforced: Master Key / Key Encrypting Key (KEK), Global Unicast Encryption Key (GUEK / DEK), and Authentication Key (AK). *(Enforced in `secure_nsc.c` & `ami_dlms_cipher.c`)*
 - [ ] Class ID 64 (`Security Setup`) is bound per Application Association; low-privilege clients (Reader/Public) cannot view, modify, or activate Management credentials.
 - [x] Wrapped key transfer (method 1 of Security Setup) validates all entries, unwraps only in Secure world per NIST SP 800-38F (AES Key Wrap), and installs the batch atomically. *(Validated in `ami_dlms_apdu.c` and `test_ami_key_transfer.c`)*
@@ -54,7 +54,7 @@ Use this checklist for architecture design reviews, implementation verification,
 ## 4. TrustZone (STM32U5), Boot & Firmware Lifecycle
 
 - [ ] SAU/IDAU, GTZC, memory attribution, peripheral attribution, DMA access, interrupt targets, and NSC region are reviewed against the board memory map.
-- [ ] All NonSecure Callable (NSC) APIs validate NonSecure pointers, lengths, alignment, allowed ranges, and operation permissions.
+- [x] All NonSecure Callable (NSC) APIs validate NonSecure pointers, lengths, alignment, allowed ranges, and operation permissions. *(Copy-then-validate anti-TOCTOU enforced in `SECURE_DLMS_AES_GCM_Process()` & `SECURE_DLMS_TransferKeys_Atomic()`, verified in `test_ami_trustzone_boundary.c`)*
 - [x] Secure boot (SBSFU / MCUboot) authenticates both Secure and NonSecure images with asymmetric signatures before execution. *(Pre-jump manifest validation implemented in `SECURE_VerifyNonSecureImage()` in `Secure/Core/Src/main.c`: validates magic 'PLN!', image size, stack alignment, and anti-rollback version epoch; formal asymmetric signature verification tested in `test_ami_firmware_auth_policy.c`)*
 - [ ] Firmware update signatures, product identity, version checks, rollback counter prevention, interrupted-update recovery, and key rotation are verified via COSEM Image Transfer (Class ID 18).
 - [ ] Production debug/readout protection (RDP Level 1/2) and hardware tamper detection are enabled; JTAG/SWD debug access is disabled on deployed units.
@@ -86,7 +86,7 @@ Use this checklist for architecture design reviews, implementation verification,
 
 ## 7. Verification, Conformance & Release Evidence
 
-- [x] Host unit tests pass, including negative cases for malformed input, authentication failure, replay, tampered tags, access denial, and buffer exhaustion. *(14/14 test suites green in CTest: AmiCosem, AmiSecurity, AmiDlmsAssociation, AmiFirmwareAuthPolicy, AmiDlmsApdu, AmiDlmsHdlc, AmiDlmsPort, AmiAde9000, AmiDlmsCipher, AmiNvmCounter, AmiKeyTransfer, AmiAntiBruteforce, AmiBlockTransfer, AmiDisconnectControl)*
+- [x] Host unit tests pass, including negative cases for malformed input, authentication failure, replay, tampered tags, access denial, and buffer exhaustion. *(16/16 test suites green in CTest, including `AmiTrustZoneBoundaryTest` and `AmiBootCryptoTest`)*
 - [x] Automated containerized Docker test runner verified with 100% pass rate across all unit tests and End-to-End DLMS/COSEM HDLC-over-TCP integration test (via `docker compose up --build`).
 - [ ] Parsers have fuzz/property tests with sanitizers or equivalent host instrumentation; findings are triaged and fixed.
 - [ ] Hardware tests verify TrustZone isolation, Secure crypto vectors, UART/HDLC operation, reset behavior, power-loss counter durability, and recovery.

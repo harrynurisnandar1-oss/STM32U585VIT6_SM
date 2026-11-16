@@ -24,6 +24,7 @@
 /* USER CODE BEGIN Includes */
 #include "ami_dlms_port.h"
 #include "main.h"
+#include "secure_nsc.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -106,10 +107,12 @@ void MX_FREERTOS_Init(void) {
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN defaultTask */
+  (void)argument;
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+    SECURE_Watchdog_Kick();
+    osDelay(1000);
   }
   /* USER CODE END defaultTask */
 }

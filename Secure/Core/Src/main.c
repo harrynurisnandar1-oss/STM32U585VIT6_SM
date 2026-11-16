@@ -21,7 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "ami_boot_crypto.h"
+#include "ami_boot_pubkey.h"
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -54,6 +56,8 @@
 static void NonSecure_Init(void);
 static void MX_GPIO_Init(void);
 static void MX_GTZC_S_Init(void);
+static void MX_IWDG_Init(void);
+static void SECURE_CheckAndApplyLitbangRdp(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -89,7 +93,8 @@ int main(void)
   MX_GTZC_S_Init();
 
   /* USER CODE BEGIN SysInit */
-
+  MX_IWDG_Init();
+  SECURE_CheckAndApplyLitbangRdp();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -116,10 +121,11 @@ int main(void)
 }
 
 #define AMI_BOOT_MANIFEST_MAGIC      0x504C4E21U /* 'PLN!' */
-#define AMI_NS_FLASH_START           0x08040000U
+#define AMI_BOOT_MANIFEST_OFFSET     0x400U
+#define AMI_NS_FLASH_START           0x08100000U
 #define AMI_NS_FLASH_END             0x081FFFFFU
-#define AMI_NS_SRAM_START            0x20018000U
-#define AMI_NS_SRAM_END              0x20040000U
+#define AMI_NS_SRAM_START            0x20040000U
+#define AMI_NS_SRAM_END              0x200C0000U
 
 typedef struct {
   uint32_t magic;           /* 0x504C4E21 'PLN!' */
@@ -127,6 +133,7 @@ typedef struct {
   uint32_t image_size;      /* NonSecure image size in bytes */
   uint32_t flags;           /* Security attributes */
   uint8_t  sha256_hash[32]; /* SHA-256 digest of NonSecure image */
+  uint8_t  ecdsa_sig[64];   /* ECDSA P-256 signature (r || s) */
 } NonSecureImageManifestTypeDef;
 
 static int SECURE_VerifyNonSecureImage(void)
@@ -139,7 +146,7 @@ static int SECURE_VerifyNonSecureImage(void)
     return -1;
   }
 
-  /* 2. Verify Initial MSP_NS lies within NonSecure RAM */
+  /* 2. Verify Initial MSP_NS lies within NonSecure RAM (0x20040000..0x200C0000) */
   if (msp_ns < AMI_NS_SRAM_START || msp_ns > AMI_NS_SRAM_END) {
     return -2;
   }
@@ -149,14 +156,41 @@ static int SECURE_VerifyNonSecureImage(void)
     return -3;
   }
 
-  /* 4. Manifest Integrity and Anti-Rollback Check */
-  const NonSecureImageManifestTypeDef *manifest = (const NonSecureImageManifestTypeDef *)(VTOR_TABLE_NS_START_ADDR + 0x400U);
+  /* 4. Manifest Cryptographic Integrity (SHA-256 + ECDSA P-256) & Anti-Rollback Check */
+  const NonSecureImageManifestTypeDef *manifest =
+      (const NonSecureImageManifestTypeDef *)(VTOR_TABLE_NS_START_ADDR + AMI_BOOT_MANIFEST_OFFSET);
+
   if (manifest->magic == AMI_BOOT_MANIFEST_MAGIC) {
-    if (manifest->image_size < 1024U || manifest->image_size > (AMI_NS_FLASH_END - AMI_NS_FLASH_START)) {
+    uint32_t min_size = AMI_BOOT_MANIFEST_OFFSET + (uint32_t)sizeof(NonSecureImageManifestTypeDef);
+    if (manifest->image_size < min_size || manifest->image_size > (AMI_NS_FLASH_END - AMI_NS_FLASH_START)) {
       return -4; /* Invalid image size declared in manifest */
     }
 
-    /* Anti-rollback check: compare with Secure monotonic counter */
+    /* Compute canonical SHA-256 over [0..0x400) + [0x400+sizeof(manifest)..image_size) */
+    AmiSha256Context sha;
+    uint8_t computed_hash[32];
+    const uint8_t *ns_base = (const uint8_t *)VTOR_TABLE_NS_START_ADDR;
+    ami_sha256_init(&sha);
+    ami_sha256_update(&sha, ns_base, AMI_BOOT_MANIFEST_OFFSET);
+    ami_sha256_update(&sha, ns_base + min_size, manifest->image_size - min_size);
+    ami_sha256_final(&sha, computed_hash);
+
+    /* Constant-time digest comparison */
+    uint8_t hash_diff = 0U;
+    for (uint32_t i = 0U; i < 32U; ++i) {
+      hash_diff |= (uint8_t)(computed_hash[i] ^ manifest->sha256_hash[i]);
+    }
+    if (hash_diff != 0U) {
+      return -6; /* SHA-256 digest mismatch */
+    }
+
+    /* Verify ECDSA P-256 signature against embedded Litbang public key */
+    if (ami_ecdsa_p256_verify(AMI_BOOT_ECDSA_PUBKEY_X, AMI_BOOT_ECDSA_PUBKEY_Y,
+                              computed_hash, manifest->ecdsa_sig) != 0) {
+      return -7; /* ECDSA P-256 signature verification failed */
+    }
+
+    /* Anti-rollback check: update monotonic epoch only after full signature verification */
 #if defined(TAMP)
     uint32_t installed_version = TAMP->BKP0R;
     if (manifest->version_epoch < installed_version) {
@@ -165,6 +199,15 @@ static int SECURE_VerifyNonSecureImage(void)
     if (manifest->version_epoch > installed_version) {
       TAMP->BKP0R = manifest->version_epoch;
     }
+#endif
+  } else {
+#if defined(AMI_STRICT_SECURE_BOOT) && (AMI_STRICT_SECURE_BOOT == 1)
+    return -8; /* Unsigned NonSecure image rejected in strict Secure Boot mode */
+#else
+    /* Litbang Prototype ST-LINK Dev Fallback: record unsigned boot flag in TAMP->BKP2R */
+#if defined(TAMP)
+    TAMP->BKP2R = 0xDEADB001U;
+#endif
 #endif
   }
 
@@ -285,7 +328,47 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+/**
+  * @brief  Initialize Independent Watchdog (IWDG) with ~6 second timeout
+  *         and freeze it when ST-LINK debugger halts the core.
+  */
+static void MX_IWDG_Init(void)
+{
+#if defined(DBGMCU) && defined(DBGMCU_APB1FZR1_DBG_IWDG_STOP)
+  DBGMCU->APB1FZR1 |= DBGMCU_APB1FZR1_DBG_IWDG_STOP;
+#endif
+#if defined(IWDG)
+  IWDG->KR  = 0x0000CCCCU; /* Enable IWDG */
+  IWDG->KR  = 0x00005555U; /* Enable register access */
+  IWDG->PR  = 0x04U;       /* Prescaler /64 -> 32kHz / 64 = 500 Hz */
+  IWDG->RLR = 3000U;       /* 3000 / 500 Hz = 6.0 seconds */
+  while ((IWDG->SR & (IWDG_SR_PVU | IWDG_SR_RVU)) != 0U) { }
+  IWDG->KR  = 0x0000AAAAU; /* Reload counter */
+#endif
+}
 
+/**
+  * @brief  Opt-in RDP Level 1 lockdown for Litbang PLN physical readout testing.
+  *         Disabled by default (RDP Level 0) for prototype debugging; never sets Level 2.
+  */
+static void SECURE_CheckAndApplyLitbangRdp(void)
+{
+#if defined(AMI_LITBANG_RDP_LEVEL1) && (AMI_LITBANG_RDP_LEVEL1 == 1)
+  FLASH_OBProgramInitTypeDef ob_init;
+  HAL_FLASHEx_OBGetConfig(&ob_init);
+  if (ob_init.RDPLevel == OB_RDP_LEVEL_0) {
+    if (HAL_FLASH_Unlock() == HAL_OK && HAL_FLASH_OB_Unlock() == HAL_OK) {
+      ob_init.OptionType = OPTIONBYTE_RDP;
+      ob_init.RDPLevel   = OB_RDP_LEVEL_1;
+      if (HAL_FLASHEx_OBProgram(&ob_init) == HAL_OK) {
+        HAL_FLASH_OB_Launch();
+      }
+      HAL_FLASH_OB_Lock();
+      HAL_FLASH_Lock();
+    }
+  }
+#endif
+}
 /* USER CODE END 4 */
 
 /**
@@ -296,8 +379,12 @@ static void MX_GPIO_Init(void)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
+#if defined(TAMP)
+  /* Record Secure fault marker in TAMP->BKP1R for post-reset diagnostics */
+  TAMP->BKP1R = 0xFA017001U;
+#endif
+  NVIC_SystemReset();
   while (1)
   {
   }

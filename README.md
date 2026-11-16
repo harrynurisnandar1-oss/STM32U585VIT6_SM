@@ -1,6 +1,6 @@
 # ⚡ STM32U585VIT6 + ADE9000 3-Phase AMI Smart Meter
 
-[![Tests](https://img.shields.io/badge/CTest%20Host-15%2F15%20Passing-brightgreen?style=flat-square&logo=cmake)](tests/)
+[![Tests](https://img.shields.io/badge/CTest%20Host-16%2F16%20Passing-brightgreen?style=flat-square&logo=cmake)](tests/)
 [![Docker Tests](https://img.shields.io/badge/Docker%20E2E-100%25%20PASS-blue?style=flat-square&logo=docker)](Dockerfile)
 [![Coverage](https://img.shields.io/badge/Code%20Coverage-79.2%25%20(LCOV)-informational?style=flat-square&logo=codecov)](docs/COVERAGE.md)
 [![Standard](https://img.shields.io/badge/Standard-SPLN%20D3.006%3A2021-orange?style=flat-square)](dokumen_PLN/)
@@ -75,7 +75,7 @@ Tujuan utama paket pekerjaan E2 adalah menjamin interoperabilitas meter terhadap
 Implementasi diklasifikasikan secara transparan berdasarkan kesiapan software dan ketergantungan perangkat keras target:
 
 > **Ringkasan Status:**
-> * 🟢 **Software, Protokol, dan Data Model (Host & Docker)**: **100% SELESAI & TERVERIFIKASI** (15/15 CTest PASS, 79.2% LCOV Coverage).
+> * 🟢 **Software, Protokol, dan Data Model (Host & Docker)**: **100% SELESAI & TERVERIFIKASI** (16/16 CTest PASS, 79.2% LCOV Coverage).
 > * 🟡 **Driver Firmware Target (STM32U585 & ADE9000)**: **KODE SELESAI** (Siap uji flashing pada hardware fisik).
 > * ⚪ **Sertifikasi Formal Laboratorium**: **MENUNGGU UJI LAB** (DLMS UA CTT Tool & Uji Interop HES).
 
@@ -97,9 +97,11 @@ Implementasi diklasifikasikan secara transparan berdasarkan kesiapan software da
 | **Keamanan** | DLMS Security Suite 0 Ciphered APDU (`0xC8`, `0xC9`, `0xCB`) | 🟢 **SUDAH** | Terverifikasi di `ami_dlms_cipher.c` |
 | **Keamanan** | Anti-Replay Invocation Counter & Wear-Leveling NVM Engine | 🟢 **SUDAH** | Penanganan saturasi `0xFFFFFFFF` fail-closed (`ami_nvm_counter.c`) |
 | **Keamanan** | Anti-Brute-Force Lockout (Backoff Eksponensial Progresif) | 🟢 **SUDAH** | Penalti 5s, 10s, 20s, 40s & lockout 5x (`ami_anti_bruteforce.c`) |
-| **TrustZone** | Partisi SAU, GTZC (TZSC/MPCBB/TZIC), & NonSecure Callable (NSC) | 🟢 **SUDAH** | Range check `cmse_check_address_range` di `secure_nsc.c` |
-| **Key Management** | Master Key (KEK) per-device & Remote Key Wrap RFC 3394 atomik | 🟢 **SUDAH** | Update batch GUEK, GBEK, AK all-or-nothing rollback |
-| **Testing** | CTest Host Native Unit Testing (15 Test Suites) | 🟢 **SUDAH** | 15/15 tests PASS (100% Lulus) |
+| **TrustZone** | Partisi SAU, GTZC (TZSC/MPCBB/TZIC), & NonSecure Callable (NSC) | 🟢 **SUDAH** | Range check `cmse_check_address_range` & *copy-then-validate* anti-TOCTOU di `secure_nsc.c` |
+| **Key Management** | Master Key (KEK) per-device, Flash Keystore (`0x0C0FC000`), & RFC 3394 | 🟢 **SUDAH** | Persistensi terenkripsi AES-128-GCM di Page 126 Secure Flash + update atomik |
+| **Secure Boot** | Verifikasi SHA-256 + ECDSA P-256 & Anti-Rollback (`TAMP->BKP0R`) | 🟢 **SUDAH** | Pure C FIPS 180-4 / 186-4 (`ami_boot_crypto.c`, `ami_sign_tool.c`) |
+| **Watchdog & RDP** | IWDG (~6s, *debug-freeze* ST-LINK) & Opt-In RDP Level 1 Litbang | 🟢 **SUDAH** | `MX_IWDG_Init()`, `SECURE_Watchdog_Kick()`, & `AMI_LITBANG_RDP_LEVEL1` |
+| **Testing** | CTest Host Native Unit Testing (16 Test Suites) | 🟢 **SUDAH** | 16/16 tests PASS (100% Lulus, termasuk `AmiBootCryptoTest`) |
 | **Testing** | 4 Kriteria Verifikasi Pengujian Keamanan | 🟢 **SUDAH** | Coverage (79.2%), Negative/1-bit flip, Zeroize Barrier, TrustZone CMSE |
 | **Testing** | Single Unified Docker Test Container & E2E DLMS Simulator | 🟢 **SUDAH** | Otomasi pengujian Linux x86_64 Alpine + Python client |
 | **Target Driver** | Driver UART DMA Circular Buffer & IDLE line interrupt | 🟡 **KODE SELESAI** | Menunggu verifikasi osiloskop / kabel serial board |
@@ -170,6 +172,16 @@ docker build -t stm32u585vit6sm:latest .
 
 # Jalankan pengujian terpadu
 docker run --rm stm32u585vit6sm:latest ./run_all_docker_tests.sh
+```
+
+### 4. Tool Penandatanganan Image Secure Boot (Pure C)
+Untuk menandatangani biner NonSecure (`STM32U585VIT6_SM_NS.bin`) dengan kunci ECDSA P-256 sebelum di-flash ke papan target:
+```powershell
+# Generate ulang header kunci publik (opsional)
+.\tests\build_host\host-tools\ami_sign_tool.exe --gen-header Secure/Core/Inc/ami_boot_pubkey.h
+
+# Tandatangani image NonSecure (epoch = 1)
+.\tests\build_host\host-tools\ami_sign_tool.exe --sign NonSecure/build/STM32U585VIT6_SM_NS.bin 1
 ```
 
 ---

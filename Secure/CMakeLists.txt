@@ -52,6 +52,11 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
 # Enable CMake support for ASM and C languages
 enable_language(C ASM)
 
+# Add project sources
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/ami_boot_crypto.c
+)
+
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../Middlewares/Third_Party/FreeRTOS/Source/include

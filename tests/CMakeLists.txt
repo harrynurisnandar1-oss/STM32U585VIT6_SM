@@ -191,3 +191,20 @@ add_executable(test_ami_trustzone_boundary
 target_include_directories(test_ami_trustzone_boundary PRIVATE "${AMI_INC}")
 add_test(NAME AmiTrustZoneBoundaryTest COMMAND test_ami_trustzone_boundary)
 
+add_executable(test_ami_boot_crypto
+    test_ami_boot_crypto.c
+    "${CMAKE_CURRENT_LIST_DIR}/../Secure/Core/Src/ami_boot_crypto.c")
+target_include_directories(test_ami_boot_crypto PRIVATE
+    "${CMAKE_CURRENT_LIST_DIR}/../Secure/Core/Inc")
+target_compile_definitions(test_ami_boot_crypto PRIVATE AMI_BOOT_CRYPTO_ENABLE_SIGN)
+add_test(NAME AmiBootCryptoTest COMMAND test_ami_boot_crypto)
+
+add_executable(ami_sign_tool
+    ami_sign_tool.c
+    "${CMAKE_CURRENT_LIST_DIR}/../Secure/Core/Src/ami_boot_crypto.c")
+target_include_directories(ami_sign_tool PRIVATE
+    "${CMAKE_CURRENT_LIST_DIR}/../Secure/Core/Inc")
+target_compile_definitions(ami_sign_tool PRIVATE AMI_BOOT_CRYPTO_ENABLE_SIGN)
+set_target_properties(ami_sign_tool PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/host-tools")
+

@@ -55,6 +55,10 @@ typedef enum
 #define SECURE_ERROR_NO_KEK            -7
 #define SECURE_ERROR_UNPROVISIONED     -8
 
+#define SECURE_MAX_GCM_PAYLOAD_SIZE    1536U
+#define SECURE_MAX_GCM_AAD_SIZE        64U
+#define SECURE_MANAGEMENT_CLIENT_SAP   16U
+
 typedef struct
 {
   uint8_t key_type;            /*!< 0 = GUEK, 1 = GBEK, 2 = AK, 3 = Master KEK */
@@ -152,6 +156,23 @@ int SECURE_DLMS_AES_GCM_Process(const SECURE_AesGcmParamsTypeDef *params);
  */
 int SECURE_DLMS_TransferKeys_Atomic(const SECURE_WrappedKeyParamTypeDef *keys,
                                     uint32_t key_count);
+
+/**
+ * @brief Reset active DLMS HLS5 session authorization in Secure World.
+ * Must be called on disconnect, timeout, AARQ reset, or auth failure.
+ */
+void SECURE_DLMS_ResetSession(void);
+
+/**
+ * @brief Bind current DLMS Client SAP for Management Association authorization.
+ * @param client_sap Negotiated client SAP (e.g. 16 for Management/HES).
+ */
+void SECURE_DLMS_SetSessionSap(uint16_t client_sap);
+
+/**
+ * @brief Refresh the Secure Independent Watchdog (IWDG) from NonSecure supervisor task.
+ */
+void SECURE_Watchdog_Kick(void);
 
 #endif /* SECURE_NSC_H */
 /* USER CODE END Non_Secure_CallLib_h */

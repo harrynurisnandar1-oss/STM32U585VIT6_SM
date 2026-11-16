@@ -109,6 +109,9 @@ static AmiDlmsPortStatus dispatch_i_frame(AmiDlmsPortContext *ctx, const HdlcFra
         /* ACSE RLRQ (Release Request) -> Reply RLRE */
         ami_dlms_association_reset(&ctx->association);
         ami_bt_reset(&ctx->block_transfer);
+#if defined(STM32U585xx) || defined(USE_HAL_DRIVER)
+        SECURE_DLMS_ResetSession();
+#endif
         apdu_response[0] = 0x63u; /* RLRE tag */
         apdu_response[1] = 0x03u; /* length */
         apdu_response[2] = 0x80u; /* reason tag */

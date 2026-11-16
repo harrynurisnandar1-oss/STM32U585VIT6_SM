@@ -30,7 +30,8 @@ Dokumen ini mencatat seluruh riwayat pembaruan fitur, perbaikan bug, pengerasan 
 
 | Fase | Rentang Rilis | Sorotan Utama |
 |---|---|---|
-| **SPIN 2** | [v2.20.0](#v2200---2026-11-09) *(Terbaru)* | 4 Pilar Keamanan, Code Coverage 79.2%, 15/15 CTest PASS, TrustZone boundary check |
+| **SPIN 2** | [v2.21.0](#v2210---2026-11-16) *(Terbaru)* | Remediasi F1/F2/C1/I5/A1/RDP (Pure C): ECDSA P-256 Secure Boot, Flash Keystore, Anti-TOCTOU, IWDG, 16/16 CTest |
+| | [v2.20.0](#v2200---2026-11-09) | 4 Pilar Keamanan, Code Coverage 79.2%, 15/15 CTest PASS, TrustZone boundary check |
 | | [v2.19.0](#v2190---2026-11-06) | Profil Kualitas Tegangan R/S/T, Instant Profile 11-kanal, Calendar/Schedule Class |
 | | [v2.18.1](#v2181---2026-11-04) | Remediasi SIGFPE division-by-zero, Docker runner cmake, unit test resilience |
 | | [v2.18.0](#v2180---2026-11-04) | Load Profile 23-kanal 15-menit & Tamper Logbook 9 Modus PLN |
@@ -1010,3 +1011,26 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
 - Memperbaiki penanganan objek Class 1 Data pada `NonSecure/AMI/Src/ami_cosem_model.c` agar objek yang tidak terdaftar mengembalikan `AMI_COSEM_OBJECT_NOT_FOUND` secara konsisten.
 - Menyelaraskan ukuran buffer respons dan ekspektasi kolom baris Event Log #1 (2 kolom) pada `tests/test_ami_dlms_apdu.c`.
 - Seluruh 15 suite CTest (**15/15, 100% PASS**) dan automated E2E Simulator Python terverifikasi sukses penuh di container Docker hardened.
+
+---
+
+## [v2.21.0] - 2026-11-16
+
+### Added & Security Hardening (Remediasi F1/I2, F2/I6, C1, I5, A1 & RDP Litbang — 100% Pure C)
+- **Secure Boot Kriptografis FIPS 180-4 SHA-256 + FIPS 186-4 ECDSA P-256 (`F2 / I6`)**:
+  - Implementasi mandiri *zero-heap* dalam bahasa C11 murni pada `Secure/Core/Inc/ami_boot_crypto.h` dan `Secure/Core/Src/ami_boot_crypto.c`.
+  - Penambahan tool host pure C `tests/ami_sign_tool.c` untuk men-generate pasangan kunci ECDSA P-256 (*Litbang prototype*), menanamkan kunci publik ke `Secure/Core/Inc/ami_boot_pubkey.h`, serta menandatangani biner `STM32U585VIT6_SM_NS.bin` pada offset `0x400`.
+  - `SECURE_VerifyNonSecureImage()` pada `Secure/Core/Src/main.c` kini memverifikasi SHA-256 kanonikal, tanda tangan ECDSA P-256, dan *anti-rollback* (`TAMP->BKP0R`), serta memperbaiki batas `AMI_NS_SRAM_START/END` (`0x20040000U`–`0x200C0000U`).
+- **Persistensi Kunci Terenkripsi di Secure Flash (`C1`)**:
+  - Alokasi region `FLASH_KEYSTORE` (8 KB, Page 126 di `0x0C0FC000`) pada `Secure/STM32U585xx_FLASH_s.ld` (tanpa mengganggu `ROM_NSC` di `0x0C0FE000`).
+  - `secure_flash_load_keys()` dan `secure_flash_save_keys()` pada `Secure/Core/Src/secure_nsc.c` mengenkripsi `SECURE_KeyStorageTypeDef` dengan AES-128-GCM terikat `UID_BASE` dan TRNG IV.
+- **Otorisasi Key-Management (`F1 / I2`) & Anti-TOCTOU (`I5`)**:
+  - Penambahan `SECURE_DLMS_ResetSession()` dan `SECURE_DLMS_SetSessionSap()` pada `Secure_nsclib/secure_nsc.h` & `Secure/Core/Src/secure_nsc.c`, terintegrasi dengan `NonSecure/AMI/Src/ami_dlms_port.c`.
+  - Penerapan **copy-then-validate** penuh pada `SECURE_DLMS_AES_GCM_Process()` dan `SECURE_DLMS_TransferKeys_Atomic()` menggunakan buffer Secure SRAM lokal yang di-zeroize pada setiap jalur keluar.
+- **Independent Watchdog (`A1`) & Opt-In RDP Level 1 Litbang**:
+  - Konfigurasi `MX_IWDG_Init()` (~6 detik, *debug-freeze* aktif saat *breakpoint* ST-LINK) dan `SECURE_Watchdog_Kick()` di `NonSecure/Core/Src/app_freertos.c`.
+  - `Error_Handler()` pada Secure & NonSecure kini mencatat fault (`TAMP->BKP1R = 0xFA017001U`) dan memicu `NVIC_SystemReset()`.
+  - `SECURE_CheckAndApplyLitbangRdp()` menjaga RDP Level 0 secara default dan menyediakan RDP Level 1 *opt-in* (`-DAMI_LITBANG_RDP_LEVEL1=1`).
+- **Pengujian Otomatis (16/16 CTest PASS & ARM Cortex-M33 Build)**:
+  - Penambahan test suite ke-16 `tests/test_ami_boot_crypto.c` (`AmiBootCryptoTest`) dan skenario uji TOCTOU pada `tests/test_ami_trustzone_boundary.c`.
+  - Verifikasi silang `arm-none-eabi-gcc` untuk `STM32U585VIT6_SM_S` dan `STM32U585VIT6_SM_NS` lulus dengan **0 error**.

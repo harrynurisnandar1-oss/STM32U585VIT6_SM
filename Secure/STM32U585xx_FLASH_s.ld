@@ -41,8 +41,9 @@ ENTRY(Reset_Handler)
 MEMORY
 {
   RAM	(xrw)	: ORIGIN = 0x30000000,	LENGTH = 256K     /* Memory is divided. Actual start is 0x30000000 and actual length is 768K */
-  ROM	(rx)	: ORIGIN = 0x0C000000,	LENGTH = 1016K    /* Memory is divided. Actual start is 0x0C000000 and actual length is 2048K */
-  ROM_NSC	(rx)	: ORIGIN = 0x0C0FE000,	LENGTH = 8K   /* Non-Secure Call-able region */
+  ROM            (rx)  : ORIGIN = 0x0C000000, LENGTH = 1008K    /* Secure Flash (reserved 8K at end for Keystore) */
+  FLASH_KEYSTORE (rx)  : ORIGIN = 0x0C0FC000, LENGTH = 8K       /* Page 126: Encrypted Secure Key Storage */
+  ROM_NSC        (rx)  : ORIGIN = 0x0C0FE000, LENGTH = 8K       /* Page 127: Non-Secure Call-able region */
   SRAM4	(xrw)	: ORIGIN = 0x38000000,	LENGTH = 16K      /* Secure SRAM4 */
 }
 /* Highest address of the user mode stack */

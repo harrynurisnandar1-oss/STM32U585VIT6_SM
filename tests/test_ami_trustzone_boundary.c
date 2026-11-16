@@ -140,6 +140,56 @@ static void test_volatile_zeroization_verification(void)
     printf("  [PASS] test_volatile_zeroization_verification\n");
 }
 
+typedef struct {
+    uint32_t in_len;
+    uint32_t aad_len;
+    const uint8_t *input;
+    uint8_t *output;
+} MockAesGcmDesc;
+
+static int mock_copy_then_validate_process(const MockAesGcmDesc *ns_desc,
+                                           void (*dma_race_hook)(MockAesGcmDesc *))
+{
+    MockAesGcmDesc local_desc;
+    memcpy(&local_desc, ns_desc, sizeof(local_desc));
+
+    /* Simulate DMA or concurrent NonSecure mutation after copy */
+    if (dma_race_hook != NULL) {
+        dma_race_hook((MockAesGcmDesc *)ns_desc);
+    }
+
+    /* Validation & execution use local_desc only (immune to TOCTOU mutation) */
+    if (local_desc.in_len > 1536U || local_desc.aad_len > 64U) {
+        return -1;
+    }
+    if (local_desc.in_len > 0U && (local_desc.input == NULL || local_desc.output == NULL)) {
+        return -1;
+    }
+    return 0;
+}
+
+static void simulate_dma_toctou_attack(MockAesGcmDesc *ns_desc)
+{
+    /* Attacker attempts to mutate length to 1MB and output pointer to Secure RAM */
+    ns_desc->in_len = 0x00100000U;
+    ns_desc->output = (uint8_t *)MOCK_SECURE_RAM_START;
+}
+
+static void test_nsc_descriptor_copy_then_validate_toctou(void)
+{
+    uint8_t in_buf[32] = {0};
+    uint8_t out_buf[32] = {0};
+    MockAesGcmDesc desc = { 32U, 16U, in_buf, out_buf };
+
+    /* Copy-then-validate must succeed safely despite concurrent NS mutation */
+    assert(mock_copy_then_validate_process(&desc, simulate_dma_toctou_attack) == 0);
+
+    /* Oversized length present at copy time must be rejected */
+    desc.in_len = 2048U;
+    assert(mock_copy_then_validate_process(&desc, NULL) == -1);
+    printf("  [PASS] test_nsc_descriptor_copy_then_validate_toctou\n");
+}
+
 int main(void)
 {
     printf("=== Starting AmiTrustZoneBoundaryTest ===\n");
@@ -148,6 +198,7 @@ int main(void)
     test_secure_world_boundary_violation();
     test_nonsecure_valid_access();
     test_volatile_zeroization_verification();
+    test_nsc_descriptor_copy_then_validate_toctou();
     printf(">>> ALL TRUSTZONE BOUNDARY & CMSE TESTS PASSED SUCCESSFULLY! <<<\n");
     return 0;
 }

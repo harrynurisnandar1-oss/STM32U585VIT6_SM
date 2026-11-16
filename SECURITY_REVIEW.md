@@ -4,7 +4,7 @@
 |---|---|
 | **Target Proyek** | Firmware 3-Phase AMI Smart Meter (STM32U585VIT6 Cortex-M33 + ADE9000) |
 | **Tanggal Audit Awal** | 3 November 2026 |
-| **Pembaruan & Adendum** | 4 November 2026 |
+| **Pembaruan & Adendum** | 16 November 2026 (Remediasi v2.21.0: F1/F2/C1/I5/A1/RDP) |
 | **Cakupan** | Tinjauan statis source code (Secure/NonSecure), konfigurasi build, proteksi TrustZone-M, dan dokumentasi |
 | **Di Luar Cakupan** | Pengujian penetrasi jaringan fisik/remote live, injeksi kesalahan fisik (fault injection/side-channel), dan eksekusi exploit target produksi |
 
@@ -30,16 +30,16 @@ Temuan-temuan ini adalah hasil analisis tingkat kode sumber (*source-level findi
 
 | ID | Area / Kategori | Severity Awal | Status Setelah Pembaruan Source | Rekomendasi / Tindak Lanjut |
 |:---:|---|:---:|---|---|
-| **C1** | Kunci Default & Persistensi | **HIGH** | **Sebagian ditangani.** Nilai default publik dihapus; penolakan unprovisioned aktif. | Pastikan kunci disimpan permanen di Secure Storage terenkripsi (bukan RAM volatil). |
+| **C1** | Kunci Default & Persistensi | **HIGH** | **Dimitigasi di source (v2.21.0).** | `secure_flash_load_keys()` & `secure_flash_save_keys()` mengenkripsi kunci dengan AES-128-GCM terikat `UID_BASE` pada Page 126 Secure Flash (`0x0C0FC000`). |
 | **C2** | Kunci Mentah di NonSecure | **HIGH** | **Telah dimitigasi di arsitektur.** | Firmware NonSecure kini hanya menggunakan opaque `AmiKeyHandle`. Larang penyalinan plaintext key. |
 | **C3** | Atribut Keamanan SRAM3 | **HIGH\*** | **Source diperbarui; perlu verifikasi HW.** | Bitmask MPCBB/GTZC SRAM3 diatur ke `0xFFFFFFFF` (Secure/Privileged). Uji pada board target. |
 | **I1** | Proof HLS & Disconnect Control | **HIGH\*** | **Perbaikan source diterapkan.** | Gateway NSC `SECURE_DLMS_HLS5_CalculateProof()` aktif. Verifikasi proof nol/salah ditolak keras. |
-| **I2 / F1** | Otorisasi Key-Management | **HIGH** | **Sebagian ditangani.** | Token publik dihapus. Sesi provisi wajib diisolasi dalam Secure domain dengan challenge unik. |
+| **I2 / F1** | Otorisasi Key-Management | **HIGH** | **Dimitigasi di source (v2.21.0).** | `SECURE_DLMS_ResetSession()` & `SECURE_DLMS_SetSessionSap()` mengikat transfer kunci ke sesi HLS5 + Management SAP (1/16) dan mereset saat RLRQ/disconnect. |
 | **I3 / F3** | Persistensi Invocation Counter | **MEDIUM** | **Guard telah ditambahkan.** | Penolakan strictly monotonic diterapkan; kegagalan lease write wajib fail-closed. |
 | **I4** | RNG Fail-Closed | **MEDIUM** | **Perbaikan source diterapkan.** | Fallback pseudo-RNG (LCG) dihapus. Kegagalan TRNG mengembalikan error -2 dan membatalkan operasi. |
-| **I5** | Descriptor NSC / TOCTOU | **MEDIUM** | **Rekomendasi mitigasi source.** | Terapkan pola copy-then-validate: salin descriptor ke Secure RAM sebelum divalidasi dan digunakan. |
-| **I6 / F2** | Verifikasi Image & Rollback | **HIGH\*** | **Pemeriksaan manifest aktif.** | Verifikasi magic header `PLN!`, MSP range, dan anti-rollback counter. Tahap produksi: tambahkan ECDSA signature. |
-| **A1** | Pemulihan Error & Watchdog | **TBD** | **Belum diverifikasi di hardware.** | Evaluasi timeout IWDG/WWDG agar loop tak berujung (`Error_Handler`) memicu reset aman terkontrol. |
+| **I5** | Descriptor NSC / TOCTOU | **MEDIUM** | **Dimitigasi di source (v2.21.0).** | Pola *copy-then-validate* diterapkan penuh di `SECURE_DLMS_AES_GCM_Process()` & `SECURE_DLMS_TransferKeys_Atomic()`, teruji di `AmiTrustZoneBoundaryTest`. |
+| **I6 / F2** | Verifikasi Image & Rollback | **HIGH\*** | **Dimitigasi di source (v2.21.0).** | `SECURE_VerifyNonSecureImage()` memverifikasi SHA-256 kanonikal + tanda tangan **ECDSA P-256** (`ami_boot_crypto.c`) + anti-rollback `TAMP->BKP0R`, teruji di `AmiBootCryptoTest`. |
+| **A1** | Pemulihan Error & Watchdog | **TBD** | **Dimitigasi di source (v2.21.0).** | `MX_IWDG_Init()` (~6s, *debug-freeze* ST-LINK) + `SECURE_Watchdog_Kick()` di FreeRTOS; `Error_Handler()` mencatat `TAMP->BKP1R` & memicu `NVIC_SystemReset()`. |
 
 *\* Severity berlaku jika jalur komunikasi atau fitur terkait aktif dan dapat dicapai dari antarmuka luar.*
 
