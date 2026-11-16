@@ -46,7 +46,7 @@ set(CMAKE_CXX_COMPILER_FORCED "true")
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined symbols
+    $<$<CONFIG:Release>:AMI_STRICT_SECURE_BOOT=1>
 )
 
 # Enable CMake support for ASM and C languages

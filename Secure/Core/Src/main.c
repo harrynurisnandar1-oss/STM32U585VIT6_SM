@@ -115,6 +115,103 @@ int main(void)
   /* USER CODE END 3 */
 }
 
+<<<<<<< Updated upstream
+=======
+#define AMI_BOOT_MANIFEST_MAGIC      0x504C4E21U /* 'PLN!' */
+#define AMI_BOOT_MANIFEST_OFFSET     0x400U
+#define AMI_NS_FLASH_START           0x08100000U
+#define AMI_NS_FLASH_END             0x081FFFFFU
+#define AMI_NS_SRAM_START            0x20040000U
+#define AMI_NS_SRAM_END              0x200C0000U
+
+typedef struct {
+  uint32_t magic;           /* 0x504C4E21 'PLN!' */
+  uint32_t version_epoch;   /* Monotonic counter for anti-rollback */
+  uint32_t image_size;      /* NonSecure image size in bytes */
+  uint32_t flags;           /* Security attributes */
+  uint8_t  sha256_hash[32]; /* SHA-256 digest of NonSecure image */
+  uint8_t  ecdsa_sig[64];   /* ECDSA P-256 signature (r || s) */
+} NonSecureImageManifestTypeDef;
+
+static int SECURE_VerifyNonSecureImage(void)
+{
+  uint32_t msp_ns = *(uint32_t *)VTOR_TABLE_NS_START_ADDR;
+  uint32_t reset_handler = *(uint32_t *)(VTOR_TABLE_NS_START_ADDR + 4U);
+
+  /* 1. Verify NonSecure Vector Table boundary */
+  if (VTOR_TABLE_NS_START_ADDR < AMI_NS_FLASH_START || VTOR_TABLE_NS_START_ADDR >= AMI_NS_FLASH_END) {
+    return -1;
+  }
+
+  /* 2. Verify Initial MSP_NS lies within NonSecure RAM (0x20040000..0x200C0000) */
+  if (msp_ns < AMI_NS_SRAM_START || msp_ns > AMI_NS_SRAM_END) {
+    return -2;
+  }
+
+  /* 3. Verify ResetHandler points to executable NonSecure Flash with Thumb bit set */
+  if ((reset_handler & 1U) == 0U || reset_handler < AMI_NS_FLASH_START || reset_handler >= AMI_NS_FLASH_END) {
+    return -3;
+  }
+
+  /* 4. Manifest Cryptographic Integrity (SHA-256 + ECDSA P-256) & Anti-Rollback Check */
+  const NonSecureImageManifestTypeDef *manifest =
+      (const NonSecureImageManifestTypeDef *)(VTOR_TABLE_NS_START_ADDR + AMI_BOOT_MANIFEST_OFFSET);
+
+  if (manifest->magic == AMI_BOOT_MANIFEST_MAGIC) {
+    uint32_t min_size = AMI_BOOT_MANIFEST_OFFSET + (uint32_t)sizeof(NonSecureImageManifestTypeDef);
+    if (manifest->image_size < min_size || manifest->image_size > (AMI_NS_FLASH_END - AMI_NS_FLASH_START)) {
+      return -4; /* Invalid image size declared in manifest */
+    }
+
+    /* Compute canonical SHA-256 over [0..0x400) + [0x400..0x410) (header: magic, epoch, size, flags) + [0x400+sizeof(manifest)..image_size) */
+    AmiSha256Context sha;
+    uint8_t computed_hash[32];
+    const uint8_t *ns_base = (const uint8_t *)VTOR_TABLE_NS_START_ADDR;
+    ami_sha256_init(&sha);
+    ami_sha256_update(&sha, ns_base, AMI_BOOT_MANIFEST_OFFSET + 16U);
+    ami_sha256_update(&sha, ns_base + min_size, manifest->image_size - min_size);
+    ami_sha256_final(&sha, computed_hash);
+
+    /* Constant-time digest comparison */
+    uint8_t hash_diff = 0U;
+    for (uint32_t i = 0U; i < 32U; ++i) {
+      hash_diff |= (uint8_t)(computed_hash[i] ^ manifest->sha256_hash[i]);
+    }
+    if (hash_diff != 0U) {
+      return -6; /* SHA-256 digest mismatch */
+    }
+
+    /* Verify ECDSA P-256 signature against embedded Litbang public key */
+    if (ami_ecdsa_p256_verify(AMI_BOOT_ECDSA_PUBKEY_X, AMI_BOOT_ECDSA_PUBKEY_Y,
+                              computed_hash, manifest->ecdsa_sig) != 0) {
+      return -7; /* ECDSA P-256 signature verification failed */
+    }
+
+    /* Anti-rollback check: update monotonic epoch only after full signature verification */
+#if defined(TAMP)
+    uint32_t installed_version = TAMP->BKP0R;
+    if (manifest->version_epoch < installed_version) {
+      return -5; /* Rollback detected: refusing to execute downgraded firmware */
+    }
+    if (manifest->version_epoch > installed_version) {
+      TAMP->BKP0R = manifest->version_epoch;
+    }
+#endif
+  } else {
+#if defined(AMI_STRICT_SECURE_BOOT) && (AMI_STRICT_SECURE_BOOT == 1)
+    return -8; /* Unsigned NonSecure image rejected in strict Secure Boot mode */
+#else
+    /* Litbang Prototype ST-LINK Dev Fallback: record unsigned boot flag in TAMP->BKP2R */
+#if defined(TAMP)
+    TAMP->BKP2R = 0xDEADB001U;
+#endif
+#endif
+  }
+
+  return 0; /* Image verified */
+}
+
+>>>>>>> Stashed changes
 /**
   * @brief  Non-secure call function
   *         This function is responsible for Non-secure initialization and switch
