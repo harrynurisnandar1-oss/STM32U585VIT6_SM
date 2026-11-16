@@ -109,9 +109,12 @@ static AmiDlmsPortStatus dispatch_i_frame(AmiDlmsPortContext *ctx, const HdlcFra
         /* ACSE RLRQ (Release Request) -> Reply RLRE */
         ami_dlms_association_reset(&ctx->association);
         ami_bt_reset(&ctx->block_transfer);
+<<<<<<< HEAD
 #if defined(STM32U585xx) || defined(USE_HAL_DRIVER)
         SECURE_DLMS_ResetSession();
 #endif
+=======
+>>>>>>> d4ee38296f41d70969e4a6ee09e5214586a74b3b
         apdu_response[0] = 0x63u; /* RLRE tag */
         apdu_response[1] = 0x03u; /* length */
         apdu_response[2] = 0x80u; /* reason tag */
@@ -141,6 +144,7 @@ static AmiDlmsPortStatus dispatch_i_frame(AmiDlmsPortContext *ctx, const HdlcFra
                     &server_proof_len);
 
                 if (hls_st == AMI_DLMS_ASSOC_OK) {
+<<<<<<< HEAD
 #if defined(STM32U585xx) || defined(USE_HAL_DRIVER)
                     SECURE_DLMS_SetSessionSap(16U);
                     if (client_proof_len != 16u ||
@@ -175,6 +179,21 @@ static AmiDlmsPortStatus dispatch_i_frame(AmiDlmsPortContext *ctx, const HdlcFra
                         memcpy(&apdu_response[7], server_proof, server_proof_len);
                         apdu_resp_len = 7u + server_proof_len;
                     }
+=======
+                    if (ctx->anti_bruteforce != NULL) {
+                        ami_anti_bruteforce_record_success(ctx->anti_bruteforce);
+                    }
+                    /* ActionResponseNormal with success (0) and server proof data */
+                    apdu_response[0] = 0xC7u;
+                    apdu_response[1] = 0x01u;
+                    apdu_response[2] = apdu[2]; /* invoke_id */
+                    apdu_response[3] = 0x00u;   /* result = success */
+                    apdu_response[4] = 0x01u;   /* data-present = true */
+                    apdu_response[5] = 0x09u;   /* OctetString */
+                    apdu_response[6] = (uint8_t)server_proof_len;
+                    memcpy(&apdu_response[7], server_proof, server_proof_len);
+                    apdu_resp_len = 7u + server_proof_len;
+>>>>>>> d4ee38296f41d70969e4a6ee09e5214586a74b3b
                 } else {
                     if (ctx->anti_bruteforce != NULL) {
                         (void)ami_anti_bruteforce_record_failure(ctx->anti_bruteforce, ctx->current_time_sec);
@@ -202,12 +221,20 @@ static AmiDlmsPortStatus dispatch_i_frame(AmiDlmsPortContext *ctx, const HdlcFra
                    apdu[5] == 0x00u && apdu[6] == 0x00u && apdu[7] == 0x60u &&
                    apdu[8] == 0x03u && apdu[9] == 0x0Au && apdu[10] == 0xFFu) { /* 0.0.96.3.10.255 */
 
+<<<<<<< HEAD
             if (ctx->association.state != AMI_DLMS_ASSOC_ASSOCIATED ||
                 ctx->association.mechanism == AMI_DLMS_AUTH_HLS) {
                 apdu_response[0] = 0xC7u;
                 apdu_response[1] = 0x01u;
                 apdu_response[2] = apdu[2];
                 apdu_response[3] = 0x03u; /* read-write-denied: plaintext Class 70 forbidden under HLS */
+=======
+            if (ctx->association.state != AMI_DLMS_ASSOC_ASSOCIATED) {
+                apdu_response[0] = 0xC7u;
+                apdu_response[1] = 0x01u;
+                apdu_response[2] = apdu[2];
+                apdu_response[3] = 0x03u; /* read-write-denied / not associated */
+>>>>>>> d4ee38296f41d70969e4a6ee09e5214586a74b3b
                 apdu_response[4] = 0x00u;
                 apdu_resp_len = 5u;
             } else if (ctx->disconnect_control == NULL) {
@@ -279,6 +306,7 @@ static AmiDlmsPortStatus dispatch_i_frame(AmiDlmsPortContext *ctx, const HdlcFra
             uint32_t req_block_num = 0u;
             if (ami_bt_parse_get_next_block_request(apdu, apdu_len, &req_invoke_id, &req_block_num)) {
                 int is_last = 0;
+<<<<<<< HEAD
                 /* If client acknowledges the block it already received (e.g. block 1 in Gurux DLMS Director),
                  * advance to next block. If client already requested the target block (block 2), use it. */
                 uint32_t target_block = req_block_num;
@@ -287,11 +315,19 @@ static AmiDlmsPortStatus dispatch_i_frame(AmiDlmsPortContext *ctx, const HdlcFra
                 }
                 AmiBtStatus bt_st = ami_bt_build_get_response_block(
                     &ctx->block_transfer, target_block,
+=======
+                AmiBtStatus bt_st = ami_bt_build_get_response_block(
+                    &ctx->block_transfer, req_block_num,
+>>>>>>> d4ee38296f41d70969e4a6ee09e5214586a74b3b
                     apdu_response, sizeof(apdu_response),
                     &apdu_resp_len, &is_last);
                 if (bt_st != AMI_BT_OK) {
                     apdu_resp_len = ami_bt_build_error_response_block(
+<<<<<<< HEAD
                         req_invoke_id, target_block,
+=======
+                        req_invoke_id, req_block_num,
+>>>>>>> d4ee38296f41d70969e4a6ee09e5214586a74b3b
                         2u, /* temporary-failure / data-block-unavailable */
                         apdu_response, sizeof(apdu_response));
                 }

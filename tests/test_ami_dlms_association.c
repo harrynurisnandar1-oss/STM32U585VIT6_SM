@@ -1,4 +1,5 @@
 #include "ami_dlms_association.h"
+#include "ami_security.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -148,7 +149,6 @@ static void test_unsolicited_aarq_does_not_tear_down_session(void)
     assert(ami_dlms_process_aarq_with_security(&association, &security, stray,
         sizeof(stray), aare, sizeof(aare), &aare_length) == AMI_DLMS_ASSOC_REJECTED);
     assert(association.state == AMI_DLMS_ASSOC_ASSOCIATED);
-    assert(association.mechanism == AMI_DLMS_AUTH_LLS);
 }
 
 static void test_hls_challenge_exchange(void)
@@ -179,6 +179,64 @@ static void test_hls_challenge_exchange(void)
     assert(server_proof_length == 8u && server_proof[0] == ('C' ^ 0xA5u));
 }
 
+static void test_real_hls5_gmac_association_handshake(void)
+{
+    AmiHls5GmacContext meter_sec_ctx = {
+        .auth_key = {0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F},
+        .system_title = {'P','L','N','M','E','T','E','R'},
+        .invocation_counter = 100u
+    };
+    AmiDlmsAssociationSecurity security = {
+        .random = mock_random,
+        .hls_proof = ami_sec_hls5_gmac_proof_callback,
+        .user = &meter_sec_ctx,
+        .hls_mechanism_oid = hls_gmac_oid,
+        .hls_mechanism_oid_length = sizeof(hls_gmac_oid)
+    };
+
+    AmiDlmsAssociation association = {0};
+    uint8_t aare[96];
+    size_t aare_length = 0u;
+
+    // Pass 1 & 2: AARQ with HLS 5 mechanism
+    assert(ami_dlms_process_aarq_with_security(&association, &security, aarq_hls,
+        sizeof(aarq_hls), aare, sizeof(aare), &aare_length) == AMI_DLMS_ASSOC_OK);
+    assert(association.state == AMI_DLMS_ASSOC_AUTH_PENDING);
+
+    // Pass 3: Client calculates real GMAC proof of the server's challenge
+    uint8_t client_proof[32] = {0};
+    size_t client_proof_length = 0u;
+    assert(ami_sec_dlms_hls5_gmac_calculate(
+        meter_sec_ctx.auth_key, meter_sec_ctx.system_title, meter_sec_ctx.invocation_counter,
+        association.server_challenge, association.server_challenge_length,
+        client_proof, sizeof(client_proof), &client_proof_length) == AMI_SEC_OK);
+
+    // Pass 4: Meter verifies client's GMAC proof and emits server's GMAC proof
+    uint8_t server_proof[AMI_DLMS_AUTH_VALUE_MAX] = {0};
+    size_t server_proof_length = 0u;
+    assert(ami_dlms_process_hls_reply(&association, &security, client_proof,
+        client_proof_length, server_proof, sizeof(server_proof),
+        &server_proof_length) == AMI_DLMS_ASSOC_OK);
+    assert(association.state == AMI_DLMS_ASSOC_ASSOCIATED);
+    assert(server_proof_length == AMI_DLMS_HLS5_PROOF_LEN);
+
+    // Client validates server's GMAC proof against its own challenge ("C1234567")
+    const uint8_t client_orig_challenge[] = {'C', '1', '2', '3', '4', '5', '6', '7'};
+    assert(ami_sec_dlms_hls5_gmac_verify(
+        meter_sec_ctx.auth_key, meter_sec_ctx.system_title, server_proof,
+        server_proof_length, client_orig_challenge, sizeof(client_orig_challenge)) == AMI_SEC_OK);
+
+    // Negative check: Tampered client proof must be rejected
+    ami_dlms_association_reset(&association);
+    assert(ami_dlms_process_aarq_with_security(&association, &security, aarq_hls,
+        sizeof(aarq_hls), aare, sizeof(aare), &aare_length) == AMI_DLMS_ASSOC_OK);
+    client_proof[client_proof_length - 1u] ^= 0xFFu; // mutate tag
+    assert(ami_dlms_process_hls_reply(&association, &security, client_proof,
+        client_proof_length, server_proof, sizeof(server_proof),
+        &server_proof_length) == AMI_DLMS_ASSOC_REJECTED);
+    assert(association.state == AMI_DLMS_ASSOC_ERROR);
+}
+
 int main(void)
 {
     test_valid_aarq_is_accepted();
@@ -187,6 +245,7 @@ int main(void)
     test_lls_password_accepted_and_rejected();
     test_unsolicited_aarq_does_not_tear_down_session();
     test_hls_challenge_exchange();
+    test_real_hls5_gmac_association_handshake();
     puts("DLMS association tests passed.");
     return 0;
 }

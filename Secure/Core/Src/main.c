@@ -115,6 +115,7 @@ int main(void)
   /* USER CODE END 3 */
 }
 
+<<<<<<< HEAD
 <<<<<<< Updated upstream
 =======
 #define AMI_BOOT_MANIFEST_MAGIC      0x504C4E21U /* 'PLN!' */
@@ -123,6 +124,13 @@ int main(void)
 #define AMI_NS_FLASH_END             0x081FFFFFU
 #define AMI_NS_SRAM_START            0x20040000U
 #define AMI_NS_SRAM_END              0x200C0000U
+=======
+#define AMI_BOOT_MANIFEST_MAGIC      0x504C4E21U /* 'PLN!' */
+#define AMI_NS_FLASH_START           0x08040000U
+#define AMI_NS_FLASH_END             0x081FFFFFU
+#define AMI_NS_SRAM_START            0x20018000U
+#define AMI_NS_SRAM_END              0x20040000U
+>>>>>>> d4ee38296f41d70969e4a6ee09e5214586a74b3b
 
 typedef struct {
   uint32_t magic;           /* 0x504C4E21 'PLN!' */
@@ -130,7 +138,10 @@ typedef struct {
   uint32_t image_size;      /* NonSecure image size in bytes */
   uint32_t flags;           /* Security attributes */
   uint8_t  sha256_hash[32]; /* SHA-256 digest of NonSecure image */
+<<<<<<< HEAD
   uint8_t  ecdsa_sig[64];   /* ECDSA P-256 signature (r || s) */
+=======
+>>>>>>> d4ee38296f41d70969e4a6ee09e5214586a74b3b
 } NonSecureImageManifestTypeDef;
 
 static int SECURE_VerifyNonSecureImage(void)
@@ -143,7 +154,11 @@ static int SECURE_VerifyNonSecureImage(void)
     return -1;
   }
 
+<<<<<<< HEAD
   /* 2. Verify Initial MSP_NS lies within NonSecure RAM (0x20040000..0x200C0000) */
+=======
+  /* 2. Verify Initial MSP_NS lies within NonSecure RAM */
+>>>>>>> d4ee38296f41d70969e4a6ee09e5214586a74b3b
   if (msp_ns < AMI_NS_SRAM_START || msp_ns > AMI_NS_SRAM_END) {
     return -2;
   }
@@ -153,6 +168,7 @@ static int SECURE_VerifyNonSecureImage(void)
     return -3;
   }
 
+<<<<<<< HEAD
   /* 4. Manifest Cryptographic Integrity (SHA-256 + ECDSA P-256) & Anti-Rollback Check */
   const NonSecureImageManifestTypeDef *manifest =
       (const NonSecureImageManifestTypeDef *)(VTOR_TABLE_NS_START_ADDR + AMI_BOOT_MANIFEST_OFFSET);
@@ -188,6 +204,16 @@ static int SECURE_VerifyNonSecureImage(void)
     }
 
     /* Anti-rollback check: update monotonic epoch only after full signature verification */
+=======
+  /* 4. Manifest Integrity and Anti-Rollback Check */
+  const NonSecureImageManifestTypeDef *manifest = (const NonSecureImageManifestTypeDef *)(VTOR_TABLE_NS_START_ADDR + 0x400U);
+  if (manifest->magic == AMI_BOOT_MANIFEST_MAGIC) {
+    if (manifest->image_size < 1024U || manifest->image_size > (AMI_NS_FLASH_END - AMI_NS_FLASH_START)) {
+      return -4; /* Invalid image size declared in manifest */
+    }
+
+    /* Anti-rollback check: compare with Secure monotonic counter */
+>>>>>>> d4ee38296f41d70969e4a6ee09e5214586a74b3b
 #if defined(TAMP)
     uint32_t installed_version = TAMP->BKP0R;
     if (manifest->version_epoch < installed_version) {
@@ -197,6 +223,7 @@ static int SECURE_VerifyNonSecureImage(void)
       TAMP->BKP0R = manifest->version_epoch;
     }
 #endif
+<<<<<<< HEAD
   } else {
 #if defined(AMI_STRICT_SECURE_BOOT) && (AMI_STRICT_SECURE_BOOT == 1)
     return -8; /* Unsigned NonSecure image rejected in strict Secure Boot mode */
@@ -206,12 +233,17 @@ static int SECURE_VerifyNonSecureImage(void)
     TAMP->BKP2R = 0xDEADB001U;
 #endif
 #endif
+=======
+>>>>>>> d4ee38296f41d70969e4a6ee09e5214586a74b3b
   }
 
   return 0; /* Image verified */
 }
 
+<<<<<<< HEAD
 >>>>>>> Stashed changes
+=======
+>>>>>>> d4ee38296f41d70969e4a6ee09e5214586a74b3b
 /**
   * @brief  Non-secure call function
   *         This function is responsible for Non-secure initialization and switch
@@ -221,6 +253,12 @@ static int SECURE_VerifyNonSecureImage(void)
 static void NonSecure_Init(void)
 {
   funcptr_NS NonSecure_ResetHandler;
+
+  /* Secure Boot integrity and anti-rollback verification prior to jump */
+  if (SECURE_VerifyNonSecureImage() != 0) {
+    /* Boot signature/integrity failure: halt system in Secure World, refuse to jump */
+    Error_Handler();
+  }
 
   SCB_NS->VTOR = VTOR_TABLE_NS_START_ADDR;
 
@@ -251,83 +289,51 @@ static void MX_GTZC_S_Init(void)
   /* USER CODE BEGIN GTZC_S_Init 1 */
 
   /* USER CODE END GTZC_S_Init 1 */
-  if (HAL_GTZC_TZSC_ConfigPeriphAttributes(GTZC_PERIPH_SAES, GTZC_TZSC_PERIPH_SEC|GTZC_TZSC_PERIPH_NPRIV) != HAL_OK)
+  /* Configure Secure hardware security & cryptographic peripherals */
+  if (HAL_GTZC_TZSC_ConfigPeriphAttributes(GTZC_PERIPH_SAES, GTZC_TZSC_PERIPH_SEC|GTZC_TZSC_PERIPH_NPRIV) != HAL_OK ||
+      HAL_GTZC_TZSC_ConfigPeriphAttributes(GTZC_PERIPH_RNG,  GTZC_TZSC_PERIPH_SEC|GTZC_TZSC_PERIPH_NPRIV) != HAL_OK ||
+      HAL_GTZC_TZSC_ConfigPeriphAttributes(GTZC_PERIPH_TAMP, GTZC_TZSC_PERIPH_SEC|GTZC_TZSC_PERIPH_NPRIV) != HAL_OK ||
+      HAL_GTZC_TZSC_ConfigPeriphAttributes(GTZC_PERIPH_RTC,  GTZC_TZSC_PERIPH_SEC|GTZC_TZSC_PERIPH_NPRIV) != HAL_OK ||
+      HAL_GTZC_TZSC_ConfigPeriphAttributes(GTZC_PERIPH_PKA,  GTZC_TZSC_PERIPH_SEC|GTZC_TZSC_PERIPH_NPRIV) != HAL_OK ||
+      HAL_GTZC_TZSC_ConfigPeriphAttributes(GTZC_PERIPH_HASH, GTZC_TZSC_PERIPH_SEC|GTZC_TZSC_PERIPH_NPRIV) != HAL_OK)
   {
     Error_Handler();
   }
   MPCBB_Area_Desc.SecureRWIllegalMode = GTZC_MPCBB_SRWILADIS_ENABLE;
   MPCBB_Area_Desc.InvertSecureState = GTZC_MPCBB_INVSECSTATE_NOT_INVERTED;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[0] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[1] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[2] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[3] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[4] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[5] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[6] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[7] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[8] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[9] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[10] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[11] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[12] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[13] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[14] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[15] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[16] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[17] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[18] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[19] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[20] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[21] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[22] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[23] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[24] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[25] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[26] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[27] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[28] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[29] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[30] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[31] =   0x00000000;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[0] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[1] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[2] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[3] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[4] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[5] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[6] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[7] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[8] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[9] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[10] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[11] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[12] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[13] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[14] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[15] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[16] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[17] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[18] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[19] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[20] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[21] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[22] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[23] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[24] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[25] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[26] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[27] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[28] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[29] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[30] =   0xFFFFFFFF;
-  MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[31] =   0xFFFFFFFF;
+  for (uint32_t i = 0; i < 32; i++) {
+    MPCBB_Area_Desc.AttributeConfig.MPCBB_SecConfig_array[i] = 0xFFFFFFFF;
+    MPCBB_Area_Desc.AttributeConfig.MPCBB_PrivConfig_array[i] = 0xFFFFFFFF;
+  }
   MPCBB_Area_Desc.AttributeConfig.MPCBB_LockConfig_array[0] =   0x00000000;
   if (HAL_GTZC_MPCBB_ConfigMem(SRAM3_BASE, &MPCBB_Area_Desc) != HAL_OK)
   {
     Error_Handler();
   }
   /* USER CODE BEGIN GTZC_S_Init 2 */
+  /* Lock MPCBB configuration to prevent NonSecure runtime tampering */
+  if (HAL_GTZC_MPCBB_Lock(SRAM3_BASE) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
+  /* Enable TrustZone Interrupt Controller (TZIC) for illegal access detection */
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_SAES);
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_RNG);
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_TAMP);
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_RTC);
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_PKA);
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_HASH);
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_SRAM1);
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_SRAM2);
+  HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_MPCBB3_REG);
+
+  /* Enable GTZC IRQ in NVIC with highest priority (0) */
+  HAL_NVIC_SetPriority(GTZC_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(GTZC_IRQn);
+
+  /* Lock TZSC register configuration against runtime tampering */
+  HAL_GTZC_TZSC_Lock(GTZC_TZSC1);
   /* USER CODE END GTZC_S_Init 2 */
 
 }

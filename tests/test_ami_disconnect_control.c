@@ -268,6 +268,7 @@ static void test_dc_dlms_port_wire_action_request(void)
     assert(dc.output_state == 1u);
     assert(port.snapshot.disconnect_output_state == 1u);
     assert(mock.last_command == AMI_BREAKER_CMD_CLOSE);
+<<<<<<< HEAD
 
     /* 5. A2 Regression: Plaintext Class 70 Action MUST be rejected under HLS association */
     port.association.mechanism = AMI_DLMS_AUTH_HLS;
@@ -298,6 +299,8 @@ static void test_dc_dlms_port_wire_action_request(void)
     assert(resp_frame.payload[2] == 0x83u);
     assert(resp_frame.payload[3] == 0x03u); /* read-write-denied */
     assert(dc.output_state == 1u);          /* Breaker remained closed */
+=======
+>>>>>>> d4ee38296f41d70969e4a6ee09e5214586a74b3b
 }
 
 static void test_dc_ciphered_action_request(void)

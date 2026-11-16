@@ -48,6 +48,9 @@ Release/
 
 # IDE and operating-system temporary files
 .vscode/
+.settings/
+.project
+.cproject
 .DS_Store
 Thumbs.db
 Desktop.ini
@@ -59,3 +62,4 @@ Desktop.ini
 *.swp
 *~
 
+docker_test/build-docker/

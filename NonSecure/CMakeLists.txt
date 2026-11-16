@@ -63,6 +63,21 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_dlms_association.c
     ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_dlms_apdu.c
     ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_dlms_hdlc.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_dlms_port.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_ade9000.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_dlms_cipher.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_nvm_counter.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_anti_bruteforce.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_dlms_block_transfer.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_disconnect_control.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/AMI/Src/ami_bsp_uart.c
+)
+
+# Generate raw binary and Intel HEX files after linking
+add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.bin
+    COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_PROJECT_NAME}.hex
+    COMMENT "Generating ${CMAKE_PROJECT_NAME}.bin and ${CMAKE_PROJECT_NAME}.hex"
 )
 
 # Link directories setup
@@ -82,15 +97,3 @@ list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 if((CMAKE_C_STANDARD EQUAL 90) OR (CMAKE_C_STANDARD EQUAL 99))
     message(ERROR "Generated code requires C11 or higher")
 endif()
-
-
-
-
-
-
-
-
-
-
-
-
