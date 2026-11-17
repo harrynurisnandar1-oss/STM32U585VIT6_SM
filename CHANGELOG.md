@@ -14,7 +14,7 @@ Dokumen ini mencatat seluruh riwayat pembaruan fitur, perbaikan bug, pengerasan 
   * Manajemen kunci terisolasi (Master Key KEK & Remote Key Wrap RFC 3394).
   * Wear-leveling NVM Invocation Counter anti-replay & integrasi host simulator TCP (port 4059).
 
-* **🏭 [SPIN 2 (v2.13.0 s.d. v2.20.0)](#-spin-2--pelengkapan-fitur-produksi-kesiapan-mains-board--sertifikasi)**:
+* **🏭 [SPIN 2 (v2.13.0 s.d. v2.22.0)](#-spin-2--pelengkapan-fitur-produksi-kesiapan-mains-board--sertifikasi)**:
   * Anti-Brute-Force & Lockout progresif eksponensial (SPLN D5.002:2024).
   * General Block Transfer (GBT) untuk segmentasi data profil dan objek besar.
   * Ekspansi Data Model COSEM PLN hingga **66 objek aktif** pada Association View.
@@ -30,7 +30,8 @@ Dokumen ini mencatat seluruh riwayat pembaruan fitur, perbaikan bug, pengerasan 
 
 | Fase | Rentang Rilis | Sorotan Utama |
 |---|---|---|
-| **SPIN 2** | [v2.21.0](#v2210---2026-11-16) *(Terbaru)* | Remediasi F1/F2/C1/I5/A1/RDP (Pure C): ECDSA P-256 Secure Boot, Flash Keystore, Anti-TOCTOU, IWDG, 16/16 CTest |
+| **SPIN 2** | [v2.22.0](#v2220---2026-11-17) *(Terbaru)* | Ciphered Association (`glo_initiateRequest`/`Response`), HLS5 Peer System Title Verification, Gurux Simulator & `.gxc` Sync |
+| | [v2.21.0](#v2210---2026-11-16) | Remediasi F1/F2/C1/I5/A1/RDP (Pure C): ECDSA P-256 Secure Boot, Flash Keystore, Anti-TOCTOU, IWDG, 16/16 CTest |
 | | [v2.20.0](#v2200---2026-11-09) | 4 Pilar Keamanan, Code Coverage 79.2%, 15/15 CTest PASS, TrustZone boundary check |
 | | [v2.19.0](#v2190---2026-11-06) | Profil Kualitas Tegangan R/S/T, Instant Profile 11-kanal, Calendar/Schedule Class |
 | | [v2.18.1](#v2181---2026-11-04) | Remediasi SIGFPE division-by-zero, Docker runner cmake, unit test resilience |
@@ -1033,4 +1034,21 @@ Conducted an in-depth security threat hunting audit across input parsers, crypto
   - `SECURE_CheckAndApplyLitbangRdp()` menjaga RDP Level 0 secara default dan menyediakan RDP Level 1 *opt-in* (`-DAMI_LITBANG_RDP_LEVEL1=1`).
 - **Pengujian Otomatis (16/16 CTest PASS & ARM Cortex-M33 Build)**:
   - Penambahan test suite ke-16 `tests/test_ami_boot_crypto.c` (`AmiBootCryptoTest`) dan skenario uji TOCTOU pada `tests/test_ami_trustzone_boundary.c`.
+
+## [v2.22.0] - 2026-11-17
+
+### Added
+- **Ciphered Association (`glo_initiateRequest` `0x21` & `glo_initiateResponse` `0x28`)**:
+  - Menambahkan dukungan sesi asosiasi terenkripsi penuh pada `NonSecure/AMI/Inc/ami_dlms_association.h` dan `NonSecure/AMI/Src/ami_dlms_association.c`, mencakup `client_system_title`, `dedicated_key`, `client_sap`, `server_sap`, serta hook `decrypt_initiate` dan `encrypt_initiate`.
+- **HLS5 Peer System Title Verification**:
+  - Menambahkan hook `hls_verify` pada `AmiDlmsAssociationSecurity` untuk memverifikasi proof HLS5 menggunakan *peer system title* dan *embedded Invocation Counter*.
+
+### Changed & Fixed
+- **Integrasi DLMS Port, APDU, Cipher & TrustZone NSC**:
+  - Memperbarui `NonSecure/AMI/Src/ami_dlms_port.c`, `ami_dlms_apdu.c`, `ami_dlms_cipher.c`, `ami_security.c` (beserta header terkait) serta `Secure/Core/Src/secure_nsc.c` dan `Secure_nsclib/secure_nsc.h` untuk mendukung alur *ciphered association* dan verifikasi HLS5.
+- **Simulator Gurux & Unit Tests**:
+  - Memperbarui `tests/gurux_simulator.c` dan profil `STM32U585VIT6_SM.gxc` agar mendukung pengujian asosiasi terenkripsi dan HLS5.
+  - Menyelaraskan `tests/test_ami_dlms_association.c`, `tests/test_ami_dlms_apdu.c`, `tests/test_ami_dlms_cipher.c`, `tests/test_ami_security.c`, dan `tests/test_ami_disconnect_control.c`.
+- **Sinkronisasi Dokumentasi**:
+  - Memperbarui `README.md`, `tests/test_note.md`, dan `SECURITY.md` agar mencerminkan 16 CTest suites.
   - Verifikasi silang `arm-none-eabi-gcc` untuk `STM32U585VIT6_SM_S` dan `STM32U585VIT6_SM_NS` lulus dengan **0 error**.

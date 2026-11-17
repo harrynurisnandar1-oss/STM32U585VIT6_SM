@@ -41,5 +41,5 @@ To help us triage and resolve the issue quickly, please include:
 
 - **Initial Acknowledgment**: You will receive an acknowledgment of your report within **48 hours**.
 - **Triage & Assessment**: Within **5 business days**, our team will assess the report, verify the vulnerability, and determine its severity (CVSS score).
-- **Remediation & Patching**: Confirmed security vulnerabilities will be patched in a private branch, verified against the comprehensive 15/15 CTest suite, LCOV code coverage analysis, and static analysis, and released in an updated version.
+- **Remediation & Patching**: Confirmed security vulnerabilities will be patched in a private branch, verified against the comprehensive 16/16 CTest suite, LCOV code coverage analysis, and static analysis, and released in an updated version.
 - **Public Disclosure**: A public GitHub Security Advisory will be published upon release of the fix, crediting the reporter (unless you prefer to remain anonymous).

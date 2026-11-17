@@ -328,7 +328,8 @@ AmiSecStatus ami_sec_aes_128_gcm_encrypt(
     uint8_t *tag_128, size_t tag_len)
 {
     if (key_128 == NULL || nonce_96 == NULL || nonce_len != AMI_GCM_NONCE_BYTES ||
-        tag_128 == NULL || tag_len != AMI_GCM_TAG_BYTES ||
+        tag_128 == NULL ||
+        (tag_len != AMI_GCM_TAG_BYTES && tag_len != AMI_DLMS_GCM_TAG_BYTES) ||
         !bytes_ok(aad, aad_len) || !bytes_ok(plaintext, plaintext_len) ||
         (plaintext_len != 0u && ciphertext == NULL) ||
         aad_len > AMI_MAX_INPUT_BYTES || plaintext_len > AMI_MAX_INPUT_BYTES) {
@@ -371,7 +372,7 @@ AmiSecStatus ami_sec_aes_128_gcm_encrypt(
     /* Tag = S ^ AES_K(J0) */
     uint8_t enc_j0[16];
     aes128_encrypt_block(rk, j0, enc_j0);
-    for (int i = 0; i < 16; ++i) tag_128[i] = s[i] ^ enc_j0[i];
+    for (size_t i = 0; i < tag_len; ++i) tag_128[i] = s[i] ^ enc_j0[i];
 
     secure_zeroize(rk, sizeof(rk));
     secure_zeroize(h, sizeof(h));
@@ -391,7 +392,8 @@ AmiSecStatus ami_sec_aes_128_gcm_decrypt(
     uint8_t *plaintext)
 {
     if (key_128 == NULL || nonce_96 == NULL || nonce_len != AMI_GCM_NONCE_BYTES ||
-        tag_128 == NULL || tag_len != AMI_GCM_TAG_BYTES ||
+        tag_128 == NULL ||
+        (tag_len != AMI_GCM_TAG_BYTES && tag_len != AMI_DLMS_GCM_TAG_BYTES) ||
         !bytes_ok(aad, aad_len) || !bytes_ok(ciphertext, ciphertext_len) ||
         (ciphertext_len != 0u && plaintext == NULL) ||
         aad_len > AMI_MAX_INPUT_BYTES || ciphertext_len > AMI_MAX_INPUT_BYTES) {
@@ -417,7 +419,7 @@ AmiSecStatus ami_sec_aes_128_gcm_decrypt(
     uint8_t expected_tag[16];
     for (int i = 0; i < 16; ++i) expected_tag[i] = s[i] ^ enc_j0[i];
 
-    if (!constant_time_memcmp(expected_tag, tag_128, 16u)) {
+    if (!constant_time_memcmp(expected_tag, tag_128, tag_len)) {
         if (plaintext != NULL && ciphertext_len != 0u) {
             secure_zeroize(plaintext, ciphertext_len);
         }
@@ -661,7 +663,7 @@ AmiSecStatus ami_sec_dlms_hls5_gmac_calculate(
         out_proof == NULL || out_len == NULL) {
         return AMI_SEC_INVALID_ARGUMENT;
     }
-    if (out_capacity < AMI_GCM_TAG_BYTES) {
+    if (out_capacity < AMI_DLMS_GCM_TAG_BYTES) {
         return AMI_SEC_INVALID_ARGUMENT;
     }
 
@@ -680,7 +682,7 @@ AmiSecStatus ami_sec_dlms_hls5_gmac_calculate(
     memcpy(aad + 1u + AMI_AES_128_KEY_BYTES, challenge, challenge_len);
     size_t aad_len = 1u + AMI_AES_128_KEY_BYTES + challenge_len;
 
-    uint8_t tag[AMI_GCM_TAG_BYTES];
+    uint8_t tag[AMI_DLMS_GCM_TAG_BYTES];
     AmiSecStatus status = ami_sec_aes_128_gmac(
         auth_key, iv, sizeof(iv), aad, aad_len, tag, sizeof(tag));
     secure_zeroize(aad, sizeof(aad));
@@ -689,18 +691,18 @@ AmiSecStatus ami_sec_dlms_hls5_gmac_calculate(
         return status;
     }
 
-    /* Form full 21-byte proof: SC (1B) || IC (4B) || Tag (16B) if capacity permits */
+    /* Form full 17-byte proof: SC (1B) || IC (4B) || Tag (12B) if capacity permits */
     if (out_capacity >= AMI_DLMS_HLS5_PROOF_LEN) {
         out_proof[0] = AMI_DLMS_HLS5_SC_AUTH_ONLY;
         out_proof[1] = iv[8];
         out_proof[2] = iv[9];
         out_proof[3] = iv[10];
         out_proof[4] = iv[11];
-        memcpy(out_proof + 5u, tag, AMI_GCM_TAG_BYTES);
+        memcpy(out_proof + 5u, tag, AMI_DLMS_GCM_TAG_BYTES);
         *out_len = AMI_DLMS_HLS5_PROOF_LEN;
     } else {
-        memcpy(out_proof, tag, AMI_GCM_TAG_BYTES);
-        *out_len = AMI_GCM_TAG_BYTES;
+        memcpy(out_proof, tag, AMI_DLMS_GCM_TAG_BYTES);
+        *out_len = AMI_DLMS_GCM_TAG_BYTES;
     }
     secure_zeroize(tag, sizeof(tag));
     return AMI_SEC_OK;
@@ -729,7 +731,7 @@ AmiSecStatus ami_sec_dlms_hls5_gmac_verify(
              ((uint32_t)received_proof[3] << 8)  |
              ((uint32_t)received_proof[4]);
         expected_tag = received_proof + 5u;
-    } else if (received_proof_len == AMI_GCM_TAG_BYTES) {
+    } else if (received_proof_len == AMI_DLMS_GCM_TAG_BYTES) {
         ic = 0u;
         expected_tag = received_proof;
     } else {
@@ -749,7 +751,7 @@ AmiSecStatus ami_sec_dlms_hls5_gmac_verify(
     memcpy(aad + 1u + AMI_AES_128_KEY_BYTES, challenge, challenge_len);
     size_t aad_len = 1u + AMI_AES_128_KEY_BYTES + challenge_len;
 
-    uint8_t tag_calc[AMI_GCM_TAG_BYTES];
+    uint8_t tag_calc[AMI_DLMS_GCM_TAG_BYTES];
     AmiSecStatus status = ami_sec_aes_128_gmac(
         auth_key, iv, sizeof(iv), aad, aad_len, tag_calc, sizeof(tag_calc));
     secure_zeroize(aad, sizeof(aad));
@@ -758,7 +760,7 @@ AmiSecStatus ami_sec_dlms_hls5_gmac_verify(
         return status;
     }
 
-    int ok = constant_time_memcmp(expected_tag, tag_calc, AMI_GCM_TAG_BYTES);
+    int ok = constant_time_memcmp(expected_tag, tag_calc, AMI_DLMS_GCM_TAG_BYTES);
     secure_zeroize(tag_calc, sizeof(tag_calc));
     return ok ? AMI_SEC_OK : AMI_SEC_AUTHENTICATION_FAILURE;
 }
@@ -882,7 +884,7 @@ AmiSecStatus ami_sec_aead_encrypt(const AmiSecBackend *backend,
     if (ami_sec_backend_validate(backend) != AMI_SEC_OK ||
         !supported_algorithm(algorithm) || key == 0u || nonce == NULL ||
         nonce_len != AMI_GCM_NONCE_BYTES || tag == NULL ||
-        tag_len != AMI_GCM_TAG_BYTES ||
+        (tag_len != AMI_GCM_TAG_BYTES && tag_len != AMI_DLMS_GCM_TAG_BYTES) ||
         !bytes_ok(aad, aad_len) || !bytes_ok(plaintext, plaintext_len) ||
         (plaintext_len != 0u && ciphertext == NULL) ||
         aad_len > AMI_MAX_INPUT_BYTES || plaintext_len > AMI_MAX_INPUT_BYTES) {
@@ -916,7 +918,7 @@ AmiSecStatus ami_sec_aead_decrypt(const AmiSecBackend *backend,
     if (ami_sec_backend_validate(backend) != AMI_SEC_OK ||
         !supported_algorithm(algorithm) || key == 0u || nonce == NULL ||
         nonce_len != AMI_GCM_NONCE_BYTES || tag == NULL ||
-        tag_len != AMI_GCM_TAG_BYTES ||
+        (tag_len != AMI_GCM_TAG_BYTES && tag_len != AMI_DLMS_GCM_TAG_BYTES) ||
         !bytes_ok(aad, aad_len) || !bytes_ok(ciphertext, ciphertext_len) ||
         (ciphertext_len != 0u && plaintext == NULL) ||
         aad_len > AMI_MAX_INPUT_BYTES || ciphertext_len > AMI_MAX_INPUT_BYTES) {

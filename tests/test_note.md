@@ -18,7 +18,7 @@ Untuk menjalankan satu suite:
 ctest --test-dir tests/build -R AmiDlmsApduTest --output-on-failure
 ```
 
-Daftar 15 suite ditentukan di `tests/CMakeLists.txt`:
+Daftar 16 suite ditentukan di `tests/CMakeLists.txt`:
 1. `AmiCosemTest`: Validasi data model COSEM: Load Profile 23-kanal 15-menit, Instant Profile 11-kanal (`1.96.98.128.0.255`), Event Log #1 standar 2 capture objects (`0.0.99.98.0.255`), Tamper Logbook 3 capture objects (9 Modus Tamper), Power Quality Voltage Log Profiles R/S/T (`1.0.99.14.2..4.255`), Class 6/11/20/22 objects, Multi-tarif, Power Quality, Limiter (Class 71), Disconnect Control (Class 70).
 2. `AmiSecurityTest`: Validasi algoritma AES-128 NIST SP 800-38D KAT, GMAC, constant-time compare, dan exhaustive 1-bit flip tampering test (GMAC tag, AAD, IV).
 3. `AmiDlmsAssociationTest`: State machine asosiasi AARQ/AARE, negosiasi conformance, dan handling disconnect.
@@ -34,6 +34,7 @@ Daftar 15 suite ditentukan di `tests/CMakeLists.txt`:
 13. `AmiBlockTransferTest`: General Block Transfer (GBT) xDLMS Datablock untuk transmisi payload profil/buffer besar.
 14. `AmiDisconnectControlTest`: State machine Disconnect Control Class 70 (Disconnected, Connected, Ready) dan Action method.
 15. `AmiTrustZoneBoundaryTest`: Validasi batas keamanan ARM Cortex-M33 CMSE NonSecure Callable (NSC), penolakan pointer NULL, pencegahan integer pointer overflow (`uptr + size < uptr`), buffer melintasi batas Secure World, dan penolakan izin tulis ke NonSecure Flash.
+16. `AmiBootCryptoTest`: Validasi integritas kriptografis Secure Boot dan manajemen kunci pada `Secure/Core/Src/secure_nsc.c`.
 
 `AmiDlmsApduTest` juga memeriksa bahwa seluruh objek yang diumumkan melalui Association View berhasil menjawab GET attribute 2 menggunakan snapshot pengujian. Baseline objek/protokol yang dites didokumentasikan di [docs/security-rules/PROTOCOL_PROFILE.md](../docs/security-rules/PROTOCOL_PROFILE.md).
 

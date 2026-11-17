@@ -80,6 +80,7 @@ AmiSecStatus ami_sec_aead_decrypt(const AmiSecBackend *backend,
 #define AMI_AES_128_KEY_BYTES           16u
 #define AMI_GCM_NONCE_BYTES             12u
 #define AMI_GCM_TAG_BYTES               16u
+#define AMI_DLMS_GCM_TAG_BYTES          12u
 
 #if !defined(STM32U585xx) && !defined(USE_HAL_DRIVER)
 /* ========================================================================= */
@@ -88,7 +89,7 @@ AmiSecStatus ami_sec_aead_decrypt(const AmiSecBackend *backend,
 
 #define AMI_DLMS_HLS5_GMAC_OID_LEN      7u
 #define AMI_DLMS_HLS5_SC_AUTH_ONLY      0x10u
-#define AMI_DLMS_HLS5_PROOF_LEN         21u  /* SC (1B) + IC (4B) + Tag (16B) */
+#define AMI_DLMS_HLS5_PROOF_LEN         17u  /* SC (1B) + IC (4B) + Tag (12B per DLMS Suite 0) */
 
 /* Raw-key primitives and adapters are only available in host builds. */
 AmiSecStatus ami_sec_aes_128_gcm_encrypt(

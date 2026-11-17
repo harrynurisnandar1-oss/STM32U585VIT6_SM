@@ -44,7 +44,8 @@ static AmiSecStatus suite0_decrypt_cb(void *user, uint8_t security_control,
         .input = ciphertext,
         .in_len = (uint32_t)ciphertext_length,
         .output = plaintext,
-        .tag = (uint8_t *)tag
+        .tag = (uint8_t *)tag,
+        .tag_len = AMI_DLMS_GCM_TAG_LENGTH
     };
     if (SECURE_DLMS_AES_GCM_Process(&params) != 0) {
         return AMI_SEC_AUTHENTICATION_FAILURE;
@@ -106,7 +107,8 @@ static AmiSecStatus suite0_encrypt_cb(void *user, uint8_t security_control,
         .input = plaintext,
         .in_len = (uint32_t)plaintext_length,
         .output = ciphertext,
-        .tag = tag
+        .tag = tag,
+        .tag_len = AMI_DLMS_GCM_TAG_LENGTH
     };
     if (SECURE_DLMS_AES_GCM_Process(&params) != 0) {
         return AMI_SEC_BACKEND_FAILURE;
@@ -310,17 +312,30 @@ int ami_dlms_cipher_suite0_build_glo_request(
         return -1;
     }
 
-    size_t total_wire_len = 6u + plain_len + AMI_DLMS_GCM_TAG_LENGTH;
+    const size_t glo_payload_len = 5u + plain_len + AMI_DLMS_GCM_TAG_LENGTH;
+    const size_t len_octets = (glo_payload_len < 128u) ? 1u : ((glo_payload_len <= 0xFFu) ? 2u : 3u);
+    const size_t total_wire_len = 1u + len_octets + glo_payload_len;
     if (out_capacity < total_wire_len) {
         return -2;
     }
 
-    out_wire[0] = glo_tag;
-    out_wire[1] = ctx->expected_security_control;
-    out_wire[2] = (uint8_t)(invocation_counter >> 24);
-    out_wire[3] = (uint8_t)(invocation_counter >> 16);
-    out_wire[4] = (uint8_t)(invocation_counter >> 8);
-    out_wire[5] = (uint8_t)invocation_counter;
+    size_t pos = 0u;
+    out_wire[pos++] = glo_tag;
+    if (glo_payload_len < 128u) {
+        out_wire[pos++] = (uint8_t)glo_payload_len;
+    } else if (glo_payload_len <= 0xFFu) {
+        out_wire[pos++] = 0x81u;
+        out_wire[pos++] = (uint8_t)glo_payload_len;
+    } else {
+        out_wire[pos++] = 0x82u;
+        out_wire[pos++] = (uint8_t)(glo_payload_len >> 8);
+        out_wire[pos++] = (uint8_t)glo_payload_len;
+    }
+    out_wire[pos++] = ctx->expected_security_control;
+    out_wire[pos++] = (uint8_t)(invocation_counter >> 24);
+    out_wire[pos++] = (uint8_t)(invocation_counter >> 16);
+    out_wire[pos++] = (uint8_t)(invocation_counter >> 8);
+    out_wire[pos++] = (uint8_t)invocation_counter;
 
     /* Build client nonce and AAD */
     uint8_t nonce[AMI_GCM_NONCE_BYTES];
@@ -334,7 +349,7 @@ int ami_dlms_cipher_suite0_build_glo_request(
     aad[0] = ctx->expected_security_control;
     memcpy(&aad[1], ctx->authentication_key, AMI_DLMS_KEY_LENGTH);
 
-    uint8_t *ciphertext = out_wire + 6u;
+    uint8_t *ciphertext = out_wire + pos;
     uint8_t *tag = ciphertext + plain_len;
 
 #if defined(STM32U585xx)
@@ -348,7 +363,8 @@ int ami_dlms_cipher_suite0_build_glo_request(
         .input = plain_apdu,
         .in_len = (uint32_t)plain_len,
         .output = ciphertext,
-        .tag = tag
+        .tag = tag,
+        .tag_len = AMI_DLMS_GCM_TAG_LENGTH
     };
     if (SECURE_DLMS_AES_GCM_Process(&params) != 0) {
         return -3;

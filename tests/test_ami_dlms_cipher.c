@@ -68,8 +68,8 @@ static void test_cipher_suite0_glo_get_roundtrip(void)
                                                     &glo_req_len) == 0);
 
     assert(glo_req[0] == 0xC8u); /* GLO_GET_REQUEST_TAG */
-    assert(glo_req[1] == 0x30u); /* SC */
-    assert(glo_req[5] == 1u);    /* IC = 1 */
+    assert(glo_req[2] == 0x30u); /* SC */
+    assert(glo_req[6] == 1u);    /* IC = 1 */
 
     uint8_t workspace[256];
     uint8_t glo_resp[256];
@@ -84,11 +84,11 @@ static void test_cipher_suite0_glo_get_roundtrip(void)
 
     assert(st == AMI_DLMS_APDU_OK);
     assert(glo_resp[0] == 0xCCu); /* GLO_GET_RESPONSE_TAG */
-    assert(glo_resp[1] == 0x30u); /* SC */
-    assert(glo_resp[5] == 101u);  /* Server TX IC incremented to 101 */
+    assert(glo_resp[2] == 0x30u); /* SC */
+    assert(glo_resp[6] == 101u);  /* Server TX IC incremented to 101 */
 
     /* Decrypt glo_resp to verify plaintext content */
-    const size_t cipher_len = glo_resp_len - 6u - AMI_DLMS_GCM_TAG_LENGTH;
+    const size_t cipher_len = glo_resp_len - 7u - AMI_DLMS_GCM_TAG_LENGTH;
     uint8_t decrypted_resp[128];
     size_t dec_len = 0;
 
@@ -107,8 +107,8 @@ static void test_cipher_suite0_glo_get_roundtrip(void)
     AmiSecStatus sec_st = ami_sec_aes_128_gcm_decrypt(
         TEST_GUEK, srv_nonce, sizeof(srv_nonce),
         srv_aad, sizeof(srv_aad),
-        glo_resp + 6u, cipher_len,
-        glo_resp + 6u + cipher_len, AMI_DLMS_GCM_TAG_LENGTH,
+        glo_resp + 7u, cipher_len,
+        glo_resp + 7u + cipher_len, AMI_DLMS_GCM_TAG_LENGTH,
         decrypted_resp);
 
     assert(sec_st == AMI_SEC_OK);
@@ -296,7 +296,7 @@ static void test_cipher_suite0_port_integration(void)
     /* Payload must be glo-get-response (0xCC) */
     assert(resp_frame.payload_length > 0);
     assert(resp_frame.payload[0] == 0xCCu);
-    assert(resp_frame.payload[1] == 0x30u); /* SC */
+    assert(resp_frame.payload[2] == 0x30u); /* SC */
 
     printf("test_cipher_suite0_port_integration: PASS\n");
 }

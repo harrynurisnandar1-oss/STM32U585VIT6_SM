@@ -25,10 +25,47 @@ static void secure_zeroize(void *memory, size_t length)
 #define GLO_ACTION_REQUEST_TAG 0xCBu
 #define GLO_GET_RESPONSE_TAG 0xCCu
 #define GLO_SET_RESPONSE_TAG 0xCDu
-#define GLO_ACTION_RESPONSE_TAG 0xCEu
+#define GLO_ACTION_RESPONSE_TAG 0xCFu
 #define GET_NORMAL_CHOICE 0x01u
 #define SECURITY_HEADER_LENGTH 5u /* security-control + invocation-counter */
-#define GLO_HEADER_LENGTH 6u /* tag + security header */
+
+static int parse_axdr_len(const uint8_t *bytes, size_t available,
+                          size_t *length, size_t *length_octets)
+{
+    if (bytes == NULL || length == NULL || length_octets == NULL || available == 0u) return 0;
+    const uint8_t first = bytes[0];
+    if ((first & 0x80u) == 0u) {
+        *length = first;
+        *length_octets = 1u;
+        return 1;
+    }
+    const size_t count = first & 0x7fu;
+    if (count == 0u || count > 2u || count > available - 1u) return 0;
+    size_t value = 0u;
+    for (size_t i = 0u; i < count; ++i) {
+        value = (value << 8) | bytes[1u + i];
+    }
+    *length = value;
+    *length_octets = count + 1u;
+    return 1;
+}
+
+static size_t write_axdr_len(uint8_t *out, size_t length)
+{
+    if (length < 128u) {
+        out[0] = (uint8_t)length;
+        return 1u;
+    }
+    if (length <= 0xFFu) {
+        out[0] = 0x81u;
+        out[1] = (uint8_t)length;
+        return 2u;
+    }
+    out[0] = 0x82u;
+    out[1] = (uint8_t)(length >> 8);
+    out[2] = (uint8_t)length;
+    return 3u;
+}
 
 static int encode_data(const AmiCosemData *data, uint8_t *out,
                        size_t capacity, size_t *written)
@@ -608,13 +645,15 @@ static AmiDlmsApduStatus process_get_request_plain(
                                                      response_capacity, response_length);
             }
             if (attribute_id == 3u) {
-                /* associated_partners_id: Structure of 2 elements (client_SAP, server_SAP)
-                 * In DLMS Green Book section 8.3 / Blue Book Class 15:
-                 * client_SAP is integer (type 0x0F), server_SAP is long-unsigned (type 0x12) */
-                static const uint8_t partners[] = {
-                    0x02, 0x02,             /* Structure, 2 elements */
-                    0x0F, 0x16,             /* Integer 8-bit (signed): client SAP 22 (0x16) */
-                    0x12, 0x00, 0x81        /* Long-Unsigned: server SAP 129 (0x0081) */
+                /* associated_partners_id: Structure of 2 elements (client_SAP, server_SAP) */
+                const uint8_t c_sap = (association->client_sap != 0u)
+                    ? (uint8_t)association->client_sap : 22u;
+                const uint16_t s_sap = (association->server_sap != 0u)
+                    ? association->server_sap : 129u;
+                const uint8_t partners[] = {
+                    0x02, 0x02,                                   /* Structure, 2 elements */
+                    0x0F, c_sap,                                  /* Integer 8-bit: client SAP */
+                    0x12, (uint8_t)(s_sap >> 8), (uint8_t)s_sap   /* Long-Unsigned: server SAP */
                 };
                 if (response_capacity < 4u + sizeof(partners)) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
                 response[0] = GET_RESPONSE_TAG;
@@ -626,9 +665,10 @@ static AmiDlmsApduStatus process_get_request_plain(
                 return AMI_DLMS_APDU_OK;
             }
             if (attribute_id == 4u) {
-                /* application_context_name: Object Identifier 2.16.756.5.8.1.1 (LN referencing without ciphering) */
-                static const uint8_t app_context_oid[] = {
-                    0x09, 0x07, 0x60, 0x85, 0x74, 0x05, 0x08, 0x01, 0x01
+                /* application_context_name: 2.16.756.5.8.1.1 (no ciphering) or .1.3 (ciphering) */
+                const uint8_t app_context_oid[] = {
+                    0x09, 0x07, 0x60, 0x85, 0x74, 0x05, 0x08, 0x01,
+                    association->ciphering_enabled ? 0x03u : 0x01u
                 };
                 if (response_capacity < 4u + sizeof(app_context_oid)) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
                 response[0] = GET_RESPONSE_TAG;
@@ -660,9 +700,10 @@ static AmiDlmsApduStatus process_get_request_plain(
                 return AMI_DLMS_APDU_OK;
             }
             if (attribute_id == 6u) {
-                /* authentication_mechanism_name: Object Identifier 2.16.756.5.8.2.0 (lowest level / none) */
-                static const uint8_t auth_mech_oid[] = {
-                    0x09, 0x07, 0x60, 0x85, 0x74, 0x05, 0x08, 0x02, 0x00
+                /* authentication_mechanism_name: 2.16.756.5.8.2.0 (none) or 2.16.756.5.8.2.5 (HLS5) */
+                const uint8_t auth_mech_oid[] = {
+                    0x09, 0x07, 0x60, 0x85, 0x74, 0x05, 0x08, 0x02,
+                    (association->mechanism == AMI_DLMS_AUTH_HLS) ? 0x05u : 0x00u
                 };
                 if (response_capacity < 4u + sizeof(auth_mech_oid)) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
                 response[0] = GET_RESPONSE_TAG;
@@ -796,26 +837,33 @@ AmiDlmsApduStatus ami_dlms_process_ciphered_request(
         return AMI_DLMS_APDU_INVALID_ARGUMENT;
     }
     if (association->state != AMI_DLMS_ASSOC_ASSOCIATED ||
-        association->mechanism != AMI_DLMS_AUTH_HLS) {
+        (association->mechanism != AMI_DLMS_AUTH_HLS && !association->ciphering_enabled)) {
         return AMI_DLMS_APDU_NOT_ASSOCIATED;
     }
     if (cipher->decrypt == NULL || cipher->encrypt == NULL ||
         cipher->accept_rx_counter == NULL || cipher->next_tx_counter == NULL) {
         return AMI_DLMS_APDU_INVALID_ARGUMENT;
     }
-    if (request_length <= GLO_HEADER_LENGTH + AMI_DLMS_GCM_TAG_LENGTH ||
+    if (request_length < 2u ||
         (request[0] != GLO_GET_REQUEST_TAG && request[0] != GLO_SET_REQUEST_TAG &&
          request[0] != GLO_ACTION_REQUEST_TAG)) {
         return AMI_DLMS_APDU_MALFORMED;
     }
-    const uint8_t security_control = request[1];
+    size_t glo_len = 0u, len_octets = 0u;
+    if (!parse_axdr_len(request + 1u, request_length - 1u, &glo_len, &len_octets) ||
+        1u + len_octets + glo_len != request_length ||
+        glo_len <= SECURITY_HEADER_LENGTH + AMI_DLMS_GCM_TAG_LENGTH) {
+        return AMI_DLMS_APDU_MALFORMED;
+    }
+    const uint8_t *glo_body = request + 1u + len_octets;
+    const uint8_t security_control = glo_body[0];
     if (security_control != cipher->expected_security_control ||
         (security_control & 0x30u) != 0x30u) {
         return AMI_DLMS_APDU_AUTHENTICATION_FAILURE;
     }
-    const uint32_t rx_counter = read_u32_be(request + 2u);
-    const size_t ciphertext_length = request_length - GLO_HEADER_LENGTH - AMI_DLMS_GCM_TAG_LENGTH;
-    const uint8_t *ciphertext = request + GLO_HEADER_LENGTH;
+    const uint32_t rx_counter = read_u32_be(glo_body + 1u);
+    const size_t ciphertext_length = glo_len - SECURITY_HEADER_LENGTH - AMI_DLMS_GCM_TAG_LENGTH;
+    const uint8_t *ciphertext = glo_body + SECURITY_HEADER_LENGTH;
     const uint8_t *tag = ciphertext + ciphertext_length;
     if (ciphertext_length > workspace_capacity) return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
 
@@ -903,7 +951,10 @@ AmiDlmsApduStatus ami_dlms_process_ciphered_request(
         return service_status;
     }
 
-    if (response_capacity < GLO_HEADER_LENGTH + response_plain_length + AMI_DLMS_GCM_TAG_LENGTH) {
+    const size_t resp_glo_payload_len = SECURITY_HEADER_LENGTH + response_plain_length + AMI_DLMS_GCM_TAG_LENGTH;
+    const size_t resp_len_octets = (resp_glo_payload_len < 128u) ? 1u : ((resp_glo_payload_len <= 0xFFu) ? 2u : 3u);
+    const size_t resp_header_len = 1u + resp_len_octets + SECURITY_HEADER_LENGTH;
+    if (response_capacity < 1u + resp_len_octets + resp_glo_payload_len) {
         secure_zeroize(workspace, workspace_capacity);
         return AMI_DLMS_APDU_BUFFER_TOO_SMALL;
     }
@@ -916,18 +967,19 @@ AmiDlmsApduStatus ami_dlms_process_ciphered_request(
         ? GLO_GET_RESPONSE_TAG : (expected_plain_tag == SET_REQUEST_TAG
             ? GLO_SET_RESPONSE_TAG : GLO_ACTION_RESPONSE_TAG);
     response[0] = response_tag;
-    response[1] = security_control;
-    write_u32_be(response + 2u, tx_counter);
+    (void)write_axdr_len(response + 1u, resp_glo_payload_len);
+    response[1u + resp_len_octets] = security_control;
+    write_u32_be(response + 2u + resp_len_octets, tx_counter);
     size_t encrypted_length = 0u;
     sec_status = cipher->encrypt(cipher->user, security_control, tx_counter,
-        workspace, response_plain_length, response + GLO_HEADER_LENGTH,
-        response_capacity - GLO_HEADER_LENGTH - AMI_DLMS_GCM_TAG_LENGTH,
-        &encrypted_length, response + GLO_HEADER_LENGTH + response_plain_length);
+        workspace, response_plain_length, response + resp_header_len,
+        response_capacity - resp_header_len - AMI_DLMS_GCM_TAG_LENGTH,
+        &encrypted_length, response + resp_header_len + response_plain_length);
     secure_zeroize(workspace, workspace_capacity);
     if (sec_status != AMI_SEC_OK || encrypted_length != response_plain_length) {
         memset(response, 0, response_capacity);
         return AMI_DLMS_APDU_BACKEND_FAILURE;
     }
-    *response_length = GLO_HEADER_LENGTH + encrypted_length + AMI_DLMS_GCM_TAG_LENGTH;
+    *response_length = resp_header_len + encrypted_length + AMI_DLMS_GCM_TAG_LENGTH;
     return service_status;
 }

@@ -328,7 +328,7 @@ static void test_dc_ciphered_action_request(void)
         glo_resp, sizeof(glo_resp), &glo_resp_len) == AMI_DLMS_APDU_OK);
 
     assert(glo_resp_len > 0);
-    assert(glo_resp[0] == 0xCEu); /* GLO-ACTION-RESPONSE tag */
+    assert(glo_resp[0] == 0xCFu); /* GLO-ACTION-RESPONSE tag */
     assert(dc.control_state == AMI_DISCONNECT_STATE_DISCONNECTED);
     assert(dc.output_state == 0u);
     assert(mock.last_command == AMI_BREAKER_CMD_OPEN);

@@ -300,11 +300,32 @@ static void ensure_secure_storage_init(void)
 
   if (secure_flash_load_keys() != 0) {
     if (!s_secure_keys.is_provisioned) {
+#if !defined(AMI_PRODUCTION_MODE)
+      /* Bench-Test / Firmware-Only Mode: auto-seed Gurux default development keys */
+      static const uint8_t bench_guek[16] = {
+          0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+          0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F
+      };
+      static const uint8_t bench_ak[16] = {
+          0xD0, 0xD1, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7,
+          0xD8, 0xD9, 0xDA, 0xDB, 0xDC, 0xDD, 0xDE, 0xDF
+      };
+      static const uint8_t bench_kek[16] = {
+          0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38,
+          0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36
+      };
+      memcpy(s_secure_keys.master_kek, bench_kek, 16);
+      memcpy(s_secure_keys.guek, bench_guek, 16);
+      memcpy(s_secure_keys.gbek, bench_guek, 16);
+      memcpy(s_secure_keys.ak, bench_ak, 16);
+      s_secure_keys.is_provisioned = 1U;
+#else
       derive_device_unique_kek(s_secure_keys.master_kek);
       /* Operational keys remain unprovisioned (zeroed) until securely injected via RFC 3394 or Factory */
       secure_memzero(s_secure_keys.guek, 16);
       secure_memzero(s_secure_keys.gbek, 16);
       secure_memzero(s_secure_keys.ak, 16);
+#endif
     }
   }
 
@@ -1222,8 +1243,13 @@ CMSE_NS_ENTRY int SECURE_DLMS_AES_GCM_Process(const SECURE_AesGcmParamsTypeDef *
     secure_memzero(&local_params, sizeof(local_params));
     return -1;
   }
+  const uint32_t eff_tag_len = (local_params.tag_len == 12U) ? 12U : 16U;
+  if (local_params.tag_len != 0U && local_params.tag_len != 12U && local_params.tag_len != 16U) {
+    secure_memzero(&local_params, sizeof(local_params));
+    return -1;
+  }
   if (local_params.tag == NULL ||
-      validate_ns_buffer(local_params.tag, 16, local_params.is_encrypt ? 1 : 0) != 0) {
+      validate_ns_buffer(local_params.tag, eff_tag_len, local_params.is_encrypt ? 1 : 0) != 0) {
     secure_memzero(&local_params, sizeof(local_params));
     return -1;
   }
@@ -1263,7 +1289,7 @@ CMSE_NS_ENTRY int SECURE_DLMS_AES_GCM_Process(const SECURE_AesGcmParamsTypeDef *
     memcpy(sec_in, local_params.input, local_params.in_len);
   }
   if (!local_params.is_encrypt) {
-    memcpy(sec_tag, local_params.tag, 16U);
+    memcpy(sec_tag, local_params.tag, eff_tag_len);
   }
 
   int res;
@@ -1273,19 +1299,19 @@ CMSE_NS_ENTRY int SECURE_DLMS_AES_GCM_Process(const SECURE_AesGcmParamsTypeDef *
         local_params.aad_len > 0U ? sec_aad : NULL, local_params.aad_len,
         local_params.in_len > 0U ? sec_in : NULL, local_params.in_len,
         local_params.in_len > 0U ? sec_out : NULL,
-        sec_tag, 16U);
+        sec_tag, eff_tag_len);
     if (res == 0) {
       if (local_params.in_len > 0U) {
         memcpy(local_params.output, sec_out, local_params.in_len);
       }
-      memcpy(local_params.tag, sec_tag, 16U);
+      memcpy(local_params.tag, sec_tag, eff_tag_len);
     }
   } else {
     res = secure_aes_128_gcm_decrypt(
         key_ptr, sec_iv,
         local_params.aad_len > 0U ? sec_aad : NULL, local_params.aad_len,
         local_params.in_len > 0U ? sec_in : NULL, local_params.in_len,
-        sec_tag, 16U,
+        sec_tag, eff_tag_len,
         local_params.in_len > 0U ? sec_out : NULL);
     if (res == 0 && local_params.in_len > 0U) {
       memcpy(local_params.output, sec_out, local_params.in_len);
