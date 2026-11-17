@@ -85,17 +85,19 @@ static size_t make_glo_request(uint8_t *out, uint8_t tag,
                                uint32_t counter, const uint8_t *plain,
                                size_t plain_length, int corrupt_tag)
 {
+    const size_t body_len = 5u + plain_length + AMI_DLMS_GCM_TAG_LENGTH;
     out[0] = tag;
-    out[1] = 0x30u;
-    out[2] = (uint8_t)(counter >> 24);
-    out[3] = (uint8_t)(counter >> 16);
-    out[4] = (uint8_t)(counter >> 8);
-    out[5] = (uint8_t)counter;
-    for (size_t i = 0u; i < plain_length; ++i) out[6u + i] = plain[i] ^ 0xAAu;
-    fake_tag(0x30u, counter, out + 6u, plain_length,
-             out + 6u + plain_length);
-    if (corrupt_tag) out[6u + plain_length] ^= 1u;
-    return 6u + plain_length + AMI_DLMS_GCM_TAG_LENGTH;
+    out[1] = (uint8_t)body_len;
+    out[2] = 0x30u;
+    out[3] = (uint8_t)(counter >> 24);
+    out[4] = (uint8_t)(counter >> 16);
+    out[5] = (uint8_t)(counter >> 8);
+    out[6] = (uint8_t)counter;
+    for (size_t i = 0u; i < plain_length; ++i) out[7u + i] = plain[i] ^ 0xAAu;
+    fake_tag(0x30u, counter, out + 7u, plain_length,
+             out + 7u + plain_length);
+    if (corrupt_tag) out[7u + plain_length] ^= 1u;
+    return 2u + body_len;
 }
 
 static void test_voltage_get_request_response(void)
@@ -450,9 +452,9 @@ static void test_hls_requires_ciphered_apdu_and_returns_ciphered_response(void)
     assert(ami_dlms_process_ciphered_request(&association, &snapshot, &cipher,
         encrypted_request, request_length, workspace, sizeof(workspace),
         encrypted_response, sizeof(encrypted_response), &length) == AMI_DLMS_APDU_OK);
-    assert(length == 6u + 9u + AMI_DLMS_GCM_TAG_LENGTH);
-    assert(encrypted_response[0] == 0xCCu && encrypted_response[1] == 0x30u);
-    assert(encrypted_response[5] == 1u && state.rx_counter == 1u && state.tx_counter == 1u);
+    assert(length == 7u + 9u + AMI_DLMS_GCM_TAG_LENGTH);
+    assert(encrypted_response[0] == 0xCCu && encrypted_response[2] == 0x30u);
+    assert(encrypted_response[6] == 1u && state.rx_counter == 1u && state.tx_counter == 1u);
 }
 
 static void test_cipher_tamper_and_set_read_only_response(void)
@@ -486,8 +488,8 @@ static void test_cipher_tamper_and_set_read_only_response(void)
         encrypted_request, request_length, workspace, sizeof(workspace),
         encrypted_response, sizeof(encrypted_response), &length) ==
         AMI_DLMS_APDU_ACCESS_ERROR);
-    assert(length == 6u + 4u + AMI_DLMS_GCM_TAG_LENGTH);
-    assert(encrypted_response[0] == 0xCDu && encrypted_response[5] == 1u);
+    assert(length == 7u + 4u + AMI_DLMS_GCM_TAG_LENGTH);
+    assert(encrypted_response[0] == 0xCDu && encrypted_response[6] == 1u);
     assert(ami_dlms_process_ciphered_request(&association, &snapshot, &cipher,
         encrypted_request, request_length, workspace, sizeof(workspace),
         encrypted_response, sizeof(encrypted_response), &length) ==
@@ -524,10 +526,10 @@ static void test_secure_setup_key_transfer_action(void)
         encrypted_response, sizeof(encrypted_response), &response_length);
     assert(action_status == AMI_DLMS_APDU_OK);
     assert(state.key_transfer_calls == 1u && state.transferred_key_count == 1u);
-    assert(encrypted_response[0] == 0xCEu && response_length == 6u + 5u + AMI_DLMS_GCM_TAG_LENGTH);
-    assert((encrypted_response[6] ^ 0xAAu) == 0xC7u);
+    assert(encrypted_response[0] == 0xCFu && response_length == 7u + 5u + AMI_DLMS_GCM_TAG_LENGTH);
+    assert((encrypted_response[7] ^ 0xAAu) == 0xC7u);
     for (size_t i = 0u; i < sizeof(workspace); ++i) assert(workspace[i] == 0u);
-    assert((encrypted_response[9] ^ 0xAAu) == 0u); /* action-result success */
+    assert((encrypted_response[10] ^ 0xAAu) == 0u); /* action-result success */
 
     /* A plain key-transfer Action APDU is never accepted after HLS. */
     assert(ami_dlms_process_get_request(&association, &snapshot, plain_action,

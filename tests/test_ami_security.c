@@ -122,9 +122,11 @@ static void test_nonce_and_tag_bounds_enforcement(void) {
     assert(ami_sec_aead_encrypt(&backend, AMI_AEAD_AES_128_GCM, 1,
         nonce, 16, NULL, 0, plain, 8, cipher, tag, 16) == AMI_SEC_INVALID_ARGUMENT);
 
-    // Tag must be strictly 16 bytes
+    // Tag must be 12 or 16 bytes
     assert(ami_sec_aead_encrypt(&backend, AMI_AEAD_AES_128_GCM, 1,
-        nonce, 12, NULL, 0, plain, 8, cipher, tag, 12) == AMI_SEC_INVALID_ARGUMENT);
+        nonce, 12, NULL, 0, plain, 8, cipher, tag, 8) == AMI_SEC_INVALID_ARGUMENT);
+    assert(ami_sec_aead_encrypt(&backend, AMI_AEAD_AES_128_GCM, 1,
+        nonce, 12, NULL, 0, plain, 8, cipher, tag, 12) == AMI_SEC_OK);
 
     // Valid 12-byte nonce & 16-byte tag -> SUCCESS
     assert(ami_sec_aead_encrypt(&backend, AMI_AEAD_AES_128_GCM, 1,
@@ -400,15 +402,15 @@ static void test_dlms_hls5_gmac_calculate_and_verify(void) {
     assert(ami_sec_dlms_hls5_gmac_verify(
         auth_key, sys_title, bad_proof, proof_len, server_challenge, sizeof(server_challenge)) == AMI_SEC_AUTHENTICATION_FAILURE);
 
-    // 8. Raw 16-byte tag output format (when capacity is exactly 16)
+    // 8. Raw 12-byte tag output format (when capacity is 12..16)
     uint8_t raw_tag[16] = {0};
     size_t raw_tag_len = 0;
     assert(ami_sec_dlms_hls5_gmac_calculate(
         auth_key, sys_title, ic, server_challenge, sizeof(server_challenge),
-        raw_tag, 16, &raw_tag_len) == AMI_SEC_OK);
-    assert(raw_tag_len == 16);
-    // Raw tag matches tag portion of 21-byte proof
-    assert(memcmp(raw_tag, proof + 5, 16) == 0);
+        raw_tag, 12, &raw_tag_len) == AMI_SEC_OK);
+    assert(raw_tag_len == AMI_DLMS_GCM_TAG_BYTES);
+    // Raw tag matches tag portion of 17-byte proof
+    assert(memcmp(raw_tag, proof + 5, AMI_DLMS_GCM_TAG_BYTES) == 0);
 
     printf("  [PASS] test_dlms_hls5_gmac_calculate_and_verify\n");
 }

@@ -129,7 +129,7 @@ Rencana kerja 26-minggu paket E2 (Protokol & Data Model Smart Meter AMI 3-Fasa) 
 Repositori ini dirancang *reproducible* dan dapat langsung diverifikasi di lingkungan host Windows maupun Linux/Docker container.
 
 ### 1. Uji Unit Host Native (CTest)
-Menjalankan seluruh 15 test suite secara deterministik:
+Menjalankan seluruh 16 test suite secara deterministik:
 ```powershell
 # Konfigurasi dan kompilasi menggunakan Ninja
 cmake -S tests -B tests/build -G Ninja
@@ -138,7 +138,7 @@ cmake --build tests/build --parallel
 # Jalankan seluruh test suite
 ctest --test-dir tests/build --output-on-failure
 ```
-*Hasil: Seluruh 15 test suite lulus 100% (Passed).*
+*Hasil: Seluruh 16 test suite lulus 100% (Passed).*
 
 Untuk menjalankan analisis **Code Coverage LCOV**:
 ```powershell
@@ -197,10 +197,11 @@ Untuk menandatangani biner NonSecure (`STM32U585VIT6_SM_NS.bin`) dengan kunci EC
 ├── Secure/                         # Ruang eksekusi Secure World (TrustZone)
 │   └── Core/Src/secure_nsc.c       # Gerbang NonSecure Callable (NSC) & Kriptografi
 ├── Secure_nsclib/                  # Header publik antarmuka NSC
-├── tests/                          # 15 Test Suite Host CTest & Simulator
+├── tests/                          # 16 Test Suite Host CTest & Simulator
 │   ├── test_ami_cosem.c            # Verifikasi 66 objek COSEM & Load Profile
 │   ├── test_ami_anti_bruteforce.c  # Pengujian lockout & backoff eksponensial
 │   ├── test_ami_trustzone_boundary.c # Pengujian batas memori CMSE NonSecure/Secure
+│   ├── test_ami_boot_crypto.c      # Pengujian Secure Boot crypto & key management
 │   └── host-tools/gurux_simulator.c# Simulator HDLC-over-TCP port 4059
 ├── docker_test/                    # Lingkungan pengujian terisolasi Docker
 ├── docs/                           # Dokumentasi teknis mendalam

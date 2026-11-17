@@ -43,7 +43,7 @@ typedef struct {
     AmiDlmsAssociationSecurity security;
     int use_custom_security;
     const AmiDlmsCipherBackend *cipher_backend;
-    uint8_t cipher_workspace[AMI_HDLC_MAX_FRAME_BYTES];
+    uint8_t cipher_workspace[AMI_BT_MAX_CACHE_BUFFER_SIZE];
     AmiCosemRegisterSnapshot snapshot;
     AmiDlmsPortTxFunc tx_func;
     AmiDlmsPortSnapshotFunc snapshot_provider;

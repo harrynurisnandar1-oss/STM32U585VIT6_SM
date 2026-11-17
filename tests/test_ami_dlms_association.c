@@ -237,6 +237,126 @@ static void test_real_hls5_gmac_association_handshake(void)
     assert(association.state == AMI_DLMS_ASSOC_ERROR);
 }
 
+typedef struct {
+    uint8_t guek[16];
+    uint8_t ak[16];
+    uint8_t server_title[8];
+    uint8_t client_title[8];
+    uint32_t tx_ic;
+} CipherInitCtx;
+
+static int test_decrypt_init(void *user, const uint8_t *cst, size_t cst_len,
+                             uint8_t sc, uint32_t ic, const uint8_t *ct, size_t ct_len,
+                             const uint8_t *tag, size_t tag_len,
+                             uint8_t *pt, size_t pt_cap, size_t *pt_len)
+{
+    CipherInitCtx *c = (CipherInitCtx *)user;
+    if (cst_len != 8u || memcmp(cst, c->client_title, 8u) != 0 || pt_cap < ct_len) return 0;
+    uint8_t nonce[12];
+    memcpy(nonce, cst, 8u);
+    nonce[8] = (uint8_t)(ic >> 24); nonce[9] = (uint8_t)(ic >> 16);
+    nonce[10] = (uint8_t)(ic >> 8); nonce[11] = (uint8_t)ic;
+    uint8_t aad[17];
+    aad[0] = sc; memcpy(aad + 1, c->ak, 16u);
+    if (ami_sec_aes_128_gcm_decrypt(c->guek, nonce, 12u, aad, 17u,
+            ct, ct_len, tag, tag_len, pt) != AMI_SEC_OK) return 0;
+    *pt_len = ct_len;
+    return 1;
+}
+
+static int test_encrypt_init(void *user, uint8_t sc, uint32_t *ic_out,
+                             const uint8_t *pt, size_t pt_len,
+                             uint8_t *ct, size_t ct_cap, size_t *ct_len,
+                             uint8_t *tag, size_t tag_len)
+{
+    CipherInitCtx *c = (CipherInitCtx *)user;
+    if (ct_cap < pt_len) return 0;
+    uint32_t ic = ++c->tx_ic;
+    *ic_out = ic;
+    uint8_t nonce[12];
+    memcpy(nonce, c->server_title, 8u);
+    nonce[8] = (uint8_t)(ic >> 24); nonce[9] = (uint8_t)(ic >> 16);
+    nonce[10] = (uint8_t)(ic >> 8); nonce[11] = (uint8_t)ic;
+    uint8_t aad[17];
+    aad[0] = sc; memcpy(aad + 1, c->ak, 16u);
+    if (ami_sec_aes_128_gcm_encrypt(c->guek, nonce, 12u, aad, 17u,
+            pt, pt_len, ct, tag, tag_len) != AMI_SEC_OK) return 0;
+    *ct_len = pt_len;
+    return 1;
+}
+
+static void test_ln_with_ciphering_and_glo_initiate(void)
+{
+    static const uint8_t hls5_oid[] = {0x60u, 0x85u, 0x74u, 0x05u, 0x08u, 0x02u, 0x05u};
+    CipherInitCtx cctx = {
+        .guek = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15},
+        .ak = {0xD0,0xD1,0xD2,0xD3,0xD4,0xD5,0xD6,0xD7,0xD8,0xD9,0xDA,0xDB,0xDC,0xDD,0xDE,0xDF},
+        .server_title = {0x4D,0x4D,0x4D,0,0,0,0,1},
+        .client_title = {0x47,0x58,0x44,0x4C,0x4D,0x53,0x30,0x31},
+        .tx_ic = 10u
+    };
+    const uint8_t plain_init_req[] = {
+        0x01u, 0x00u, 0x00u, 0x00u, 0x06u, 0x5Fu, 0x1Fu, 0x04u, 0x00u,
+        0x00u, 0x10u, 0x1Du, 0x01u, 0xF4u
+    };
+    uint8_t nonce[12] = {0x47,0x58,0x44,0x4C,0x4D,0x53,0x30,0x31, 0,0,0,1};
+    uint8_t aad[17]; aad[0] = 0x30u; memcpy(aad + 1, cctx.ak, 16u);
+    uint8_t ct[14], tag[12];
+    assert(ami_sec_aes_128_gcm_encrypt(cctx.guek, nonce, 12u, aad, 17u,
+        plain_init_req, sizeof(plain_init_req), ct, tag, sizeof(tag)) == AMI_SEC_OK);
+
+    /* Build AARQ with 2.16.756.5.8.1.3, calling-AP-title (0xA6), HLS5, glo_initiateRequest (0x21) */
+    uint8_t aarq[128];
+    size_t n = 0u;
+    aarq[n++] = 0x60u;
+    size_t len_pos = n++;
+    /* 0xA1 application context 2.16.756.5.8.1.3 */
+    const uint8_t ctx_field[] = {0xA1, 0x09, 0x06, 0x07, 0x60, 0x85, 0x74, 0x05, 0x08, 0x01, 0x03};
+    memcpy(aarq + n, ctx_field, sizeof(ctx_field)); n += sizeof(ctx_field);
+    /* 0xA6 calling-AP-title */
+    aarq[n++] = 0xA6u; aarq[n++] = 10u; aarq[n++] = 0x04u; aarq[n++] = 8u;
+    memcpy(aarq + n, cctx.client_title, 8u); n += 8u;
+    /* 0x8A, 0x8B, 0xAC */
+    const uint8_t acse_auth[] = {0x8A, 0x02, 0x07, 0x80, 0x8B, 0x07, 0x60, 0x85, 0x74, 0x05, 0x08, 0x02, 0x05};
+    memcpy(aarq + n, acse_auth, sizeof(acse_auth)); n += sizeof(acse_auth);
+    aarq[n++] = 0xACu; aarq[n++] = 18u; aarq[n++] = 0x80u; aarq[n++] = 16u;
+    for (uint8_t i = 0u; i < 16u; ++i) aarq[n++] = (uint8_t)(0x10u + i);
+    /* 0xBE user-information with 0x21 glo_initiateRequest */
+    const size_t glo_len = 5u + sizeof(ct) + sizeof(tag);
+    const size_t ui_len = 2u + glo_len;
+    aarq[n++] = 0xBEu; aarq[n++] = (uint8_t)(2u + ui_len);
+    aarq[n++] = 0x04u; aarq[n++] = (uint8_t)ui_len;
+    aarq[n++] = 0x21u; aarq[n++] = (uint8_t)glo_len;
+    aarq[n++] = 0x30u; aarq[n++] = 0u; aarq[n++] = 0u; aarq[n++] = 0u; aarq[n++] = 1u;
+    memcpy(aarq + n, ct, sizeof(ct)); n += sizeof(ct);
+    memcpy(aarq + n, tag, sizeof(tag)); n += sizeof(tag);
+    aarq[len_pos] = (uint8_t)(n - 2u);
+
+    AmiDlmsAssociation assoc = {0};
+    const AmiDlmsAssociationSecurity sec = {
+        .user = &cctx,
+        .allow_ciphering = 1u,
+        .server_system_title = cctx.server_title,
+        .server_system_title_length = 8u,
+        .random = mock_random,
+        .hls_proof = mock_hls_proof,
+        .decrypt_initiate = test_decrypt_init,
+        .encrypt_initiate = test_encrypt_init,
+        .hls_mechanism_oid = hls5_oid,
+        .hls_mechanism_oid_length = sizeof(hls5_oid)
+    };
+    uint8_t aare[256];
+    size_t aare_len = 0u;
+    assert(ami_dlms_process_aarq_with_security(&assoc, &sec, aarq, n,
+        aare, sizeof(aare), &aare_len) == AMI_DLMS_ASSOC_OK);
+    assert(assoc.state == AMI_DLMS_ASSOC_AUTH_PENDING);
+    assert(assoc.ciphering_enabled == 1u);
+    assert(assoc.client_system_title_length == 8u);
+    assert(memcmp(assoc.client_system_title, cctx.client_title, 8u) == 0);
+    assert(aare[0] == 0x61u);
+    assert(aare_len > 60u);
+}
+
 int main(void)
 {
     test_valid_aarq_is_accepted();
@@ -246,6 +366,7 @@ int main(void)
     test_unsolicited_aarq_does_not_tear_down_session();
     test_hls_challenge_exchange();
     test_real_hls5_gmac_association_handshake();
+    test_ln_with_ciphering_and_glo_initiate();
     puts("DLMS association tests passed.");
     return 0;
 }

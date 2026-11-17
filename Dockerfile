@@ -7,6 +7,7 @@ RUN apk update && \
     apk add --no-cache build-base cmake ninja
 
 WORKDIR /workspace
+COPY Secure /workspace/Secure
 COPY NonSecure /workspace/NonSecure
 COPY tests /workspace/tests
 

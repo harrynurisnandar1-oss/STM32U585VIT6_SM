@@ -2,8 +2,9 @@
 <ArrayOfGXDLMSDevice xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="Gurux1">
   <GXDLMSDevice>
     <Password />
+    <Security>AuthenticationEncryption</Security>
     <KeyAgreementScheme>0</KeyAgreementScheme>
-    <SystemTitle>4142434445464748</SystemTitle>
+    <SystemTitle>4D4D4D0000000001</SystemTitle>
     <ServerSystemTitle />
     <DedicatedKey />
     <BlockCipherKey>000102030405060708090A0B0C0D0E0F</BlockCipherKey>
@@ -13,7 +14,6 @@
     <Signing>0</Signing>
     <LogicalAddress>1</LogicalAddress>
     <DateTimeSkips>256</DateTimeSkips>
-    <ClientAddress>22</ClientAddress>
     <MacDestinationAddress>0</MacDestinationAddress>
     <PduSize>512</PduSize>
     <InactivityTimeout>0</InactivityTimeout>

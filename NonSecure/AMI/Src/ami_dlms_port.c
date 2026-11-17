@@ -105,6 +105,8 @@ static AmiDlmsPortStatus dispatch_i_frame(AmiDlmsPortContext *ctx, const HdlcFra
              */
             return AMI_DLMS_PORT_OK;
         }
+        ctx->association.client_sap = frame->source_sap;
+        ctx->association.server_sap = frame->destination_sap;
     } else if (apdu[0] == 0x62u) {
         /* ACSE RLRQ (Release Request) -> Reply RLRE */
         ami_dlms_association_reset(&ctx->association);
@@ -237,6 +239,109 @@ static AmiDlmsPortStatus dispatch_i_frame(AmiDlmsPortContext *ctx, const HdlcFra
             apdu_response[4] = 0x03u;
             apdu_resp_len = 5u;
         }
+    } else if (apdu[0] == 0xCBu &&
+               ctx->association.state == AMI_DLMS_ASSOC_AUTH_PENDING &&
+               ctx->cipher_backend != NULL &&
+               ctx->cipher_backend->decrypt != NULL &&
+               ctx->cipher_backend->encrypt != NULL &&
+               ctx->cipher_backend->accept_rx_counter != NULL &&
+               ctx->cipher_backend->next_tx_counter != NULL) {
+        /* Encrypted HLS Pass 3: glo-action (0xCB) carrying reply_to_HLS_authentication */
+        size_t glo_len = 0u, len_octets = 0u;
+        const uint8_t first_len = (apdu_len >= 2u) ? apdu[1] : 0u;
+        if (apdu_len < 2u) return AMI_DLMS_PORT_FRAME_ERROR;
+        if ((first_len & 0x80u) == 0u) {
+            glo_len = first_len; len_octets = 1u;
+        } else {
+            size_t cnt = first_len & 0x7Fu;
+            if (cnt == 0u || cnt > 2u || apdu_len < 2u + cnt) return AMI_DLMS_PORT_FRAME_ERROR;
+            len_octets = 1u + cnt;
+            for (size_t i = 0u; i < cnt; ++i) glo_len = (glo_len << 8) | apdu[2u + i];
+        }
+        if (1u + len_octets + glo_len != apdu_len || glo_len <= 5u + AMI_DLMS_GCM_TAG_LENGTH) {
+            return AMI_DLMS_PORT_FRAME_ERROR;
+        }
+        const uint8_t *glo_body = apdu + 1u + len_octets;
+        const uint8_t sc = glo_body[0];
+        const uint32_t rx_ic = ((uint32_t)glo_body[1] << 24) | ((uint32_t)glo_body[2] << 16) |
+                               ((uint32_t)glo_body[3] << 8) | (uint32_t)glo_body[4];
+        const size_t ct_len = glo_len - 5u - AMI_DLMS_GCM_TAG_LENGTH;
+        const uint8_t *ct = glo_body + 5u;
+        const uint8_t *tag = ct + ct_len;
+        size_t plain_len = 0u;
+        if (sc != ctx->cipher_backend->expected_security_control ||
+            ct_len > sizeof(ctx->cipher_workspace) ||
+            ctx->cipher_backend->decrypt(ctx->cipher_backend->user, sc, rx_ic,
+                ct, ct_len, tag, ctx->cipher_workspace, sizeof(ctx->cipher_workspace),
+                &plain_len) != AMI_SEC_OK ||
+            ctx->cipher_backend->accept_rx_counter(ctx->cipher_backend->user, rx_ic) != 1) {
+            memset(ctx->cipher_workspace, 0, sizeof(ctx->cipher_workspace));
+            return AMI_DLMS_PORT_FRAME_ERROR;
+        }
+        const uint8_t *plain = ctx->cipher_workspace;
+        uint8_t plain_resp[96];
+        size_t plain_resp_len = 0u;
+        if (plain_len >= 14u && plain[0] == 0xC3u && plain[1] == 0x01u &&
+            plain[3] == 0x00u && plain[4] == 0x0Fu &&
+            plain[5] == 0x00u && plain[6] == 0x00u && plain[7] == 0x28u &&
+            plain[8] == 0x00u && plain[9] == 0x00u && plain[10] == 0xFFu &&
+            plain[11] == 0x01u && plain[12] == 0x09u &&
+            plain_len >= 14u + plain[13]) {
+            uint8_t server_proof[64];
+            size_t server_proof_len = 0u;
+            AmiDlmsAssociationStatus hls_st = ami_dlms_process_hls_reply(
+                &ctx->association, &ctx->security,
+                &plain[14], plain[13],
+                server_proof, sizeof(server_proof), &server_proof_len);
+            if (hls_st == AMI_DLMS_ASSOC_OK) {
+                if (ctx->anti_bruteforce != NULL) {
+                    ami_anti_bruteforce_record_success(ctx->anti_bruteforce);
+                }
+                plain_resp[0] = 0xC7u;
+                plain_resp[1] = 0x01u;
+                plain_resp[2] = plain[2];
+                plain_resp[3] = 0x00u;
+                plain_resp[4] = 0x01u;
+                plain_resp[5] = 0x09u;
+                plain_resp[6] = (uint8_t)server_proof_len;
+                memcpy(&plain_resp[7], server_proof, server_proof_len);
+                plain_resp_len = 7u + server_proof_len;
+            } else {
+                if (ctx->anti_bruteforce != NULL) {
+                    (void)ami_anti_bruteforce_record_failure(ctx->anti_bruteforce, ctx->current_time_sec);
+                }
+                plain_resp[0] = 0xC7u; plain_resp[1] = 0x01u; plain_resp[2] = plain[2];
+                plain_resp[3] = 0x03u; plain_resp[4] = 0x00u;
+                plain_resp_len = 5u;
+            }
+        } else {
+            plain_resp[0] = 0xC7u; plain_resp[1] = 0x01u;
+            plain_resp[2] = (plain_len > 2u) ? plain[2] : 0u;
+            plain_resp[3] = 0x01u; plain_resp[4] = 0x00u;
+            plain_resp_len = 5u;
+        }
+        memset(ctx->cipher_workspace, 0, sizeof(ctx->cipher_workspace));
+        uint32_t tx_ic = 0u;
+        if (ctx->cipher_backend->next_tx_counter(ctx->cipher_backend->user, &tx_ic) != 1) {
+            return AMI_DLMS_PORT_FRAME_ERROR;
+        }
+        const size_t resp_glo_len = 5u + plain_resp_len + AMI_DLMS_GCM_TAG_LENGTH;
+        apdu_response[0] = 0xCFu; /* glo-action-response */
+        apdu_response[1] = (uint8_t)resp_glo_len;
+        apdu_response[2] = sc;
+        apdu_response[3] = (uint8_t)(tx_ic >> 24);
+        apdu_response[4] = (uint8_t)(tx_ic >> 16);
+        apdu_response[5] = (uint8_t)(tx_ic >> 8);
+        apdu_response[6] = (uint8_t)tx_ic;
+        size_t enc_len = 0u;
+        if (ctx->cipher_backend->encrypt(ctx->cipher_backend->user, sc, tx_ic,
+                plain_resp, plain_resp_len,
+                apdu_response + 7u, sizeof(apdu_response) - 7u - AMI_DLMS_GCM_TAG_LENGTH,
+                &enc_len, apdu_response + 7u + plain_resp_len) != AMI_SEC_OK ||
+            enc_len != plain_resp_len) {
+            return AMI_DLMS_PORT_FRAME_ERROR;
+        }
+        apdu_resp_len = 2u + resp_glo_len;
     } else if (ctx->association.state != AMI_DLMS_ASSOC_ASSOCIATED) {
         /* Unassociated state handling per DLMS CTT T_APPL_IDLE_N1 */
         if (apdu[0] == 0x05u) {
@@ -321,6 +426,124 @@ static AmiDlmsPortStatus dispatch_i_frame(AmiDlmsPortContext *ctx, const HdlcFra
         apdu_response[2] = apdu_len > 2u ? apdu[2] : 0u;
         apdu_response[3] = 0x03u;
         apdu_resp_len = 4u;
+    } else if (apdu[0] == 0xC8u &&
+               ctx->cipher_backend != NULL &&
+               ctx->cipher_backend->decrypt != NULL &&
+               ctx->cipher_backend->encrypt != NULL &&
+               ctx->cipher_backend->accept_rx_counter != NULL &&
+               ctx->cipher_backend->next_tx_counter != NULL &&
+               ctx->block_transfer_threshold > 0u) {
+        /* Encrypted GET (0xC8) with Block Transfer support */
+        size_t glo_len = 0u, len_octets = 0u;
+        const uint8_t first_len = (apdu_len >= 2u) ? apdu[1] : 0u;
+        if (apdu_len < 2u) return AMI_DLMS_PORT_FRAME_ERROR;
+        if ((first_len & 0x80u) == 0u) {
+            glo_len = first_len; len_octets = 1u;
+        } else {
+            size_t cnt = first_len & 0x7Fu;
+            if (cnt == 0u || cnt > 2u || apdu_len < 2u + cnt) return AMI_DLMS_PORT_FRAME_ERROR;
+            len_octets = 1u + cnt;
+            for (size_t i = 0u; i < cnt; ++i) glo_len = (glo_len << 8) | apdu[2u + i];
+        }
+        if (1u + len_octets + glo_len != apdu_len || glo_len <= 5u + AMI_DLMS_GCM_TAG_LENGTH) {
+            return AMI_DLMS_PORT_FRAME_ERROR;
+        }
+        const uint8_t *glo_body = apdu + 1u + len_octets;
+        const uint8_t sc = glo_body[0];
+        const uint32_t rx_ic = ((uint32_t)glo_body[1] << 24) | ((uint32_t)glo_body[2] << 16) |
+                               ((uint32_t)glo_body[3] << 8) | (uint32_t)glo_body[4];
+        const size_t ct_len = glo_len - 5u - AMI_DLMS_GCM_TAG_LENGTH;
+        const uint8_t *ct = glo_body + 5u;
+        const uint8_t *tag = ct + ct_len;
+        size_t plain_len = 0u;
+        if (sc != ctx->cipher_backend->expected_security_control ||
+            ct_len > sizeof(ctx->cipher_workspace) ||
+            ctx->cipher_backend->decrypt(ctx->cipher_backend->user, sc, rx_ic,
+                ct, ct_len, tag, ctx->cipher_workspace, sizeof(ctx->cipher_workspace),
+                &plain_len) != AMI_SEC_OK ||
+            ctx->cipher_backend->accept_rx_counter(ctx->cipher_backend->user, rx_ic) != 1) {
+            memset(ctx->cipher_workspace, 0, sizeof(ctx->cipher_workspace));
+            return AMI_DLMS_PORT_FRAME_ERROR;
+        }
+        if (ctx->snapshot_provider != NULL) {
+            (void)ctx->snapshot_provider(&ctx->snapshot, ctx->user_data);
+        }
+        uint8_t plain_resp[AMI_BT_MAX_CACHE_BUFFER_SIZE];
+        size_t plain_resp_len = 0u;
+        if (plain_len >= 2u && ctx->cipher_workspace[0] == 0xC0u && ctx->cipher_workspace[1] == 0x02u) {
+            uint8_t req_invoke_id = 0u;
+            uint32_t req_block_num = 0u;
+            if (ami_bt_parse_get_next_block_request(ctx->cipher_workspace, plain_len,
+                                                    &req_invoke_id, &req_block_num)) {
+                int is_last = 0;
+                uint32_t target_block = req_block_num;
+                if (target_block == ctx->block_transfer.current_block_number) {
+                    target_block = ctx->block_transfer.current_block_number + 1u;
+                }
+                if (ami_bt_build_get_response_block(&ctx->block_transfer, target_block,
+                                                    plain_resp, sizeof(plain_resp),
+                                                    &plain_resp_len, &is_last) != AMI_BT_OK) {
+                    plain_resp_len = ami_bt_build_error_response_block(
+                        req_invoke_id, target_block, 2u, plain_resp, sizeof(plain_resp));
+                }
+            }
+        } else {
+            AmiDlmsApduStatus get_st = ami_dlms_process_get_request(
+                &ctx->association, &ctx->snapshot,
+                ctx->cipher_workspace, plain_len,
+                plain_resp, sizeof(plain_resp), &plain_resp_len);
+            if (get_st == AMI_DLMS_APDU_OK &&
+                plain_resp_len > ctx->block_transfer_threshold &&
+                plain_resp[0] == 0xC4u && plain_resp[1] == 0x01u && plain_resp[3] == 0x00u) {
+                uint8_t invoke_id = plain_resp[2];
+                if (ami_bt_start_get_transfer(&ctx->block_transfer, invoke_id,
+                                              &plain_resp[4], plain_resp_len - 4u) == AMI_BT_OK) {
+                    int is_last = 0;
+                    (void)ami_bt_build_get_response_block(&ctx->block_transfer, 1u,
+                                                          plain_resp, sizeof(plain_resp),
+                                                          &plain_resp_len, &is_last);
+                }
+            }
+        }
+        memset(ctx->cipher_workspace, 0, sizeof(ctx->cipher_workspace));
+        if (plain_resp_len == 0u) {
+            return AMI_DLMS_PORT_FRAME_ERROR;
+        }
+        uint32_t tx_ic = 0u;
+        if (ctx->cipher_backend->next_tx_counter(ctx->cipher_backend->user, &tx_ic) != 1) {
+            return AMI_DLMS_PORT_FRAME_ERROR;
+        }
+        const size_t resp_glo_len = 5u + plain_resp_len + AMI_DLMS_GCM_TAG_LENGTH;
+        const size_t resp_len_octets = (resp_glo_len < 128u) ? 1u : ((resp_glo_len <= 0xFFu) ? 2u : 3u);
+        if (sizeof(apdu_response) < 1u + resp_len_octets + resp_glo_len) {
+            return AMI_DLMS_PORT_FRAME_ERROR;
+        }
+        size_t pos = 0u;
+        apdu_response[pos++] = 0xCCu; /* glo-get-response */
+        if (resp_glo_len < 128u) {
+            apdu_response[pos++] = (uint8_t)resp_glo_len;
+        } else if (resp_glo_len <= 0xFFu) {
+            apdu_response[pos++] = 0x81u;
+            apdu_response[pos++] = (uint8_t)resp_glo_len;
+        } else {
+            apdu_response[pos++] = 0x82u;
+            apdu_response[pos++] = (uint8_t)(resp_glo_len >> 8);
+            apdu_response[pos++] = (uint8_t)resp_glo_len;
+        }
+        apdu_response[pos++] = sc;
+        apdu_response[pos++] = (uint8_t)(tx_ic >> 24);
+        apdu_response[pos++] = (uint8_t)(tx_ic >> 16);
+        apdu_response[pos++] = (uint8_t)(tx_ic >> 8);
+        apdu_response[pos++] = (uint8_t)tx_ic;
+        size_t enc_len = 0u;
+        if (ctx->cipher_backend->encrypt(ctx->cipher_backend->user, sc, tx_ic,
+                plain_resp, plain_resp_len,
+                apdu_response + pos, sizeof(apdu_response) - pos - AMI_DLMS_GCM_TAG_LENGTH,
+                &enc_len, apdu_response + pos + plain_resp_len) != AMI_SEC_OK ||
+            enc_len != plain_resp_len) {
+            return AMI_DLMS_PORT_FRAME_ERROR;
+        }
+        apdu_resp_len = pos + enc_len + AMI_DLMS_GCM_TAG_LENGTH;
     } else if (apdu[0] == 0xC8u || apdu[0] == 0xC9u || apdu[0] == 0xCBu) {
         /* Ciphered APDUs (Security Suite 0): glo-get (0xC8), glo-set (0xC9), glo-action (0xCB) */
         if (ctx->cipher_backend == NULL) {
@@ -576,21 +799,82 @@ __attribute__((weak)) int ami_dlms_hardware_get_snapshot(AmiCosemRegisterSnapsho
         return 0; /* Metrology invalid or communication error: fail-closed */
     }
 
-#if defined(STM32U585xx)
+#if defined(STM32U585xx) && defined(AMI_PRODUCTION_MODE)
     /* In production target firmware, refuse to fabricate fake measurement data */
     return 0;
 #else
-    /* Development snapshot strictly for host CTest suite simulation */
-    snapshot->valid_mask = AMI_COSEM_VALID_VOLTAGE_A | AMI_COSEM_VALID_CURRENT_A |
-                           AMI_COSEM_VALID_ACTIVE_IMPORT | AMI_COSEM_VALID_CLOCK;
+    /* Bench-Test / Firmware-Only Snapshot (no physical ADE9000/Relay required) */
+    memset(snapshot, 0, sizeof(*snapshot));
     snapshot->phase_voltage_millivolts[0] = 230000u;
-    snapshot->phase_current_milliamps[0] = 5000u;
-    snapshot->active_import_wh = 1000u;
+    snapshot->phase_voltage_millivolts[1] = 231000u;
+    snapshot->phase_voltage_millivolts[2] = 229000u;
+    snapshot->phase_current_milliamps[0] = 10500u;
+    snapshot->phase_current_milliamps[1] = 10300u;
+    snapshot->phase_current_milliamps[2] = 9800u;
+    snapshot->active_import_wh = 1234567u;
+    snapshot->active_import_tariff_wh[0] = 500000u;
+    snapshot->active_import_tariff_wh[1] = 600000u;
+    snapshot->active_import_tariff_wh[2] = 134567u;
+    snapshot->frequency_mhz = 50010u;
+    snapshot->power_factor[0] = 985;
+    snapshot->power_factor[1] = 982;
+    snapshot->power_factor[2] = 987;
+    snapshot->power_factor[3] = 986;
+    snapshot->thd_voltage_percent_x10[0] = 15u;
+    snapshot->thd_voltage_percent_x10[1] = 14u;
+    snapshot->thd_voltage_percent_x10[2] = 16u;
+    snapshot->thd_voltage_percent_x10[3] = 15u;
+    snapshot->thd_current_percent_x10[0] = 22u;
+    snapshot->thd_current_percent_x10[1] = 21u;
+    snapshot->thd_current_percent_x10[2] = 24u;
+    snapshot->thd_current_percent_x10[3] = 22u;
+    snapshot->limiter_threshold_active_watts = 13200u;
+    snapshot->limiter_threshold_normal_watts = 13000u;
+    snapshot->limiter_min_over_threshold_duration_sec = 10u;
+    snapshot->limiter_min_under_threshold_duration_sec = 30u;
+    snapshot->disconnect_output_state = 1u;
+    snapshot->disconnect_control_state = 1u;
+    snapshot->disconnect_control_mode = 2u;
+    strcpy(snapshot->meter_id, "PLN2026102801");
+    strcpy(snapshot->meter_type, "3P-POSTPAID-SPLN");
     snapshot->clock_date_time.year[0] = 0x07u;
     snapshot->clock_date_time.year[1] = 0xEAu;
-    snapshot->clock_date_time.month = 10u;
-    snapshot->clock_date_time.day = 28u;
-    snapshot->clock_date_time.hour = 12u;
+    snapshot->clock_date_time.month = 11u;
+    snapshot->clock_date_time.day = 17u;
+    snapshot->clock_date_time.day_of_week = 2u;
+    snapshot->clock_date_time.hour = 9u;
+    snapshot->clock_date_time.minute = 0u;
+    snapshot->clock_date_time.second = 0u;
+    snapshot->clock_date_time.deviation[0] = 0x80u;
+    snapshot->clock_date_time.deviation[1] = 0x00u;
+    snapshot->security_policy = 0x30u;
+    snapshot->security_suite = 0u;
+    snapshot->valid_mask = AMI_COSEM_VALID_REACTIVE_IMPORT |
+                           AMI_COSEM_VALID_REACTIVE_EXPORT |
+                           AMI_COSEM_VALID_SECURITY_CLIENT_TITLE |
+                           AMI_COSEM_VALID_LOAD_PROFILE |
+                           AMI_COSEM_VALID_VOLTAGE_A |
+                           AMI_COSEM_VALID_VOLTAGE_B |
+                           AMI_COSEM_VALID_VOLTAGE_C |
+                           AMI_COSEM_VALID_CURRENT_A |
+                           AMI_COSEM_VALID_CURRENT_B |
+                           AMI_COSEM_VALID_CURRENT_C |
+                           AMI_COSEM_VALID_ACTIVE_IMPORT |
+                           AMI_COSEM_VALID_ACTIVE_EXPORT |
+                           AMI_COSEM_VALID_CLOCK |
+                           AMI_COSEM_VALID_EVENT_LOG |
+                           AMI_COSEM_VALID_BILLING_PROFILE |
+                           AMI_COSEM_VALID_TARIFF_REGISTERS |
+                           AMI_COSEM_VALID_POWER_QUALITY |
+                           AMI_COSEM_VALID_LIMITER |
+                           AMI_COSEM_VALID_DISCONNECT_CTRL |
+                           AMI_COSEM_VALID_DEVICE_INFO;
+    snapshot->event_log_count = 1u;
+    snapshot->event_log[0].timestamp = snapshot->clock_date_time;
+    snapshot->event_log[0].event_code = 1u;
+    snapshot->billing_history_count = 1u;
+    snapshot->billing_history[0].billing_timestamp = snapshot->clock_date_time;
+    snapshot->billing_history[0].active_import_wh = 1234567u;
     return 1;
 #endif
 }
@@ -605,16 +889,30 @@ static void AmiDlmsTaskEntry(void *argument)
     static AmiNvmCounterContext s_nvm_counter_ctx;
     static AmiNvmStorageDriver s_tamp_driver;
     static AmiDlmsCipherBackend s_cipher_backend;
+#if !defined(AMI_PRODUCTION_MODE)
+    static AmiDisconnectControlContext s_bench_dc;
+    static const uint8_t server_st[8] = {0x4D, 0x4D, 0x4D, 0x00, 0x00, 0x00, 0x00, 0x01};
+    static const uint8_t client_st[8] = {0x47, 0x58, 0x44, 0x4C, 0x4D, 0x53, 0x30, 0x31};
+    static const uint8_t bench_guek[16] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F
+    };
+    static const uint8_t bench_ak[16] = {
+        0xD0, 0xD1, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7,
+        0xD8, 0xD9, 0xDA, 0xDB, 0xDC, 0xDD, 0xDE, 0xDF
+    };
+#else
+    static const uint8_t server_st[8] = {'P', 'L', 'N', 0, 0, 0, 0, 1};
+    static const uint8_t client_st[8] = {'H', 'E', 'S', 0, 0, 0, 0, 1};
+    static const uint8_t bench_guek[16] = {0};
+    static const uint8_t bench_ak[16] = {0};
+#endif
 
     /* Initialize persistent NVM counter driver via TrustZone secure gateway */
     ami_nvm_create_tamp_backup_driver(&s_tamp_driver);
     (void)ami_nvm_counter_init(&s_nvm_counter_ctx, &s_tamp_driver, 100u, 10u);
 
-    static const uint8_t server_st[8] = {'P', 'L', 'N', 0, 0, 0, 0, 1};
-    static const uint8_t client_st[8] = {'H', 'E', 'S', 0, 0, 0, 0, 1};
-    static const uint8_t dummy_key[16] = {0};
-
-    (void)ami_dlms_cipher_suite0_init(&s_suite0_ctx, dummy_key, dummy_key,
+    (void)ami_dlms_cipher_suite0_init(&s_suite0_ctx, bench_guek, bench_ak,
                                       client_st, server_st, 1u);
     (void)ami_dlms_cipher_suite0_bind_nvm(&s_suite0_ctx, &s_nvm_counter_ctx);
     (void)ami_dlms_cipher_suite0_get_backend(&s_suite0_ctx, &s_cipher_backend);
@@ -624,11 +922,18 @@ static void AmiDlmsTaskEntry(void *argument)
                        ami_dlms_hardware_get_snapshot,
                        NULL);
     ami_dlms_port_set_cipher_backend(&s_global_port_ctx, &s_cipher_backend);
+#if !defined(AMI_PRODUCTION_MODE)
+    ami_disconnect_control_init(&s_bench_dc, AMI_DISCONNECT_MODE_2, NULL, NULL);
+    ami_dlms_port_set_disconnect_control(&s_global_port_ctx, &s_bench_dc);
+#endif
 
     /* Enforce HLS security policy with TrustZone TRNG and HLS proof callbacks */
     static const uint8_t hls5_oid[7] = {0x60, 0x85, 0x74, 0x05, 0x08, 0x02, 0x05};
     AmiDlmsAssociationSecurity sec_policy;
     memset(&sec_policy, 0, sizeof(sec_policy));
+    sec_policy.allow_ciphering = 1u;
+    sec_policy.server_system_title = s_suite0_ctx.server_system_title;
+    sec_policy.server_system_title_length = AMI_DLMS_SYSTEM_TITLE_LENGTH;
     sec_policy.random = ami_dlms_secure_random;
     sec_policy.hls_proof = ami_dlms_secure_hls_proof;
     sec_policy.hls_mechanism_oid = hls5_oid;

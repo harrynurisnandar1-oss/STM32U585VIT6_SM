@@ -78,6 +78,7 @@ typedef struct
   uint32_t in_len;
   uint8_t *output;
   uint8_t *tag;
+  uint32_t tag_len;
 } SECURE_AesGcmParamsTypeDef;
 
 /* Exported constants --------------------------------------------------------*/

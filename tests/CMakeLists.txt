@@ -6,6 +6,11 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 enable_testing()
 
+if(MSVC)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS WIN32_LEAN_AND_MEAN)
+    add_compile_options(/W3)
+endif()
+
 option(ENABLE_COVERAGE "Enable code coverage instrumentation (gcov/lcov)" OFF)
 if(ENABLE_COVERAGE)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -61,6 +66,11 @@ add_test(NAME AmiDlmsHdlcTest COMMAND test_ami_dlms_hdlc)
 
 add_executable(gurux_simulator
     gurux_simulator.c
+    "${AMI_SRC}/ami_dlms_port.c"
+    "${AMI_SRC}/ami_dlms_cipher.c"
+    "${AMI_SRC}/ami_security.c"
+    "${AMI_SRC}/ami_anti_bruteforce.c"
+    "${AMI_SRC}/ami_nvm_counter.c"
     "${AMI_SRC}/ami_dlms_hdlc.c"
     "${AMI_SRC}/ami_dlms_association.c"
     "${AMI_SRC}/ami_dlms_apdu.c"

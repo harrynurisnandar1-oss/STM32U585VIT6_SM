@@ -26,7 +26,7 @@ typedef enum {
     AMI_DLMS_APDU_BACKEND_FAILURE
 } AmiDlmsApduStatus;
 
-#define AMI_DLMS_GCM_TAG_LENGTH 16u
+#define AMI_DLMS_GCM_TAG_LENGTH 12u
 
 typedef struct {
     uint8_t key_type; /* DLMS enum: 0 = global unicast, 2 = authentication. */

@@ -1,12 +1,17 @@
 #include "ami_cosem_model.h"
 #include "ami_dlms_apdu.h"
 #include "ami_dlms_association.h"
+#include "ami_dlms_cipher.h"
 #include "ami_dlms_hdlc.h"
+#include "ami_dlms_port.h"
 #include "ami_dlms_block_transfer.h"
 #include "ami_disconnect_control.h"
+#include "ami_anti_bruteforce.h"
+#include "ami_security.h"
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -30,8 +35,32 @@ static int socket_startup(void) { return 0; }
 
 #define SERVER_PORT 4059
 
-static AmiBlockTransferContext s_sim_bt;
 static AmiDisconnectControlContext s_sim_dc;
+static AmiAntiBruteforceContext s_sim_abf;
+static AmiDlmsSecuritySuite0Context s_sim_suite0;
+static AmiDlmsCipherBackend s_sim_cipher_backend;
+static AmiCosemRegisterSnapshot s_sim_snapshot;
+static uint32_t s_sim_rng_state = 0x53504C4Eu;
+static int s_sim_rx_ic_initialized = 0;
+
+static const uint8_t s_gurux_default_guek[16] = {
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F
+};
+static const uint8_t s_gurux_default_ak[16] = {
+    0xD0, 0xD1, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7,
+    0xD8, 0xD9, 0xDA, 0xDB, 0xDC, 0xDD, 0xDE, 0xDF
+};
+static const uint8_t s_gurux_default_kek[16] = {
+    0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38,
+    0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36
+};
+static const uint8_t s_gurux_server_sys_title[8] = {
+    0x4D, 0x4D, 0x4D, 0x00, 0x00, 0x00, 0x00, 0x01 /* MMM00001 */
+};
+static const uint8_t s_gurux_default_client_sys_title[8] = {
+    0x47, 0x58, 0x44, 0x4C, 0x4D, 0x53, 0x30, 0x31
+};
 
 static int sim_breaker_actuator(void *user, AmiBreakerCommand cmd)
 {
@@ -229,218 +258,203 @@ static void make_development_snapshot(AmiCosemRegisterSnapshot *snapshot)
     snapshot->billing_history[0].active_export_wh = 0u;
 }
 
-static int process_i_frame(HdlcContext *hdlc, const HdlcFrame *request,
-                           AmiDlmsAssociation *association,
-                           AmiCosemRegisterSnapshot *snapshot,
-                           uint8_t *wire_response, size_t wire_capacity,
-                           size_t *wire_length)
+static int sim_random_cb(void *user, uint8_t *out, size_t len)
 {
-    uint8_t apdu_response[AMI_BT_MAX_CACHE_BUFFER_SIZE];
-    size_t apdu_length = 0u;
-    AmiDlmsAssociationStatus association_status;
-    AmiDlmsApduStatus apdu_status;
-
-    *wire_length = 0u;
-    /* ami_dlms_hdlc_parse_byte removes the LLC header after frame validation. */
-    const uint8_t *apdu = request->payload;
-    const size_t apdu_length_in = request->payload_length;
-    if (apdu_length_in == 0u) return 1;
-
-    if (apdu[0] == 0x60u) {
-        ami_dlms_association_reset(association);
-        ami_bt_reset(&s_sim_bt);
-        association_status = ami_dlms_process_aarq(association, apdu, apdu_length_in,
-            apdu_response, sizeof(apdu_response), &apdu_length);
-        fprintf(stdout, "[APDU AARE] status=%d response=%u bytes",
-                (int)association_status, (unsigned)apdu_length);
-        for (size_t i = 0u; i < apdu_length && i < 48u; ++i)
-            fprintf(stdout, " %02X", apdu_response[i]);
-        fputc('\n', stdout);
-        fflush(stdout);
-        if (association_status != AMI_DLMS_ASSOC_OK) {
-            fprintf(stderr, "AARQ rejected (status=%d)\n", (int)association_status);
-            if (apdu_length == 0u) return 1;
-        }
-    } else if (apdu[0] == 0x62u) {
-        /* ACSE RLRQ (Release Request) -> Reply with RLRE (Release Response) */
-        ami_dlms_association_reset(association);
-        ami_bt_reset(&s_sim_bt);
-        apdu_response[0] = 0x63u; /* RLRE tag */
-        apdu_response[1] = 0x03u; /* length */
-        apdu_response[2] = 0x80u; /* reason tag */
-        apdu_response[3] = 0x01u;
-        apdu_response[4] = 0x00u; /* normal */
-        apdu_length = 5u;
-        fprintf(stdout, "[APDU RLRE] Association released cleanly.\n");
-        fflush(stdout);
-    } else if (association->state != AMI_DLMS_ASSOC_ASSOCIATED) {
-        /* When unassociated:
-         * Per DLMS CTT T_APPL_IDLE_N1, meter must NOT answer for Get request.
-         * For Short Name Read (0x05) when checking disconnect (APPL_REL_P1), return ExceptionResponse.
-         */
-        if (apdu[0] == 0x05u) {
-            apdu_response[0] = 0xD8u; /* ExceptionResponse */
-            apdu_response[1] = 0x00u; /* no state error */
-            apdu_response[2] = 0x02u; /* service not supported */
-            apdu_length = 3u;
-            fprintf(stdout, "[APDU EXCEPTION] Unassociated Read SN rejected\n");
-            fflush(stdout);
-        } else {
-            fprintf(stdout, "[APDU IDLE] Silently dropping unassociated request 0x%02X per T_APPL_IDLE_N1\n", apdu[0]);
-            fflush(stdout);
-            return 1;
-        }
-    } else if (apdu[0] == 0xC0u) {
-        if (apdu_length_in >= 2u && apdu[1] == 0x02u) {
-            /* GET-Request-For-Next-Datablock */
-            uint8_t req_invoke_id = 0u;
-            uint32_t req_block_num = 0u;
-            if (ami_bt_parse_get_next_block_request(apdu, apdu_length_in, &req_invoke_id, &req_block_num)) {
-                int is_last = 0;
-                /* If client acknowledges the block it already received (e.g. block 1 in Gurux DLMS Director),
-                 * advance to next block. If client already requested the target block (block 2), use it. */
-                uint32_t target_block = req_block_num;
-                if (target_block == s_sim_bt.current_block_number) {
-                    target_block = s_sim_bt.current_block_number + 1u;
-                }
-                AmiBtStatus bt_st = ami_bt_build_get_response_block(
-                    &s_sim_bt, target_block, apdu_response, sizeof(apdu_response), &apdu_length, &is_last);
-                if (bt_st != AMI_BT_OK) {
-                    apdu_length = ami_bt_build_error_response_block(
-                        req_invoke_id, target_block, 2u, apdu_response, sizeof(apdu_response));
-                }
-                fprintf(stdout, "[APDU GET-DATABLOCK] req=%u target=%u last=%d length=%u bytes\n",
-                        (unsigned)req_block_num, (unsigned)target_block, is_last, (unsigned)apdu_length);
-                fflush(stdout);
-            }
-        } else {
-            apdu_status = ami_dlms_process_get_request(association, snapshot, apdu,
-                apdu_length_in, apdu_response, sizeof(apdu_response), &apdu_length);
-
-            /* Safety fallback: if processing returned length 0, never send empty APDU */
-            if (apdu_length == 0u) {
-                apdu_response[0] = 0xC4u; /* GetResponse */
-                apdu_response[1] = 0x01u; /* GetResponseNormal */
-                apdu_response[2] = apdu_length_in > 2u ? apdu[2] : 0u; /* invoke_id */
-                apdu_response[3] = 0x01u; /* data-access-result choice: error */
-                apdu_response[4] = 0x04u; /* object-undefined */
-                apdu_length = 5u;
-                fprintf(stdout, "[APDU GET] Safety fallback applied: object-undefined (5 bytes)\n");
-            }
-
-            /* If response payload exceeds HDLC frame limit (480 bytes), use block transfer */
-            if (apdu_status == AMI_DLMS_APDU_OK && apdu_length > 480u &&
-                apdu_response[0] == 0xC4u && apdu_response[1] == 0x01u && apdu_response[3] == 0x00u) {
-                uint8_t invoke_id = apdu_response[2];
-                AmiBtStatus bt_st = ami_bt_start_get_transfer(
-                    &s_sim_bt, invoke_id, &apdu_response[4], apdu_length - 4u);
-                if (bt_st == AMI_BT_OK) {
-                    int is_last = 0;
-                    (void)ami_bt_build_get_response_block(
-                        &s_sim_bt, 1u, apdu_response, sizeof(apdu_response), &apdu_length, &is_last);
-                    fprintf(stdout, "[APDU GET-WITH-DATABLOCK START] block=1 last=%d length=%u bytes\n",
-                            is_last, (unsigned)apdu_length);
-                    fflush(stdout);
-                }
-            } else {
-                fprintf(stdout, "[APDU GET] status=%d response=%u bytes",
-                        (int)apdu_status, (unsigned)apdu_length);
-                for (size_t i = 0u; i < apdu_length && i < 16u; ++i)
-                    fprintf(stdout, " %02X", apdu_response[i]);
-                fputc('\n', stdout);
-                fflush(stdout);
-            }
-        }
-    } else if (apdu[0] == 0xC1u) {
-        /* SetRequest -> SetResponseNormal with read-write-denied (3) */
-        apdu_response[0] = 0xC5u; /* SetResponse */
-        apdu_response[1] = 0x01u; /* SetResponseNormal */
-        apdu_response[2] = apdu_length_in > 2u ? apdu[2] : 0u; /* invoke_id */
-        apdu_response[3] = 0x03u; /* read-write-denied */
-        apdu_length = 4u;
-        fprintf(stdout, "[APDU SET] Denied (read-only meter)\n");
-        fflush(stdout);
-    } else if (apdu[0] == 0xC3u) {
-        if (apdu_length_in >= 12u &&
-            apdu[1] == 0x01u &&
-            apdu[3] == 0x00u && apdu[4] == 0x46u &&
-            apdu[5] == 0x00u && apdu[6] == 0x00u && apdu[7] == 0x60u &&
-            apdu[8] == 0x03u && apdu[9] == 0x0Au && apdu[10] == 0xFFu) {
-            uint8_t method_id = apdu[11];
-            AmiDisconnectStatus dc_st = AMI_DISCONNECT_ERR_INVALID_PARAM;
-            if (method_id == 1u) {
-                dc_st = ami_disconnect_control_remote_disconnect(&s_sim_dc, 0);
-                fprintf(stdout, "[APDU ACTION] remote_disconnect -> status=%d (Breaker State: %u)\n",
-                        (int)dc_st, s_sim_dc.control_state);
-            } else if (method_id == 2u) {
-                dc_st = ami_disconnect_control_remote_reconnect(&s_sim_dc, 0);
-                fprintf(stdout, "[APDU ACTION] remote_reconnect -> status=%d (Breaker State: %u)\n",
-                        (int)dc_st, s_sim_dc.control_state);
-            }
-            if (dc_st == AMI_DISCONNECT_OK) {
-                ami_disconnect_control_sync_snapshot(&s_sim_dc, snapshot);
-                apdu_response[0] = 0xC7u;
-                apdu_response[1] = 0x01u;
-                apdu_response[2] = apdu[2];
-                apdu_response[3] = 0x00u; /* success */
-                apdu_response[4] = 0x00u; /* data-present = false */
-                apdu_length = 5u;
-            } else if (dc_st == AMI_DISCONNECT_ERR_NOT_PERMITTED) {
-                apdu_response[0] = 0xC7u;
-                apdu_response[1] = 0x01u;
-                apdu_response[2] = apdu[2];
-                apdu_response[3] = 0x01u; /* error */
-                apdu_response[4] = 0x03u; /* read-write-denied */
-                apdu_length = 5u;
-            } else {
-                apdu_response[0] = 0xC7u;
-                apdu_response[1] = 0x01u;
-                apdu_response[2] = apdu[2];
-                apdu_response[3] = 0x01u;
-                apdu_response[4] = 0x02u; /* temporary-failure */
-                apdu_length = 5u;
-            }
-            fflush(stdout);
-        } else {
-            /* ActionRequest on unsupported method -> ActionResponseNormal with read-write-denied (3) */
-            apdu_response[0] = 0xC7u; /* ActionResponse */
-            apdu_response[1] = 0x01u; /* ActionResponseNormal */
-            apdu_response[2] = apdu_length_in > 2u ? apdu[2] : 0u; /* invoke_id */
-            apdu_response[3] = 0x01u; /* action-result choice: error */
-            apdu_response[4] = 0x03u; /* read-write-denied */
-            apdu_length = 5u;
-            fprintf(stdout, "[APDU ACTION] Denied (read-only / unsupported method)\n");
-            fflush(stdout);
-        }
-    } else {
-        /* Short Name referencing (e.g. 0x05 ReadRequest) or unsupported service on LN meter */
-        apdu_response[0] = 0xD8u; /* ExceptionResponse */
-        apdu_response[1] = 0x00u; /* no state error */
-        apdu_response[2] = 0x02u; /* service-error: service-not-supported */
-        apdu_length = 3u;
-        fprintf(stdout, "[APDU EXCEPTION] Service 0x%02X not supported (LN meter)\n", apdu[0]);
-        fflush(stdout);
+    (void)user;
+    if (out == NULL || len == 0u) return 0;
+    for (size_t i = 0u; i < len; ++i) {
+        s_sim_rng_state = s_sim_rng_state * 1664525u + 1013904223u;
+        out[i] = (uint8_t)(s_sim_rng_state >> 24);
     }
+    return 1;
+}
 
-    return ami_dlms_hdlc_build_frame(hdlc, request, apdu_response, apdu_length,
-        wire_response, wire_capacity, wire_length) == AMI_HDLC_FRAME_READY;
+static int sim_hls_proof_cb(void *user, const uint8_t *oid, size_t oid_len,
+                            const uint8_t *challenge, size_t challenge_len,
+                            uint8_t *proof, size_t proof_cap, size_t *proof_len)
+{
+    (void)user; (void)oid; (void)oid_len;
+    uint32_t tx_ic = ++s_sim_suite0.current_tx_counter;
+    AmiSecStatus st = ami_sec_dlms_hls5_gmac_calculate(
+        s_sim_suite0.authentication_key,
+        s_sim_suite0.server_system_title,
+        tx_ic,
+        challenge, challenge_len,
+        proof, proof_cap, proof_len);
+    fprintf(stdout, "[HLS5 StoC] Generated server proof (%u bytes, IC=%u, status=%d)\n",
+            (unsigned)(*proof_len), (unsigned)tx_ic, (int)st);
+    fflush(stdout);
+    return (st == AMI_SEC_OK) ? 1 : 0;
+}
+
+static int sim_hls_verify_cb(void *user, const uint8_t *oid, size_t oid_len,
+                             const uint8_t *client_sys_title, size_t client_sys_title_len,
+                             const uint8_t *challenge, size_t challenge_len,
+                             const uint8_t *client_proof, size_t client_proof_len)
+{
+    (void)user; (void)oid; (void)oid_len;
+    if (client_sys_title != NULL && client_sys_title_len == AMI_DLMS_SYSTEM_TITLE_LENGTH) {
+        memcpy(s_sim_suite0.client_system_title, client_sys_title, AMI_DLMS_SYSTEM_TITLE_LENGTH);
+    }
+    AmiSecStatus st = ami_sec_dlms_hls5_gmac_verify(
+        s_sim_suite0.authentication_key,
+        s_sim_suite0.client_system_title,
+        client_proof, client_proof_len,
+        challenge, challenge_len);
+    fprintf(stdout, "[HLS5 Verify CtoS] status=%d (0=OK)\n", (int)st);
+    fflush(stdout);
+    return (st == AMI_SEC_OK) ? 1 : 0;
+}
+
+static int sim_decrypt_initiate_cb(void *user,
+                                   const uint8_t *client_sys_title, size_t client_sys_title_len,
+                                   uint8_t sc, uint32_t ic,
+                                   const uint8_t *ct, size_t ct_len,
+                                   const uint8_t *tag, size_t tag_len,
+                                   uint8_t *pt, size_t pt_cap, size_t *pt_len)
+{
+    (void)user;
+    if (pt_cap < ct_len || sc != AMI_DLMS_SECURITY_CONTROL_SUITE_0) return 0;
+    if (client_sys_title != NULL && client_sys_title_len == AMI_DLMS_SYSTEM_TITLE_LENGTH) {
+        memcpy(s_sim_suite0.client_system_title, client_sys_title, AMI_DLMS_SYSTEM_TITLE_LENGTH);
+    }
+    uint8_t nonce[AMI_GCM_NONCE_BYTES];
+    memcpy(nonce, s_sim_suite0.client_system_title, AMI_DLMS_SYSTEM_TITLE_LENGTH);
+    nonce[8]  = (uint8_t)(ic >> 24);
+    nonce[9]  = (uint8_t)(ic >> 16);
+    nonce[10] = (uint8_t)(ic >> 8);
+    nonce[11] = (uint8_t)ic;
+
+    uint8_t aad[1u + AMI_DLMS_KEY_LENGTH];
+    aad[0] = sc;
+    memcpy(&aad[1], s_sim_suite0.authentication_key, AMI_DLMS_KEY_LENGTH);
+
+    AmiSecStatus st = ami_sec_aes_128_gcm_decrypt(
+        s_sim_suite0.encryption_key, nonce, sizeof(nonce),
+        aad, sizeof(aad), ct, ct_len, tag, tag_len, pt);
+    if (st != AMI_SEC_OK) {
+        fprintf(stderr, "[glo_initiateRequest] Decrypt FAILED (status=%d, IC=%u)\n", (int)st, (unsigned)ic);
+        return 0;
+    }
+    if (ic == 0u) {
+        s_sim_rx_ic_initialized = 1;
+        s_sim_suite0.last_rx_counter = 0u;
+    } else if (s_sim_cipher_backend.accept_rx_counter != NULL &&
+        s_sim_cipher_backend.accept_rx_counter(&s_sim_suite0, ic) != 1) {
+        fprintf(stderr, "[glo_initiateRequest] Replay counter rejected (IC=%u)\n", (unsigned)ic);
+        return 0;
+    } else {
+        s_sim_rx_ic_initialized = 1;
+    }
+    *pt_len = ct_len;
+    fprintf(stdout, "[glo_initiateRequest] Decrypted OK (IC=%u, %u bytes)\n", (unsigned)ic, (unsigned)ct_len);
+    fflush(stdout);
+    return 1;
+}
+
+static int sim_encrypt_initiate_cb(void *user,
+                                   uint8_t sc, uint32_t *ic_out,
+                                   const uint8_t *pt, size_t pt_len,
+                                   uint8_t *ct, size_t ct_cap, size_t *ct_len,
+                                   uint8_t *tag, size_t tag_len)
+{
+    (void)user;
+    if (ct_cap < pt_len || ic_out == NULL) return 0;
+    uint32_t tx_ic = ++s_sim_suite0.current_tx_counter;
+    *ic_out = tx_ic;
+    uint8_t nonce[AMI_GCM_NONCE_BYTES];
+    memcpy(nonce, s_sim_suite0.server_system_title, AMI_DLMS_SYSTEM_TITLE_LENGTH);
+    nonce[8]  = (uint8_t)(tx_ic >> 24);
+    nonce[9]  = (uint8_t)(tx_ic >> 16);
+    nonce[10] = (uint8_t)(tx_ic >> 8);
+    nonce[11] = (uint8_t)tx_ic;
+
+    uint8_t aad[1u + AMI_DLMS_KEY_LENGTH];
+    aad[0] = sc;
+    memcpy(&aad[1], s_sim_suite0.authentication_key, AMI_DLMS_KEY_LENGTH);
+
+    AmiSecStatus st = ami_sec_aes_128_gcm_encrypt(
+        s_sim_suite0.encryption_key, nonce, sizeof(nonce),
+        aad, sizeof(aad), pt, pt_len, ct, tag, tag_len);
+    if (st != AMI_SEC_OK) return 0;
+    *ct_len = pt_len;
+    return 1;
+}
+
+typedef struct {
+    socket_t client;
+} SimTransportCtx;
+
+static int sim_port_tx(const uint8_t *data, size_t length, void *user_data)
+{
+    SimTransportCtx *t = (SimTransportCtx *)user_data;
+    fprintf(stdout, "[TX to Gurux] %u bytes:", (unsigned)length);
+    for (size_t i = 0u; i < length; ++i) {
+        fprintf(stdout, " %02X", data[i]);
+    }
+    fputc('\n', stdout);
+    fflush(stdout);
+    return send_all(t->client, data, length);
+}
+
+static int sim_port_snapshot(AmiCosemRegisterSnapshot *snapshot, void *user_data)
+{
+    (void)user_data;
+    ami_disconnect_control_sync_snapshot(&s_sim_dc, &s_sim_snapshot);
+    memcpy(s_sim_snapshot.client_system_title, s_sim_suite0.client_system_title,
+           AMI_DLMS_SYSTEM_TITLE_LENGTH);
+    memcpy(s_sim_snapshot.server_system_title, s_sim_suite0.server_system_title,
+           AMI_DLMS_SYSTEM_TITLE_LENGTH);
+    s_sim_snapshot.security_policy = 0x30u; /* Authenticated + Encrypted */
+    s_sim_snapshot.security_suite = 0u;     /* Suite 0: AES-128-GCM */
+    *snapshot = s_sim_snapshot;
+    return 1;
 }
 
 static int serve_client(socket_t client)
 {
-    HdlcContext hdlc;
-    HdlcFrame frame;
-    AmiDlmsAssociation association = {0};
-    AmiCosemRegisterSnapshot snapshot;
-    uint8_t wire_response[AMI_HDLC_MAX_FRAME_BYTES];
-    size_t response_length;
+    SimTransportCtx transport = { .client = client };
+    AmiDlmsPortContext port_ctx;
 
-    ami_dlms_hdlc_init(&hdlc);
-    ami_bt_init(&s_sim_bt, AMI_BT_DEFAULT_BLOCK_SIZE);
     ami_disconnect_control_init(&s_sim_dc, AMI_DISCONNECT_MODE_2, sim_breaker_actuator, NULL);
-    make_development_snapshot(&snapshot);
-    ami_disconnect_control_sync_snapshot(&s_sim_dc, &snapshot);
-    fprintf(stdout, "Gurux client connected; development no-auth profile active.\n");
+    ami_anti_bruteforce_init(&s_sim_abf, NULL);
+    make_development_snapshot(&s_sim_snapshot);
+    ami_disconnect_control_sync_snapshot(&s_sim_dc, &s_sim_snapshot);
+
+    ami_dlms_cipher_suite0_init(&s_sim_suite0,
+                                s_gurux_default_guek,
+                                s_gurux_default_ak,
+                                s_gurux_default_client_sys_title,
+                                s_gurux_server_sys_title,
+                                0u);
+    s_sim_rx_ic_initialized = 0;
+    (void)ami_dlms_cipher_suite0_set_kek(&s_sim_suite0, s_gurux_default_kek);
+    (void)ami_dlms_cipher_suite0_get_backend(&s_sim_suite0, &s_sim_cipher_backend);
+
+    ami_dlms_port_init(&port_ctx, sim_port_tx, sim_port_snapshot, &transport);
+    ami_dlms_port_configure_block_transfer(&port_ctx, AMI_BT_DEFAULT_BLOCK_SIZE, 480u);
+    ami_dlms_port_set_anti_bruteforce(&port_ctx, &s_sim_abf);
+    ami_dlms_port_set_disconnect_control(&port_ctx, &s_sim_dc);
+    ami_dlms_port_set_cipher_backend(&port_ctx, &s_sim_cipher_backend);
+
+    static const uint8_t hls5_oid[7] = {0x60u, 0x85u, 0x74u, 0x05u, 0x08u, 0x02u, 0x05u};
+    AmiDlmsAssociationSecurity sec_policy;
+    memset(&sec_policy, 0, sizeof(sec_policy));
+    sec_policy.allow_no_auth = 1u;   /* Public Client (None) */
+    sec_policy.allow_ciphering = 1u; /* Management Client (HighGMAC / Suite 0) */
+    sec_policy.server_system_title = s_sim_suite0.server_system_title;
+    sec_policy.server_system_title_length = AMI_DLMS_SYSTEM_TITLE_LENGTH;
+    sec_policy.random = sim_random_cb;
+    sec_policy.hls_proof = sim_hls_proof_cb;
+    sec_policy.hls_verify = sim_hls_verify_cb;
+    sec_policy.decrypt_initiate = sim_decrypt_initiate_cb;
+    sec_policy.encrypt_initiate = sim_encrypt_initiate_cb;
+    sec_policy.hls_mechanism_oid = hls5_oid;
+    sec_policy.hls_mechanism_oid_length = sizeof(hls5_oid);
+    port_ctx.security = sec_policy;
+    port_ctx.use_custom_security = 1;
+
+    fprintf(stdout, "Gurux client connected; SPLN D5.002:2024 auto-detect profile active (None + HighGMAC).\n");
     fflush(stdout);
 
     unsigned byte_count = 0;
@@ -475,9 +489,7 @@ static int serve_client(socket_t client)
             fflush(stdout);
         }
 
-        /* Detect if an HTTP browser (Chrome/Edge) or non-DLMS client connects by mistake */
-        if (byte_count == 4 && hdlc.frame_length == 0u) {
-            /* If the stream started with "GET " or "POST" */
+        if (byte_count == 4 && port_ctx.hdlc.frame_length == 0u) {
             if (byte == ' ' || byte == 'T') {
                 fprintf(stderr, "\n[PERINGATAN] Client mengirim request HTTP (bukan DLMS HDLC). Browser Anda sedang membuka port ini!\n");
                 const char *http_resp = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n"
@@ -488,61 +500,12 @@ static int serve_client(socket_t client)
             }
         }
 
-        if (byte == AMI_HDLC_FLAG && hdlc.frame_length != 0u) {
-            fprintf(stdout, "[HDLC raw frame: %u bytes]", (unsigned)hdlc.frame_length);
-            for (size_t i = 0u; i < hdlc.frame_length; ++i)
-                fprintf(stdout, " %02X", hdlc.frame_buffer[i]);
-            fputc('\n', stdout);
-            fflush(stdout);
-        }
-        AmiHdlcStatus status = ami_dlms_hdlc_parse_byte(&hdlc, byte, &frame);
-        if (status == AMI_HDLC_INCOMPLETE) continue;
-        if (status != AMI_HDLC_FRAME_READY) {
-            fprintf(stderr, "[HDLC Frame Error: %d on byte 0x%02X]\n", (int)status, byte);
+        ami_dlms_port_set_time(&port_ctx, (uint32_t)time(NULL));
+        AmiDlmsPortStatus st = ami_dlms_port_process_byte(&port_ctx, byte);
+        if (st == AMI_DLMS_PORT_TX_ERROR) return 0;
+        if (st != AMI_DLMS_PORT_OK && st != AMI_DLMS_PORT_INCOMPLETE) {
+            fprintf(stderr, "[DLMS Port Status=%d]\n", (int)st);
             fflush(stderr);
-            continue;
-        }
-
-        fprintf(stdout, "[RX from Gurux] Type=%d (Ctrl=0x%02X, Dst=%u, Src=%u, Payload=%u bytes)\n",
-                (int)frame.type, frame.control, frame.destination_sap, frame.source_sap, (unsigned)frame.payload_length);
-        fflush(stdout);
-
-        response_length = 0u;
-        if (frame.type == AMI_HDLC_FRAME_SNRM || frame.type == AMI_HDLC_FRAME_DISC) {
-            ami_dlms_association_reset(&association);
-            ami_bt_reset(&s_sim_bt);
-            status = ami_dlms_hdlc_build_frame(&hdlc, &frame, NULL, 0u,
-                wire_response, sizeof(wire_response), &response_length);
-            if (status == AMI_HDLC_FRAME_READY) {
-                fprintf(stdout, "[TX to Gurux] UA Response (%u bytes)\n", (unsigned)response_length);
-                fflush(stdout);
-                if (!send_all(client, wire_response, response_length)) return 0;
-            } else {
-                fprintf(stderr, "[ERR] Failed to build UA response (status=%d)\n", (int)status);
-            }
-        } else if (frame.type == AMI_HDLC_FRAME_RR) {
-            status = ami_dlms_hdlc_build_frame(&hdlc, &frame, NULL, 0u,
-                wire_response, sizeof(wire_response), &response_length);
-            if (status == AMI_HDLC_FRAME_READY) {
-                fprintf(stdout, "[TX to Gurux] RR Response (%u bytes):", (unsigned)response_length);
-                for (size_t i = 0u; i < response_length; ++i) fprintf(stdout, " %02X", wire_response[i]);
-                fputc('\n', stdout);
-                fflush(stdout);
-                if (!send_all(client, wire_response, response_length)) return 0;
-            } else {
-                fprintf(stderr, "[ERR] Failed to build RR response (status=%d)\n", (int)status);
-            }
-        } else if (frame.type == AMI_HDLC_FRAME_I) {
-            if (!process_i_frame(&hdlc, &frame, &association, &snapshot,
-                    wire_response, sizeof(wire_response), &response_length)) {
-                fprintf(stderr, "Could not build I-frame response.\n");
-                continue;
-            }
-            if (response_length != 0u) {
-                fprintf(stdout, "[TX to Gurux] I-Frame Response (%u bytes)\n", (unsigned)response_length);
-                fflush(stdout);
-                if (!send_all(client, wire_response, response_length)) return 0;
-            }
         }
     }
 }
