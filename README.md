@@ -27,7 +27,7 @@ The E2 protocol and data-model layer is designed for deterministic interoperabil
 
 ### TrustZone Partitioning & Protocol Flow
 
-<img width="743" height="667" alt="Workflow E3-TrustZone Partitioning   Protocol Flow drawio" src="https://github.com/user-attachments/assets/2ee896bf-3676-46bd-aba0-ce84a7f69640" />
+<img width="743" height="667" alt="Workflow E3-TrustZone Partitioning   Protocol Flow drawio" src="https://github.com/user-attachments/assets/7b3eb689-ecae-4788-b342-8ae523ec353a" />
 
 ### Subsystems
 
@@ -87,11 +87,6 @@ The E2 protocol and data-model layer is designed for deterministic interoperabil
 ### Target Firmware Presets (`CMakePresets.json`)
 The root `CMakePresets.json` configures the ARM Cortex-M33 build using `Ninja` and `gcc-arm-none-eabi.cmake`:
 
-<<<<<<< Updated upstream
-### 1. Uji Unit Host Native (CTest)
-Menjalankan seluruh 16 test suite secara deterministik:
-=======
->>>>>>> Stashed changes
 ```powershell
 # Configure and build Debug or Release firmware
 cmake --preset Debug
@@ -152,15 +147,19 @@ cmake --build tests/build --target ami_sign_tool
 ## Project Structure
 
 ```text
+├── .github/workflows/                # GitHub Actions CI (CTest, LCOV, ARM build, CodeQL)
 ├── NonSecure/                        # Cortex-M33 NonSecure application
 │   ├── AMI/
 │   │   ├── Inc/                      # Protocol, COSEM, OBIS catalog, and driver headers
 │   │   └── Src/                      # HDLC, ACSE, APDU, GBT, Cipher, ADE9000, NVM Counter
-│   └── Core/                         # Startup, FreeRTOS tasks, HAL peripheral config
+│   ├── Core/                         # Startup, FreeRTOS tasks, HAL peripheral config
+│   ├── CMakeLists.txt                # NonSecure target build configuration
+│   └── STM32U585xx_FLASH_ns.ld       # NonSecure Flash linker script
 ├── Secure/                           # Cortex-M33 TrustZone Secure World
 │   ├── Core/
 │   │   ├── Inc/                      # Secure Boot pubkey & boot crypto headers
 │   │   └── Src/                      # secure_nsc.c (NSC gateway), ami_boot_crypto.c, main.c
+│   ├── CMakeLists.txt                # Secure target build configuration
 │   └── STM32U585xx_FLASH_s.ld        # Secure Flash linker script (incl. FLASH_KEYSTORE)
 ├── Secure_nsclib/                    # Public NSC interface headers (secure_nsc.h)
 ├── Drivers/                          # STM32U5xx HAL & CMSIS
@@ -170,19 +169,27 @@ cmake --build tests/build --target ami_sign_tool
 │   ├── ami_sign_tool.c               # ECDSA P-256 image signing CLI
 │   ├── gurux_simulator.c             # HDLC-over-TCP simulator (port 4059)
 │   ├── scripts/lcov_to_markdown.py   # LCOV .info to Markdown report generator
-│   └── test_ami_*.c                  # 16 unit/security/policy test suites
-├── docker_test/                      # E2E Python test client & Docker test scripts
+│   ├── test_ami_*.c                  # 16 unit/security/policy test suites
+│   └── test_note.md                  # Host test & Gurux CTT guide
+├── docker_test/                      # E2E Python client & Docker test harness scripts
 ├── docs/
+│   ├── Architecture diagram for Project.md
 │   ├── COVERAGE.md                   # LCOV coverage breakdown
-│   ├── images/                       # Architecture diagrams
 │   └── security-rules/               # Protocol profile, architecture, checklist, threat model
-├── CMakePresets.json                 # ARM Cortex-M33 CMake build presets
+├── CMakeLists.txt                    # Root STM32U585 CMake superbuild
+├── CMakePresets.json                 # ARM Cortex-M33 CMake build presets (Debug/Release)
+├── gcc-arm-none-eabi.cmake           # ARM GNU GCC toolchain file
+├── starm-clang.cmake                 # STARM-Clang toolchain file
+├── mx-generated.cmake                # STM32CubeMX generated CMake definitions
 ├── Dockerfile                        # Multi-stage Alpine simulator & CTest verification image
 ├── compose.yaml                      # Docker Compose service definition (port 4059)
 ├── CHANGELOG.md                      # Release history (Spin 1 & Spin 2)
+├── CODE_OF_CONDUCT.md                # Contributor code of conduct
+├── LICENSE                           # Project license
 ├── SECURITY.md                       # Vulnerability disclosure policy
 ├── SECURITY_REVIEW.md                # Static security audit & remediation status
-└── STM32U585VIT6_SM.gxc              # GXDLMSDirector workspace profile
+├── STM32U585VIT6_SM.gxc              # GXDLMSDirector workspace profile
+└── STM32U585VIT6_SM.ioc              # STM32CubeMX hardware configuration
 ```
 
 ---
@@ -195,10 +202,6 @@ cmake -S tests -B tests/build -G Ninja
 cmake --build tests/build --parallel
 ctest --test-dir tests/build --output-on-failure
 ```
-<<<<<<< Updated upstream
-*Hasil: Seluruh 16 test suite lulus 100% (Passed).*
-=======
->>>>>>> Stashed changes
 
 Suite details (including `AmiCosemTest`, `AmiSecurityTest`, `AmiDlmsAssociationTest`, `AmiFirmwareAuthPolicyTest`, `AmiDlmsApduTest`, `AmiDlmsHdlcTest`, `AmiDlmsPortTest`, `AmiAde9000Test`, `AmiDlmsCipherTest`, `AmiNvmCounterTest`, `AmiKeyTransferTest`, `AmiAntiBruteforceTest`, `AmiBlockTransferTest`, `AmiDisconnectControlTest`, `AmiTrustZoneBoundaryTest`, and `AmiBootCryptoTest`) are documented in [`tests/test_note.md`](tests/test_note.md).
 
@@ -224,36 +227,11 @@ Instructions for running the Python E2E client against `gurux_simulator` are doc
 
 ## Security Considerations & Trade-offs
 
-<<<<<<< Updated upstream
-```text
-├── NonSecure/                      # Ruang eksekusi NonSecure (Cortex-M33)
-│   ├── AMI/                        # Implementasi Inti DLMS/COSEM & Metrologi
-│   │   ├── Inc/                    # Header file (ami_cosem_model.h, dll.)
-│   │   └── Src/                    # Source code (HDLC, APDU, Security, Cipher, ADE9000)
-│   └── Core/                       # Startup, FreeRTOS, dan konfigurasi HAL
-├── Secure/                         # Ruang eksekusi Secure World (TrustZone)
-│   └── Core/Src/secure_nsc.c       # Gerbang NonSecure Callable (NSC) & Kriptografi
-├── Secure_nsclib/                  # Header publik antarmuka NSC
-├── tests/                          # 16 Test Suite Host CTest & Simulator
-│   ├── test_ami_cosem.c            # Verifikasi 66 objek COSEM & Load Profile
-│   ├── test_ami_anti_bruteforce.c  # Pengujian lockout & backoff eksponensial
-│   ├── test_ami_trustzone_boundary.c # Pengujian batas memori CMSE NonSecure/Secure
-│   ├── test_ami_boot_crypto.c      # Pengujian Secure Boot crypto & key management
-│   └── host-tools/gurux_simulator.c# Simulator HDLC-over-TCP port 4059
-├── docker_test/                    # Lingkungan pengujian terisolasi Docker
-├── docs/                           # Dokumentasi teknis mendalam
-│   └── security-rules/             # Spesifikasi protokol, arsitektur, ancaman
-├── CHANGELOG.md                    # Riwayat lengkap perubahan dan rilis versi
-├── CODE_OF_CONDUCT.md              # Pedoman perilaku dan etika kontributor
-└── STM32U585VIT6_SM.gxc            # Profil workspace Gurux DLMSDirector
-```
-=======
 - **Simulator vs. Target Auth Policy**: `gurux_simulator` permits `No-Auth` for local development and GXDLMSDirector browsing. Production firmware built with `STM32U585xx` enforces a fail-closed policy rejecting `No-Auth`, `LLS`, `HLS3` (MD5), `HLS4` (SHA-1), and any challenge length other than 16 bytes.
 - **Anti-TOCTOU on NSC Calls**: `SECURE_DLMS_AES_GCM_Process()` and `SECURE_DLMS_TransferKeys_Atomic()` copy parameter descriptors into local Secure SRAM before performing `cmse_check_address_range` and integer-overflow checks (`uptr + size < uptr`), preventing asynchronous DMA modification between check and use.
 - **Fail-Closed Crypto & NVM**: Hardware TRNG failures return an error and abort operations without falling back to a PRNG. If NVM Invocation Counter persistence fails or saturates at `0xFFFFFFFF`, ciphered sessions fail closed to prevent AES-GCM nonce reuse.
 - **Zeroization vs. Compiler Optimization**: `secure_zeroize()` and `secure_memzero()` include compiler memory barriers (`__asm__ __volatile__("" : : "r"(ptr) : "memory")`) to prevent dead-store elimination under `-O2`/`-O3`.
 - **Static Review Scope**: See [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md) for hardware-dependent verification items remaining before production deployment (physical SRAM3 MPCBB lock verification, IWDG fault-reset validation, and RDP Level 1/2 mass-production lockdown).
->>>>>>> Stashed changes
 
 ---
 
@@ -289,6 +267,7 @@ Instructions for running the Python E2E client against `gurux_simulator` are doc
 
 ## Reference Documentation
 
+- [`docs/Architecture diagram for Project.md`](docs/Architecture%20diagram%20for%20Project.md) — End-to-end system block, HLS5 sequence, CI/CD, and code dependency diagrams
 - [`docs/security-rules/PROTOCOL_PROFILE.md`](docs/security-rules/PROTOCOL_PROFILE.md) — DLMS/COSEM protocol and association baseline
 - [`docs/security-rules/SECURITY_ARCHITECTURE.md`](docs/security-rules/SECURITY_ARCHITECTURE.md) — TrustZone Secure/NonSecure isolation architecture
 - [`docs/security-rules/SECURITY_CHECKLIST.md`](docs/security-rules/SECURITY_CHECKLIST.md) — Release security compliance checklist

@@ -1,68 +1,68 @@
-# Kode Etik & Pedoman Perilaku Kontributor (Code of Conduct)
-## Proyek Smart Meter 3-Fasa AMI (STM32U585VIT6 + ADE9000)
+# Contributor Code of Conduct
+## 3-Phase AMI Smart Meter Project (STM32U585VIT6 + ADE9000)
 
 ---
 
-## 1. Komitmen Kami
+## 1. Our Pledge
 
-Sebagai kontributor, pengembang, dan pengelola proyek **Smart Meter 3-Fasa AMI (STM32U585VIT6 + ADE9000)**, kami berkomitmen untuk menciptakan dan memelihara lingkungan kerja sama yang terbuka, aman, profesional, inklusif, dan bebas dari pelecehan atau diskriminasi bagi setiap orang, tanpa memandang usia, jenis kelamin, identitas gender, orientasi seksual, disabilitas, penampilan fisik, ras, etnis, agama, atau tingkat pengalaman teknis.
-
----
-
-## 2. Standar Perilaku Positif
-
-Contoh perilaku yang mendukung lingkungan proyek yang sehat dan produktif meliputi:
-
-* **Saling Menghargai & Berkomunikasi Terbuka**: Menggunakan bahasa yang santun, profesional, dan empatik dalam setiap diskusi masalah (*issues*), ulasan kode (*code reviews*), dan rapat tim.
-* **Fokus pada Fakta Teknis & Keselamatan**: Mengutamakan kualitas teknis, keselamatan kerja listrik tegangan tinggi, kepatuhan standar metrologi (SPLN / IEC), serta keterandalan keamanan siber.
-* **Menerima Masukan Konstruktif Secara Elegan**: Terbuka terhadap kritik teknis yang membangun demi peningkatan mutu arsitektur dan keandalan sistem.
-* **Kolaborasi Tanpa Ego**: Berorientasi pada keberhasilan tim, berbagi wawasan, membantu anggota tim lain yang sedang menghadapi kendala, serta menghargai kontribusi setiap peran (Hardware, Firmware, QA, Metrologi).
+As contributors, developers, and maintainers of the **3-Phase AMI Smart Meter (STM32U585VIT6 + ADE9000)** project, we are committed to fostering an open, safe, professional, inclusive, and harassment-free collaboration environment for everyone, regardless of age, sex, gender identity, sexual orientation, disability, physical appearance, race, ethnicity, religion, or level of technical experience.
 
 ---
 
-## 3. Perilaku yang Tidak Dapat Ditoleransi
+## 2. Expected Standards of Behavior
 
-Perilaku berikut dikategorikan sebagai pelanggaran dan dilarang keras dalam proyek ini:
+Behaviors that contribute to a healthy and productive engineering environment include:
 
-* Penggunaan bahasa, gambar, atau konten bernuansa seksual, merendahkan, atau menyinggung SARA.
-* *Trolling*, pelecehan verbal, komentar yang menghina (*derogatory*), serta serangan pribadi (*ad hominem*).
-* Pelecehan publik atau pribadi dalam bentuk apa pun.
-* Mempublikasikan data pribadi orang lain (seperti nomor kontak, alamat rumah, atau kredensial rahasia) tanpa izin eksplisit (*doxxing*).
-* Tindakan tidak bertanggung jawab terkait keselamatan laboratorium listrik, memanipulasi data uji metrologi secara tidak jujur, atau membahayakan integritas sistem secara sengaja.
-* Perilaku lain yang secara wajar dinilai tidak profesional dalam konteks rekayasa teknis.
+* **Respectful & Open Communication**: Using polite, professional, and empathetic language in all issue discussions, code reviews, and team meetings.
+* **Focus on Technical Fact & Safety**: Prioritizing engineering quality, high-voltage electrical lab safety, metrology standards compliance (SPLN / IEC), and cybersecurity reliability.
+* **Gracefully Accepting Constructive Feedback**: Remaining open to constructive technical criticism aimed at improving system architecture and reliability.
+* **Ego-Free Collaboration**: Focusing on team success, sharing knowledge, helping teammates overcome blockers, and respecting every discipline (Hardware, Firmware, QA, Metrology).
 
 ---
 
-## 4. Etika Khusus Pengembangan Sistem Kritis (Safety & Integrity)
+## 3. Unacceptable Behavior
 
-Mengingat proyek ini melibatkan perangkat listrik 3-fasa tegangan tinggi ($230/400\text{ VAC}$) dan sistem penagihan utilitas kritis:
+The following behaviors are considered violations and are strictly prohibited in this project:
 
-1. **Integritas Metrologi**: Dilarang sengaja memasukkan logika manipulasi pengukuran daya/energi yang melanggar standar legal metrologi (SPLN D3.006 / IEC 62053).
-2. **Kepatuhan Keamanan Siber (*Fail-Closed*)**: Setiap kontribusi yang menyangkut kriptografi, TrustZone, dan manajemen kunci wajib mematuhi arsitektur keamanan SPLN D5.002:2024 dan tidak boleh menurunkan postur keamanan demi jalan pintas (*no hardcoded keys, no bypass*).
-3. **Keselamatan Kerja di Laboratorium**: Setiap eksperimen tegangan tinggi wajib mengikuti aturan *two-person rule* dan mematuhi otorisasi *Safety Gate*.
-
----
-
-## 5. Tanggung Jawab Pengelola (*Maintainers*)
-
-Pengelola proyek bertanggung jawab untuk memperjelas dan menegakkan standar perilaku yang dapat diterima, serta mengambil tindakan korektif yang wajar dan proporsional terhadap setiap perilaku yang melanggar pedoman ini.
-
-Pengelola memiliki hak dan tanggung jawab untuk menghapus, mengedit, atau menolak komentar, commit, kode, pull request, atau issue yang tidak sejalan dengan Pedoman Perilaku ini.
+* Use of sexualized, derogatory, or discriminatory language, imagery, or content.
+* Trolling, verbal harassment, insulting/derogatory comments, and personal attacks (*ad hominem*).
+* Public or private harassment of any form.
+* Publishing others' private information (such as phone numbers, home addresses, or confidential credentials) without explicit permission (*doxxing*).
+* Reckless actions regarding electrical lab safety, dishonest manipulation of metrology test data, or intentional compromise of system integrity.
+* Any other conduct reasonably considered unprofessional in an engineering context.
 
 ---
 
-## 6. Pelaporan Pelanggaran & Penegakan
+## 4. Safety & Integrity Ethics for Critical Systems
 
-Insiden perilaku yang tidak pantas, intimidasi, atau pelecehan dapat dilaporkan secara tertutup kepada pimpinan program atau koordinator proyek. Semua laporan akan ditinjau secara adil, rahasia, dan secepatnya.
+Because this project involves high-voltage 3-phase electrical hardware ($230/400\text{ VAC}$) and critical utility billing systems:
 
-Tindakan penegakan dapat berupa:
-1. **Peringatan / Klarifikasi**: Peringatan tertulis secara tertutup mengenai perilaku yang melanggar standar profesional.
-2. **Tindakan Korektif**: Pembatalan atau penolakan kontribusi terkait.
-3. **Pembatasan Sementara**: Penangguhan akses sementara dari repositori atau ruang diskusi proyek.
-4. **Pemutusan Permanen**: Pencabutan hak akses dan pemblokiran permanen dari seluruh aktivitas proyek.
+1. **Metrology Integrity**: Intentionally introducing power/energy measurement manipulation logic that violates legal metrology standards (SPLN D3.006 / IEC 62053) is strictly forbidden.
+2. **Cybersecurity Compliance (*Fail-Closed*)**: Every contribution affecting cryptography, TrustZone, and key management must comply with the SPLN D5.002:2024 security architecture and must never weaken security posture for shortcuts (*no hardcoded keys, no bypass*).
+3. **Laboratory Safety**: Every high-voltage experiment must follow the *two-person rule* and comply with *Safety Gate* authorization.
 
 ---
 
-## 7. Referensi & Lisensi
+## 5. Maintainer Responsibilities
 
-Pedoman Perilaku ini diadaptasi dari **Contributor Covenant**, versi 2.1 (https://www.contributor-covenant.org/version/2/1/code_of_conduct.html), yang disesuaikan dengan kebutuhan rekayasa perangkat keras dan lunak tertanam (*embedded system*) utilitas kelistrikan.
+Project maintainers are responsible for clarifying and enforcing acceptable behavior standards, and taking fair, proportionate corrective action in response to any violation of this Code of Conduct.
+
+Maintainers have the right and responsibility to remove, edit, or reject comments, commits, code, pull requests, or issues that are not aligned with this Code of Conduct.
+
+---
+
+## 6. Reporting Violations & Enforcement
+
+Instances of inappropriate behavior, intimidation, or harassment may be reported confidentially to the program lead or project coordinator. All reports will be reviewed fairly, confidentially, and promptly.
+
+Enforcement actions may include:
+1. **Warning / Clarification**: A private written warning regarding behavior that violates professional standards.
+2. **Corrective Action**: Reversion or rejection of the associated contribution.
+3. **Temporary Restriction**: Temporary suspension of access to the repository or project discussion channels.
+4. **Permanent Removal**: Revocation of access rights and permanent ban from all project activities.
+
+---
+
+## 7. Attribution & References
+
+This Code of Conduct is adapted from the **Contributor Covenant**, version 2.1 (https://www.contributor-covenant.org/version/2/1/code_of_conduct.html), tailored for electrical utility embedded hardware and firmware engineering.

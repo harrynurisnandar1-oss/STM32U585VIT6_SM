@@ -1,54 +1,54 @@
 [![Architecture diagram of harrynurisnandar1-oss/stm32u585vit6_sm](https://gitdiagram.com/harrynurisnandar1-oss/stm32u585vit6_sm/diagram.png)](https://gitdiagram.com/harrynurisnandar1-oss/stm32u585vit6_sm?utm_source=readme&utm_medium=picture)
 
 
-# 📐 Diagram Arsitektur Lengkap Sistem Smart Meter 3-Fasa AMI
+# 📐 Complete System Architecture — 3-Phase AMI Smart Meter
 **Target: STM32U585VIT6 (ARM Cortex-M33 TrustZone) + ADE9000 AFE**  
-*Kepatuhan Standar: SPLN D3.006:2021, SPLN D5.002:2024, IEC 62056 (DLMS/COSEM)*
+*Standards Compliance: SPLN D3.006:2021, SPLN D5.002:2024, IEC 62056 (DLMS/COSEM)*
 
 ---
 
-## 1. Diagram Blok Sistem End-to-End (Topologi Fisik & Logika)
+## 1. End-to-End System Block Diagram (Physical & Logical Topology)
 
 ```mermaid
 flowchart TB
-    subgraph OUTSIDE["🌐 DUNIA LUAR / EKSTERNAL"]
+    subgraph OUTSIDE["🌐 EXTERNAL / FIELD INTERFACES"]
         HES["🏢 PLN Head-End System (HES) / MDMS"]
-        HHU["📱 Handheld Unit (HHU) / Teknisi P2TL"]
-        GRID["⚡ Jala-Jala Listrik 3-Fasa 230/400V AC"]
+        HHU["📱 Handheld Unit (HHU) / P2TL Technician"]
+        GRID["⚡ 3-Phase Mains Grid 230/400V AC"]
     end
 
-    subgraph INTERFACE["🔌 ANTARMUKA FISIK & SENSOR (SPIN 1 / SPIN 2)"]
-        MODEM["📡 Kompartemen Modem Modular\n(4G Cat-M1 / NB-IoT / RF Mesh)\nRJ-45 8-Pin RS-232 (19.200 bps)"]
-        OPTICAL["🔦 Port Optik Inframerah Depan\nIEC 62056-21 (9.600 bps)\nIsolasi Galvanis 4 kV"]
-        AFE["⚡ Analog Front-End ADE9000\n7-Kanal 24-bit ADC, SPI Terisolasi\nCT + Voltage Divider Sensing"]
+    subgraph INTERFACE["🔌 PHYSICAL INTERFACES & SENSORS (SPIN 1 / SPIN 2)"]
+        MODEM["📡 Modular Modem Bay\n(4G Cat-M1 / NB-IoT / RF Mesh)\nRJ-45 8-Pin RS-232 (19,200 bps)"]
+        OPTICAL["🔦 Front Infrared Optical Port\nIEC 62056-21 (9,600 bps)\n4 kV Galvanic Isolation"]
+        AFE["⚡ ADE9000 Analog Front-End\n7-Channel 24-bit ADC, Isolated SPI\nCT + Voltage Divider Sensing"]
         BREAKER["🔘 Contactor / Relay Breaker\nDisconnect Control (Class 70)"]
     end
 
-    HES <-->|Seluler / Nirkabel| MODEM
-    HHU <-->|Inframerah 900nm| OPTICAL
-    GRID -->|Tegangan & Arus| AFE
-    BREAKER -->|Putus / Sambung Aliran Listrik| GRID
+    HES <-->|Cellular / Wireless| MODEM
+    HHU <-->|900nm Infrared| OPTICAL
+    GRID -->|Voltage & Current| AFE
+    BREAKER -->|Disconnect / Reconnect Load| GRID
 
-    subgraph MCU["🔲 MIKROKONTROLER STM32U585VIT6 (ARM Cortex-M33 TrustZone)"]
+    subgraph MCU["🔲 STM32U585VIT6 MICROCONTROLLER (ARM Cortex-M33 TrustZone)"]
         
-        subgraph NONSECURE["🟢 NON-SECURE WORLD (Aplikasi Meter & Protokol)"]
+        subgraph NONSECURE["🟢 NON-SECURE WORLD (Meter Application & Protocol)"]
             subgraph DRIVERS["Hardware / BSP Drivers"]
-                UART_DRV["Driver UART & DMA Circular Buffer\n(ami_bsp_uart.c)\nLPUART1 / USART2 & USART3"]
-                ADE_DRV["Driver Metrologi ADE9000 SPI\n(ami_ade9000.c)\nFail-Closed Snapshot Feeder"]
-                RELAY_DRV["Driver Aktuator Disconnect Control\n(ami_disconnect_control.c)"]
+                UART_DRV["UART & DMA Circular Buffer Driver\n(ami_bsp_uart.c)\nLPUART1 / USART2 & USART3"]
+                ADE_DRV["ADE9000 SPI Metrology Driver\n(ami_ade9000.c)\nFail-Closed Snapshot Feeder"]
+                RELAY_DRV["Disconnect Control Actuator Driver\n(ami_disconnect_control.c)"]
             end
 
             subgraph RTOS["FreeRTOS Kernel Tasks"]
-                DLMS_TASK["Task Protokol DLMS/COSEM\n(ami_dlms_port.c)\nStreamBuffer & Message Queue"]
-                MET_TASK["Task Metrologi & Sampling\nPeriodik Baca RMS, Daya, Energi"]
+                DLMS_TASK["DLMS/COSEM Protocol Task\n(ami_dlms_port.c)\nStreamBuffer & Message Queue"]
+                MET_TASK["Metrology & Sampling Task\nPeriodic RMS, Power, Energy Readout"]
             end
 
             subgraph DLMS_STACK["DLMS/COSEM Protocol Engine"]
-                HDLC["HDLC Parser Type 3 (0xA0)\nCRC-16 HCS/FCS, Transparent 0x7E\nZero-Heap O(1)"]
+                HDLC["HDLC Type 3 Parser (0xA0)\nCRC-16 HCS/FCS, Transparent 0x7E\nZero-Heap O(1)"]
                 ACSE["ACSE Association Machine\nAARQ/AARE, Max PDU, Dynamic Conformance"]
-                ABF["Anti-Brute-Force & Lockout\nPenalti Eksponensial (5s..40s)\nHard Lockout 5x Gagal (SPLN D5.002)"]
-                GBT["General Block Transfer (GBT)\nxDLMS Datablock (0xC0/0xC4 0x02)\nSegmentasi Data Profil Besar"]
-                COSEM["COSEM Object Model (49 Objek PLN)\n- Load Profile 15-menit (23 Kanal)\n- Tamper Logbook (9 Modus PLN)\n- Billing Profile (Class 7)\n- Multi-Tarif WBP/LWBP (Tarif 1..4)\n- Demand Limiter (Class 71)"]
+                ABF["Anti-Brute-Force & Lockout\nExponential Penalty (5s..40s)\nHard Lockout 5 Failures (SPLN D5.002)"]
+                GBT["General Block Transfer (GBT)\nxDLMS Datablock (0xC0/0xC4 0x02)\nLarge Profile Segmentation"]
+                COSEM["COSEM Object Model (66 PLN Objects)\n- 15-min Load Profile (23 Channels)\n- Tamper Logbook (9 PLN Modes)\n- Billing Profile (Class 7)\n- Multi-Tariff WBP/LWBP (Tariffs 1..4)\n- Demand Limiter (Class 71)"]
             end
 
             UART_DRV -->|Byte Stream IRQ| RTOS
@@ -57,21 +57,21 @@ flowchart TB
             DLMS_STACK --> RELAY_DRV
         end
 
-        subgraph GATEWAY["🔐 GERBANG NON-SECURE CALLABLE (NSC)"]
-            NSC_API["secure_nsc.c / secure_nsc.h\n- cmse_check_address_range()\n- Atomic Single-Fetch Copy Parameter\n- Strict Pointer Validation"]
+        subgraph GATEWAY["🔐 NON-SECURE CALLABLE (NSC) GATEWAY"]
+            NSC_API["secure_nsc.c / secure_nsc.h\n- cmse_check_address_range()\n- Copy-then-Validate Anti-TOCTOU\n- Strict Pointer Validation"]
         end
 
         subgraph SECURE["🔴 SECURE WORLD (TrustZone Protected Domain)"]
-            SAU["Security Attribution Unit (SAU)\nIsolasi Memori SRAM3 & Flash"]
-            CRYPTO["Core Kriptografi Suite 0\n- AES-128-GCM (glo-get/set/action)\n- HLS 5 GMAC (Mutual 4-Pass Auth)\n- Key Unwrap RFC 3394 (Master Key KEK)\n- Memory Zeroization (secure_zeroize)"]
-            TRNG["Hardware TRNG Fail-Closed\nGenerator Acak 16-Byte Challenge"]
+            SAU["Security Attribution Unit (SAU)\nSRAM3 & Flash Memory Isolation"]
+            CRYPTO["Suite 0 Cryptography Core\n- AES-128-GCM (glo-get/set/action/init)\n- HLS 5 GMAC (Mutual 4-Pass Auth)\n- RFC 3394 Key Unwrap (Master Key KEK)\n- Memory Zeroization (secure_zeroize)"]
+            TRNG["Fail-Closed Hardware TRNG\n16-Byte Random Challenge Generator"]
             NVM_SEC["Wear-Leveling Anti-Replay Engine\n- Strictly Monotonic Invocation Counter\n- TAMP Backup Register / NVM\n- Saturation Guard (0xFFFFFFFF Fail-Closed)"]
         end
 
-        DLMS_STACK <-->|Permintaan Kripto / Auth / Key| NSC_API
-        NSC_API <-->|Eksekusi Terisolasi| CRYPTO
-        NSC_API <-->|Nomor Acak Challenge| TRNG
-        NSC_API <-->|Pencatatan Counter Monotonik| NVM_SEC
+        DLMS_STACK <-->|Crypto / Auth / Key Requests| NSC_API
+        NSC_API <-->|Isolated Execution| CRYPTO
+        NSC_API <-->|Random Challenge| TRNG
+        NSC_API <-->|Monotonic Counter Update| NVM_SEC
     end
 
     MODEM <--> UART_DRV
@@ -82,7 +82,7 @@ flowchart TB
 
 ---
 
-## 2. Diagram Aliran Data Protokol & Otentikasi HLS5 (GMAC)
+## 2. Protocol & HLS5 (GMAC) Authentication Data Flow
 
 ```mermaid
 sequenceDiagram
@@ -93,60 +93,60 @@ sequenceDiagram
     participant NSC as 🔐 TrustZone NSC Gateway
     participant Secure as 🔴 Secure World (Crypto Core)
 
-    Note over Client,HDLC: 1. Handshake HDLC Link Layer
+    Note over Client,HDLC: 1. HDLC Link Layer Handshake
     Client->>HDLC: SNRM Frame (Format 3, Client=16, Server=1)
-    HDLC->>Client: UA Frame (Negosiasi Max Frame Size 512B)
+    HDLC->>Client: UA Frame (Max Frame Size 512B Negotiation)
 
-    Note over Client,Port: 2. Handshake Asosiasi ACSE
+    Note over Client,Port: 2. ACSE Association Handshake
     Client->>HDLC: I-Frame: AARQ (Mechanism OID: HLS 5 GMAC)
-    HDLC->>Port: Ekstrak APDU AARQ
+    HDLC->>Port: Extract AARQ APDU
     Port->>NSC: SECURE_TRNG_GetBytes(16 bytes)
-    NSC->>Secure: Baca TRNG Hardware STM32U5
+    NSC->>Secure: Read STM32U5 Hardware TRNG
     Secure-->>Port: 16-Byte Server Challenge (StoC)
-    Port-->>HDLC: Bentuk APDU AARE (Status: Auth_Pending, StoC)
-    HDLC-->>Client: I-Frame: AARE (Membawa Server Challenge)
+    Port-->>HDLC: Build AARE APDU (Status: Auth_Pending, StoC)
+    HDLC-->>Client: I-Frame: AARE (Carrying Server Challenge)
 
-    Note over Client,Secure: 3. Pembuktian Bersama HLS 5 (Mutual Proof Exchange)
+    Note over Client,Secure: 3. HLS 5 Mutual Proof Exchange
     Client->>HDLC: I-Frame: Action Request (reply_to_HLS, Client Proof CtoS)
     HDLC->>Port: Action Method 1 (Association LN)
     Port->>NSC: SECURE_DLMS_HLS5_VerifyAndGenerateProof()
-    Note over Secure: Validasi GMAC CtoS (Constant-time)<br/>Jika valid, bangkitkan GMAC StoC
-    alt Jika Otentikasi Gagal
+    Note over Secure: Validate CtoS GMAC (Constant-time)<br/>If valid, generate StoC GMAC
+    alt Authentication Fails
         Secure-->>Port: Error Auth Failed
-        Note over Port: Pemicu Anti-Brute-Force:<br/>failed_attempts++ (Penalti 5s..40s atau Lockout)
-        Port-->>Client: Penolakan AARE Rejection Permanent
-    else Jika Otentikasi Sukses
+        Note over Port: Trigger Anti-Brute-Force:<br/>failed_attempts++ (Penalty 5s..40s or Lockout)
+        Port-->>Client: Permanent AARE Rejection
+    else Authentication Succeeds
         Secure-->>Port: Success + Server Proof (StoC)
         Port-->>HDLC: Action Response (Server Proof)
-        HDLC-->>Client: I-Frame: HLS 5 Sesi Terbuka Penuh!
+        HDLC-->>Client: I-Frame: HLS 5 Session Fully Open
     end
 
-    Note over Client,Secure: 4. Transaksi Terenkripsi (Suite 0 AES-128-GCM)
+    Note over Client,Secure: 4. Encrypted Transaction (Suite 0 AES-128-GCM)
     Client->>HDLC: GLO-GET-Request (0xC8, SC=0x30, Nonce, Ciphertext, Tag)
-    HDLC->>Port: Teruskan ke Cipher Engine
+    HDLC->>Port: Forward to Cipher Engine
     Port->>NSC: SECURE_DLMS_AES_GCM_Process(Decrypt)
-    Secure->>Secure: Cek Monotonik RX Counter (Anti-Replay)
-    Secure->>Secure: Dekripsi AES-GCM & Verifikasi Tag 16-Byte
-    Secure-->>Port: Plaintext APDU GET
-    Port->>Port: Baca Objek COSEM (misal Load Profile 23-Kanal)
-    Port->>NSC: SECURE_DLMS_AES_GCM_Process(Encrypt Respons)
-    Secure->>Secure: Alokasi TX Monotonic Counter + Enkripsi
+    Secure->>Secure: Check Monotonic RX Counter (Anti-Replay)
+    Secure->>Secure: Decrypt AES-GCM & Verify 16-Byte Tag
+    Secure-->>Port: Plaintext GET APDU
+    Port->>Port: Read COSEM Object (e.g. 23-Ch Load Profile)
+    Port->>NSC: SECURE_DLMS_AES_GCM_Process(Encrypt Response)
+    Secure->>Secure: Allocate Monotonic TX Counter + Encrypt
     Secure-->>Port: GLO-GET-Response (0xCC)
-    Port-->>HDLC: Bungkus I-Frame HDLC
-    HDLC-->>Client: Respons Terenkripsi Sampai di HES
+    Port-->>HDLC: Wrap in HDLC I-Frame
+    HDLC-->>Client: Encrypted Response Delivered to HES
 ```
 
 ---
 
-## 3. Diagram Struktur Pengujian & CI/CD Pipeline
+## 3. Testing & CI/CD Pipeline Structure
 
 ```mermaid
 flowchart LR
-    subgraph DEV["💻 WORKSPACE DEVELOPMENT"]
+    subgraph DEV["💻 DEVELOPMENT WORKSPACE"]
         CODE["Source Code\n(NonSecure, Secure, Tests)"]
     end
 
-    subgraph LOCAL_TEST["🧪 VERIFIKASI HOST LOKAL (Ninja / CMake)"]
+    subgraph LOCAL_TEST["🧪 LOCAL HOST VERIFICATION (Ninja / CMake)"]
         direction TB
         C1["AmiCosemTest"]
         C2["AmiSecurityTest"]
@@ -156,20 +156,20 @@ flowchart LR
         C6["AmiAntiBruteforceTest"]
         C7["AmiBlockTransferTest"]
         C8["AmiDisconnectControlTest"]
-        C9["(Total 14/14 Suites PASS)"]
-        SIM["Gurux Simulator TCP (Port 4059)\nUji GXDLMSDirector E2E"]
+        C9["(Total 16/16 Suites PASS)"]
+        SIM["Gurux TCP Simulator (Port 4059)\nGXDLMSDirector E2E Testing"]
     end
 
     subgraph DOCKER_BOX["🐳 SINGLE UNIFIED TEST CONTAINER (Alpine Linux)"]
-        DK_BUILD["Stage 1: Multi-stage Build\n(GCC 15, CMake, Ninja, -O3 Release)"]
-        DK_RUN["Stage 2: Runtime Runner\n1. Jalankan 14 CTest Suites (100%)\n2. Jalankan Background Simulator\n3. Jalankan Python E2E Client Verification"]
+        DK_BUILD["Stage 1: Multi-stage Build\n(GCC, CMake, Ninja, -O3 Release, 16 CTest Suites)"]
+        DK_RUN["Stage 2: Runtime Runner\nStripped gurux_simulator (Port 4059)\n+ Host Python E2E Client Verification"]
         DK_BUILD --> DK_RUN
     end
 
     subgraph CI_PIPELINE["🚀 GITHUB ACTIONS PRODUCTION CI"]
         direction TB
         W1["Host Tests CI (Ubuntu Linux & Windows)"]
-        W2["STM32U585 FreeRTOS Firmware CI\n(ARM GNU GCC 13.3.Rel1 Toolchain)"]
+        W2["STM32U585 FreeRTOS Firmware CI\n(ARM GNU GCC Toolchain)"]
         W3["CodeQL Static Analysis (C/C++ Security SAST)"]
         ARTIFACTS["📦 Firmware Artifacts\n(.elf, .bin, .hex, .map)"]
         W2 --> ARTIFACTS
