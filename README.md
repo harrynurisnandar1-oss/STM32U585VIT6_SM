@@ -27,7 +27,7 @@ The E2 protocol and data-model layer is designed for deterministic interoperabil
 
 ### TrustZone Partitioning & Protocol Flow
 
-![TrustZone Partitioning & Protocol Flow](docs/images/trustzone-protocol-flow.png)
+<img width="743" height="667" alt="Workflow E3-TrustZone Partitioning   Protocol Flow drawio" src="https://github.com/user-attachments/assets/7b3eb689-ecae-4788-b342-8ae523ec353a" />
 
 ### Subsystems
 
