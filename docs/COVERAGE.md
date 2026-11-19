@@ -1,4 +1,4 @@
-﻿# 📊 LCOV Code Coverage Report
+# 📊 LCOV Code Coverage Report
 
 > **Target:** STM32U585VIT6 + ADE9000 (DLMS/COSEM & TrustZone Firmware)  
 > **Generated at:** 2026-11-09 10:18:15
@@ -30,4 +30,4 @@
 | `NonSecure/AMI/Src/ami_cosem_model.c` | **62.5%** | 489 / 783 | **89.5%** | 17 / 19 | 🟡 |
 
 ---
-> *Laporan ini diekstrak otomatis dari artefak LCOV menggunakan tests/scripts/lcov_to_markdown.py.*
+> *This report was automatically extracted from LCOV artifacts using `tests/scripts/lcov_to_markdown.py`.*

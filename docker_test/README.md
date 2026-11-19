@@ -1,61 +1,61 @@
-# Panduan Koneksi GXDLMSDirector ke Docker Simulator
+# GXDLMSDirector Connection Guide for Docker Simulator
 
-Container Docker `stm32u585vit6sm` kini berukuran sangat kecil (**< 10 MB**) dan berfungsi khusus menjalankan **Gurux DLMS/COSEM HDLC-over-TCP Simulator** pada port `4059`.
+The `stm32u585vit6sm` Docker container is a minimal multi-stage Alpine image (**< 10 MB**) dedicated to running the **Gurux DLMS/COSEM HDLC-over-TCP Simulator** on port `4059`.
 
-Seluruh aplikasi pengujian seperti **GXDLMSDirector** (atau skrip uji Python) dijalankan langsung dari **PC Windows Host Anda**, tanpa membebani container.
+Client testing tools such as **GXDLMSDirector** (or Python E2E scripts) run directly from your **Windows/Linux Host**, keeping the container lightweight.
 
 ---
 
-## 1. Menjalankan Simulator di Docker
+## 1. Start the Simulator in Docker
 
-Dari root repository atau folder ini:
+From the repository root or this directory:
 ```powershell
 .\docker_test\run_docker_tests.bat
 ```
-Atau via Docker Compose:
+Or via Docker Compose:
 ```bash
 docker compose up -d
 ```
-Simulator akan langsung aktif di latar belakang mendengarkan pada port `127.0.0.1:4059`.
+The simulator will start listening in the background on `127.0.0.1:4059`.
 
 ---
 
-## 2. Pengaturan Koneksi di GXDLMSDirector (Windows)
+## 2. Configure GXDLMSDirector Connection (Host)
 
-Buka aplikasi **GXDLMSDirector** di PC Windows Anda, lalu buat device baru dengan konfigurasi berikut:
+Open **GXDLMSDirector** on your host PC and create a new device with the following settings (or load `STM32U585VIT6_SM.gxc` from the repository root):
 
 1. **General Settings**:
-   - **Manufacturer**: `Generic` (atau `Gurux`)
-   - **Authentication**: `None` (untuk pengujian fungsional dasar) atau `High (GMAC)`
-   - **Logical Name Referencing (LN)**: Centang (`True`)
+   - **Manufacturer**: `Generic` (or `Gurux`)
+   - **Authentication**: `None` (for basic functional testing) or `High (GMAC)`
+   - **Logical Name Referencing (LN)**: Checked (`True`)
    - **Interface Type**: `HDLC`
-   - **Client Address**: `16` (Hex `0x10` - Management Client) atau `1` (Public)
+   - **Client Address**: `16` (Hex `0x10` — Management Client) or `1` (Public)
    - **Server Address**: `1` (Logical Address 1)
 
 2. **Communication (Media)**:
-   - Pilih **Media**: `Network` (TCP/IP)
-   - **Host Name / IP Address**: `127.0.0.1` (atau `localhost`)
+   - **Media**: `Network` (TCP/IP)
+   - **Host Name / IP Address**: `127.0.0.1` (or `localhost`)
    - **Port**: `4059`
 
-3. **Koneksi**:
-   - Klik tombol **Connect**.
-   - Setelah status berubah menjadi *Connected*, klik kanan pada nama perangkat lalu pilih **Read Objects / Association View**.
-   - Seluruh **49 Objek OBIS**, Load Profile 23 kanal, dan Tamper Log akan terbaca secara interaktif.
+3. **Connect**:
+   - Click **Connect**.
+   - Once the status changes to *Connected*, right-click the device and select **Read Objects / Association View**.
+   - All **66 active OBIS objects**, the 23-channel Load Profile, and Tamper Logs can be read interactively.
 
 ---
 
-## 3. Menjalankan Uji Klien Python dari Windows Host (Opsional)
+## 3. Run the Python E2E Client from Host (Optional)
 
-Jika Anda ingin menjalankan script automated test client dari Windows host:
+To execute the automated Python E2E test script from your host:
 ```powershell
 python .\docker_test\test_dlms_e2e_client.py
 ```
 
 ---
 
-## 4. Menghentikan Simulator
+## 4. Stop the Simulator
 
-Untuk menghentikan container simulator:
+To stop and remove the simulator container:
 ```bash
 docker compose down
 ```

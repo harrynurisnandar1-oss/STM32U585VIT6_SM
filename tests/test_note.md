@@ -1,10 +1,10 @@
-# Panduan Host Test dan Gurux Conformance
+# Host Test and Gurux Conformance Guide
 
-Dokumen ini menjelaskan apa yang diuji pada host, cara menjalankannya, serta cara menafsirkan hasil Gurux. Host test memakai data sintetis/snapshot dan tidak membutuhkan board.
+This document explains what is tested on the host, how to run the suites, and how to interpret Gurux Conformance Test Tool (CTT) results. Host tests use synthetic/snapshot data and do not require physical target hardware.
 
-## Menjalankan CTest
+## Running CTest
 
-Dari root repository pada PowerShell:
+From the repository root in PowerShell:
 
 ```powershell
 cmake -S tests -B tests/build -G Ninja
@@ -12,35 +12,35 @@ cmake --build tests/build --parallel
 ctest --test-dir tests/build --output-on-failure
 ```
 
-Untuk menjalankan satu suite:
+To run a single test suite:
 
 ```powershell
 ctest --test-dir tests/build -R AmiDlmsApduTest --output-on-failure
 ```
 
-Daftar 16 suite ditentukan di `tests/CMakeLists.txt`:
-1. `AmiCosemTest`: Validasi data model COSEM: Load Profile 23-kanal 15-menit, Instant Profile 11-kanal (`1.96.98.128.0.255`), Event Log #1 standar 2 capture objects (`0.0.99.98.0.255`), Tamper Logbook 3 capture objects (9 Modus Tamper), Power Quality Voltage Log Profiles R/S/T (`1.0.99.14.2..4.255`), Class 6/11/20/22 objects, Multi-tarif, Power Quality, Limiter (Class 71), Disconnect Control (Class 70).
-2. `AmiSecurityTest`: Validasi algoritma AES-128 NIST SP 800-38D KAT, GMAC, constant-time compare, dan exhaustive 1-bit flip tampering test (GMAC tag, AAD, IV).
-3. `AmiDlmsAssociationTest`: State machine asosiasi AARQ/AARE, negosiasi conformance, dan handling disconnect.
-4. `AmiFirmwareAuthPolicyTest`: Penegakan kebijakan keamanan fail-closed firmware target (blokir No-Auth/LLS, wajib HLS5 16-byte challenge, secure boot manifest check).
-5. `AmiDlmsApduTest`: xDLMS GET/SET/ACTION normal, ciphered APDU, dan verifikasi keterbacaan seluruh 66 objek aktif Association View (termasuk Instant Profile dan PQ Voltage Log Profiles).
-6. `AmiDlmsHdlcTest`: Parser streaming HDLC zero-heap, CRC-16 HCS/FCS, resiliensi flag transparent 0x7E, dan LLC framing.
-7. `AmiDlmsPortTest`: Layer transport port, buffer circular UART, dan integrasi cipher backend.
-8. `AmiAde9000Test`: Driver metrologi SPI ADE9000, register scaling, penanganan error fail-closed SPI, dan feeder snapshot.
-9. `AmiDlmsCipherTest`: Engine ciphering Suite 0 (AES-128-GCM), autentikasi tag, dan penolakan replay/tampering.
-10. `AmiNvmCounterTest`: Wear-leveling NVM/TAMP anti-replay Invocation Counter dan proteksi batas saturasi 0xFFFFFFFF.
-11. `AmiKeyTransferTest`: Remote Key Transfer RFC 3394 AES Key Wrap atomik di Secure World.
-12. `AmiAntiBruteforceTest`: Mitigasi brute-force per SPLN D5.002:2024 (penalti progresif 5s, 10s, 20s, 40s, lockout permanen 5x gagal).
-13. `AmiBlockTransferTest`: General Block Transfer (GBT) xDLMS Datablock untuk transmisi payload profil/buffer besar.
-14. `AmiDisconnectControlTest`: State machine Disconnect Control Class 70 (Disconnected, Connected, Ready) dan Action method.
-15. `AmiTrustZoneBoundaryTest`: Validasi batas keamanan ARM Cortex-M33 CMSE NonSecure Callable (NSC), penolakan pointer NULL, pencegahan integer pointer overflow (`uptr + size < uptr`), buffer melintasi batas Secure World, dan penolakan izin tulis ke NonSecure Flash.
-16. `AmiBootCryptoTest`: Validasi integritas kriptografis Secure Boot dan manajemen kunci pada `Secure/Core/Src/secure_nsc.c`.
+The 16 test suites defined in `tests/CMakeLists.txt`:
+1. `AmiCosemTest`: Validates the COSEM data model: 23-channel 15-minute Load Profile, 11-channel Instant Profile (`1.96.98.128.0.255`), standard Event Log #1 with 2 capture objects (`0.0.99.98.0.255`), Tamper Logbook with 3 capture objects (9 Tamper Modes), Power Quality Voltage Log Profiles R/S/T (`1.0.99.14.2..4.255`), Class 6/11/20/22 objects, Multi-Tariff, Power Quality, Limiter (Class 71), and Disconnect Control (Class 70).
+2. `AmiSecurityTest`: Validates AES-128 NIST SP 800-38D KAT vectors, GMAC, constant-time comparison, and exhaustive 1-bit flip tampering tests (GMAC tag, AAD, IV).
+3. `AmiDlmsAssociationTest`: ACSE association state machine (`AARQ`/`AARE`), conformance negotiation, ciphered initiate hooks, and disconnect handling.
+4. `AmiFirmwareAuthPolicyTest`: Target firmware fail-closed authentication policy enforcement (blocks No-Auth/LLS, requires HLS5 with 16-byte challenge, verifies Secure Boot manifest checks).
+5. `AmiDlmsApduTest`: Normal and ciphered xDLMS `GET`/`SET`/`ACTION` processing and readability verification across all 66 active objects in the Association View (including Instant Profile and PQ Voltage Log Profiles).
+6. `AmiDlmsHdlcTest`: Zero-heap streaming HDLC parser, CRC-16 HCS/FCS validation, transparent `0x7E` flag resilience, and LLC framing.
+7. `AmiDlmsPortTest`: Transport port layer, UART circular buffer, and cipher backend integration.
+8. `AmiAde9000Test`: ADE9000 SPI metrology driver, register scaling, fail-closed SPI error handling, and snapshot feeder.
+9. `AmiDlmsCipherTest`: Security Suite 0 (AES-128-GCM) ciphering engine, tag authentication, and replay/tampering rejection.
+10. `AmiNvmCounterTest`: Wear-leveling NVM/TAMP anti-replay Invocation Counter and fail-closed `0xFFFFFFFF` saturation protection.
+11. `AmiKeyTransferTest`: Atomic RFC 3394 AES Key Wrap remote key transfer in Secure World.
+12. `AmiAntiBruteforceTest`: Brute-force mitigation per SPLN D5.002:2024 (progressive penalties of 5s, 10s, 20s, 40s, and permanent lockout after 5 failures).
+13. `AmiBlockTransferTest`: General Block Transfer (GBT) xDLMS Datablock segmentation for large profile/buffer payloads.
+14. `AmiDisconnectControlTest`: Disconnect Control Class 70 state machine (`Disconnected`, `Connected`, `Ready_for_Reconnection`) and Action methods.
+15. `AmiTrustZoneBoundaryTest`: ARM Cortex-M33 CMSE NonSecure Callable (NSC) boundary validation, NULL pointer rejection, integer pointer overflow prevention (`uptr + size < uptr`), Secure World boundary-crossing checks, and NonSecure Flash write-permission rejection.
+16. `AmiBootCryptoTest`: Cryptographic integrity validation for Pure C11 Secure Boot (`SHA-256` + `ECDSA P-256`) and key management on `Secure/Core/Src/secure_nsc.c`.
 
-`AmiDlmsApduTest` juga memeriksa bahwa seluruh objek yang diumumkan melalui Association View berhasil menjawab GET attribute 2 menggunakan snapshot pengujian. Baseline objek/protokol yang dites didokumentasikan di [docs/security-rules/PROTOCOL_PROFILE.md](../docs/security-rules/PROTOCOL_PROFILE.md).
+`AmiDlmsApduTest` also verifies that every object advertised in the Association View responds successfully to `GET` attribute 2 using test snapshots. The baseline objects and protocol profile under test are documented in [docs/security-rules/PROTOCOL_PROFILE.md](../docs/security-rules/PROTOCOL_PROFILE.md).
 
-## Simulator Gurux
+## Gurux Simulator
 
-Build dan jalankan simulator:
+Build and run the simulator:
 
 ```powershell
 cmake -S tests -B tests/build -G Ninja
@@ -48,69 +48,69 @@ cmake --build tests/build --target gurux_simulator
 .\tests\build\host-tools\gurux_simulator.exe
 ```
 
-Simulator menerima raw HDLC-over-TCP di `127.0.0.1:4059`. Di Gurux DLMSDirector gunakan:
+The simulator accepts raw HDLC-over-TCP on `127.0.0.1:4059`. In Gurux DLMSDirector, use:
 
-| Parameter | Nilai untuk simulator |
+| Parameter | Simulator Setting |
 |---|---|
 | Media | Network / TCP |
 | Host | `127.0.0.1` |
 | Port | `4059` |
-| Interface | HDLC, bukan Wrapper |
+| Interface | HDLC (not Wrapper) |
 | Referencing | Logical Name (LN) |
-| Authentication | None, hanya untuk profil simulator pengembangan |
+| Authentication | None (for development simulator profile only) |
 
-Alamat client/server harus mengikuti profil koneksi simulator. Jika koneksi gagal, periksa log simulator dan trace HDLC sebelum mengubah parameter lain.
+Client/server addresses must match the simulator connection profile. If connection fails, inspect simulator logs and HDLC traces before changing other parameters.
 
-**Penting:** simulator host yang memakai No-Auth berbeda dari firmware. Firmware dikonfigurasi untuk menolak No-Auth dan LLS. Hasil CTT dengan `Authentication level: None` terhadap simulator tidak membuktikan kebijakan autentikasi firmware. Uji firmware memerlukan profil autentikasi yang didukung oleh integrasi target.
+**Important:** The host simulator's `No-Auth` mode differs from target firmware. Target firmware is configured to reject `No-Auth` and `LLS`. A passing CTT run with `Authentication level: None` against the simulator does **not** prove target firmware authentication policy. Firmware testing requires an authentication profile supported by the target integration.
 
-Firmware policy test juga memastikan hanya OID HLS5-GMAC dengan challenge client 16-byte yang diterima; No-Auth, LLS, HLS3/MD5, HLS4/SHA-1, dan challenge dengan panjang lain ditolak. Test ini memverifikasi policy, bukan implementasi crypto Secure-world, provisioning key, atau keamanan produksi. Profil target dan status gate tercatat di [docs/security-rules/PROTOCOL_PROFILE.md](../docs/security-rules/PROTOCOL_PROFILE.md).
+The firmware policy test also verifies that only the HLS5-GMAC OID with a 16-byte client challenge is accepted; `No-Auth`, `LLS`, `HLS3/MD5`, `HLS4/SHA-1`, and challenges of any other length are rejected. This test verifies policy logic, not Secure-world cryptographic execution, key provisioning, or production security. Target profiles and gate statuses are recorded in [docs/security-rules/PROTOCOL_PROFILE.md](../docs/security-rules/PROTOCOL_PROFILE.md).
 
-## OBIS: katalog, model, dan Association View
+## OBIS: Catalog, Model, and Association View
 
-Ada tiga hal yang jangan disamakan:
+Do not conflate these three distinct layers:
 
-1. **Katalog OBIS** (`NonSecure/AMI/Inc/ami_obis_catalog.h`) mencatat kode yang dirujuk atau direncanakan proyek.
-2. **Model COSEM** menentukan objek/atribut dan nilai yang dapat diproses oleh implementasi.
-3. **Association View** (`association_view` di `ami_dlms_apdu.c`) mengumumkan objek yang tersedia kepada klien DLMS.
+1. **OBIS Catalog** (`NonSecure/AMI/Inc/ami_obis_catalog.h`): Records OBIS codes referenced or planned by the project.
+2. **COSEM Model**: Defines objects, attributes, and values that the implementation can process.
+3. **Association View** (`association_view` in `ami_dlms_apdu.c`): Advertises available objects to DLMS clients.
 
-Sebuah kode yang ada di katalog belum tentu sudah tersedia melalui association atau dapat dibaca dengan GET. Saat menilai conformance, cocokkan class ID, logical name/OBIS, versi class, attribute, tipe data, skala/unit, dan hak akses untuk setiap objek yang dijanjikan profil produk.
+An OBIS code present in the catalog is not necessarily exposed via association or readable via `GET`. When evaluating conformance, match the class ID, logical name/OBIS, class version, attribute, data type, scaler/unit, and access rights for every object promised by the product profile.
 
-## Menjalankan Gurux Conformance Tests (CTT)
+## Running Gurux Conformance Tests (CTT)
 
-Mulai dengan profil yang cocok dengan endpoint yang diuji:
+Start with a profile matching the endpoint under test:
 
-- Pilih Logical Name referencing jika itu mode yang diimplementasikan dan digunakan pada koneksi.
-- Atur autentikasi sesuai endpoint: No-Auth hanya untuk simulator pengembangan; jangan menurunkan kebijakan keamanan firmware untuk menghilangkan kegagalan CTT.
-- Pastikan media/interface dan alamat cocok dengan koneksi aktual, dan simpan laporan serta trace request/respons.
-- Jalankan tes HDLC jika endpoint menggunakan HDLC dan koneksi sudah terbentuk.
-- Jalankan tes aplikasi/GET untuk objek yang memang termasuk Association View dan profil produk.
+- Select Logical Name referencing if that is the implemented and active connection mode.
+- Configure authentication to match the endpoint: `No-Auth` is for the development simulator only; never weaken firmware security policy to clear a CTT failure.
+- Ensure media/interface and addresses match the actual connection, and archive reports along with request/response traces.
+- Run HDLC tests if the endpoint uses HDLC and the connection is established.
+- Run application/`GET` tests for objects included in the Association View and product profile.
 
-`ExcludeBasicTests = True` melewati Basic Tests; ini cocok untuk run rutin terbatas pada cakupan yang telah dipilih, tetapi **bukan** bukti bahwa Basic Tests lulus. Mengubahnya menjadi `False` berguna untuk gap analysis. CTT dapat meminta banyak class/OBIS/attribute standar yang tidak disediakan implementasi terbatas; kegagalan seperti `UndefinedObject` menunjukkan objek yang diminta tidak ditemukan pada endpoint, bukan otomatis bug security. Namun, bila objek tersebut dijanjikan produk, catat sebagai gap implementasi dan investigasi.
+Setting `ExcludeBasicTests = True` skips Basic Tests; this is suitable for routine runs scoped to selected objects, but is **not** proof that Basic Tests pass. Setting it to `False` is useful for gap analysis. CTT may query standard classes/OBIS/attributes not provided by a scoped implementation; failures such as `UndefinedObject` indicate the requested object does not exist on the endpoint, not automatically a security bug. However, if that object is promised by the product profile, log it as an implementation gap and investigate.
 
-Jangan mengaktifkan atau menafsirkan tes SET, Action, image transfer, SN, maupun layanan lain sebagai persyaratan produk kecuali fitur tersebut memang ada di profil dan implementasi. Jangan pula mengecualikan tes yang berkaitan dengan fitur yang dinyatakan didukung.
+Do not enable or interpret `SET`, `Action`, image transfer, `SN`, or other service tests as product requirements unless those features are part of the profile and implementation. Conversely, do not exclude tests covering features claimed as supported.
 
-### Cara membaca hasil
+### Interpreting Results
 
-- **Passed:** tes yang dilaporkan lulus pada endpoint dan konfigurasi tersebut saja.
-- **Failed / Access Error / UndefinedObject:** simpan detail request, response, class, OBIS, attribute, dan endpoint. Bandingkan dengan objek yang diumumkan serta akses yang diharapkan.
-- **Ignored / Excluded:** tes tidak dijalankan; jangan dihitung sebagai lulus.
-- **Authentication None:** identifikasi apakah endpoint adalah simulator atau firmware sebelum membuat kesimpulan keamanan.
+- **Passed:** Tests reported as passing on that specific endpoint and configuration only.
+- **Failed / Access Error / UndefinedObject:** Save request/response details, class, OBIS, attribute, and endpoint. Compare against advertised objects and expected access rights.
+- **Ignored / Excluded:** Test was not executed; do not count as passing.
+- **Authentication None:** Identify whether the endpoint is the simulator or target firmware before drawing security conclusions.
 
-Contoh: `Attribute0SupportedWithGet` yang gagal perlu ditelusuri melalui trace APDU yang berisi request aktual. Ringkasan CTT saja belum cukup untuk menentukan objek dan perbaikan yang benar.
+For example, a failing `Attribute0SupportedWithGet` check must be traced through the actual APDU request/response logs. A CTT summary alone is insufficient to pinpoint the object and correct fix.
 
-## Batas pengujian
+## Testing Boundaries
 
-- Snapshot/sample data digunakan untuk menguji pemetaan dan pengiriman nilai. Test ini tidak menghitung atau membuktikan akurasi metrologi.
-- Host test dan TCP simulator tidak membuktikan komunikasi UART fisik, timing, integrasi FreeRTOS pada board, atau ketahanan perangkat di lapangan.
-- Keberhasilan CTT untuk satu konfigurasi tidak membuktikan seluruh profil produk atau sertifikasi.
-- Pengujian autentikasi HLS produksi memerlukan layanan kriptografi, provisioning, penyimpanan kunci, dan konfigurasi target yang disetujui. Host test tidak menggantikan validasi integrasi Secure-world.
+- Snapshot/sample data is used to test value mapping and serialization. These tests do not compute or prove metrology accuracy.
+- Host tests and the TCP simulator do not prove physical UART communication, hardware timing, FreeRTOS scheduling on silicon, or field durability.
+- Passing CTT for a single configuration does not prove full product profile compliance or formal certification.
+- Production HLS authentication testing requires approved cryptographic services, key provisioning, secure storage, and target configuration. Host tests do not replace Secure-world integration validation.
 
-## Analisis Code Coverage (LCOV)
+## Code Coverage Analysis (LCOV)
 
-Untuk mengukur dan memverifikasi ketercakupan kode (*coverage*) pada host:
+To measure and verify host code coverage:
 
 ```powershell
-# Jalankan via Docker / Linux
+# Run via Docker / Linux
 cmake -S tests -B tests/build_cov -G Ninja -DENABLE_COVERAGE=ON
 cmake --build tests/build_cov
 ctest --test-dir tests/build_cov
@@ -120,11 +120,11 @@ lcov --list tests/build_cov/coverage_filtered.info
 python3 tests/scripts/lcov_to_markdown.py tests/build_cov/coverage_filtered.info docs/COVERAGE.md
 ```
 
-Hasil coverage firmware saat ini tersimpan otomatis di [docs/COVERAGE.md](../docs/COVERAGE.md):
-- **Total Line Coverage**: **79.2%** (2.600 / 3.281 baris).
-- **Total Function Coverage**: **95.7%** (154 / 161 fungsi).
-- Modul keamanan kritis (`ami_security.c`, `ami_dlms_hdlc.c`, `ami_dlms_cipher.c`) mencapai line coverage **> 89%**.
+Current firmware coverage results are saved in [docs/COVERAGE.md](../docs/COVERAGE.md):
+- **Total Line Coverage**: **79.2%** (2,600 / 3,281 lines).
+- **Total Function Coverage**: **95.7%** (154 / 161 functions).
+- Critical security modules (`ami_security.c`, `ami_dlms_hdlc.c`, `ami_dlms_cipher.c`) achieve **> 89%** line coverage.
 
-## Referensi Docker
+## Docker Reference
 
-Instruksi Docker dan cakupan test container tersedia di [docker_test/README.md](../docker_test/README.md).
+Docker instructions and container simulator setup are available in [docker_test/README.md](../docker_test/README.md).
