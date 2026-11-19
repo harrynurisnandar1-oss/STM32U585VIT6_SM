@@ -1,193 +1,230 @@
-# ⚡ STM32U585VIT6 + ADE9000 3-Phase AMI Smart Meter
+# STM32U585VIT6 + ADE9000 3-Phase AMI Smart Meter
 
-[![Tests](https://img.shields.io/badge/CTest%20Host-16%2F16%20Passing-brightgreen?style=flat-square&logo=cmake)](tests/)
-[![Docker Tests](https://img.shields.io/badge/Docker%20E2E-100%25%20PASS-blue?style=flat-square&logo=docker)](Dockerfile)
+[![CTest](https://img.shields.io/badge/CTest%20Host-16%2F16%20Passing-brightgreen?style=flat-square&logo=cmake)](tests/)
+[![Docker](https://img.shields.io/badge/Docker%20Simulator-Ready-blue?style=flat-square&logo=docker)](Dockerfile)
 [![Coverage](https://img.shields.io/badge/Code%20Coverage-79.2%25%20(LCOV)-informational?style=flat-square&logo=codecov)](docs/COVERAGE.md)
-[![Standard](https://img.shields.io/badge/Standard-SPLN%20D3.006%3A2021-orange?style=flat-square)](dokumen_PLN/)
-[![Security Suite](https://img.shields.io/badge/Security-Suite%200%20%7C%20HLS5%20GMAC-red?style=flat-square)](docs/security-rules/)
+[![Standards](https://img.shields.io/badge/Standards-IEC%2062056%20%7C%20SPLN%20D3.006%3A2021-orange?style=flat-square)](docs/security-rules/PROTOCOL_PROFILE.md)
+[![Security](https://img.shields.io/badge/Security-Suite%200%20%7C%20HLS5%20GMAC-red?style=flat-square)](docs/security-rules/)
 [![Architecture](https://img.shields.io/badge/Target-ARM%20Cortex--M33%20TrustZone-purple?style=flat-square)](Secure/)
 
-Firmware kelas produksi untuk meter listrik pintar (*smart meter*) 3-fasa pascabayar berbasis mikrokontroler **STM32U585VIT6** (ARM Cortex-M33 TrustZone) dan metering analog front-end **ADE9000**. Repositori ini mengintegrasikan tumpukan protokol lengkap **DLMS/COSEM** (IEC 62056 / SPLN D3.006:2021), cipher suite keamanan tinggi **SPLN D5.002:2024**, driver metrologi ADE9000, host unit testing, serta simulator terintegrasi untuk verifikasi end-to-end.
+Postpaid 3-phase Advanced Metering Infrastructure (AMI) smart meter firmware targeting the **STM32U585VIT6** microcontroller (ARM Cortex-M33 with TrustZone-M) and **ADE9000** polyphase metering analog front-end (AFE).
+
+The codebase implements the **DLMS/COSEM** protocol stack (IEC 62056 / SPLN D3.006:2021), **DLMS Security Suite 0** with **HLS 5 (GMAC)** mutual authentication (SPLN D5.002:2024), TrustZone-isolated key management and Secure Boot verification, an ADE9000 SPI metrology driver, a 16-suite CTest host test harness, and an HDLC-over-TCP simulator for end-to-end verification.
 
 ---
 
-## 📌 Ringkasan Eksekutif Pekerjaan E2: Protokol & Data Model
+## Overview
 
-Tujuan utama paket pekerjaan E2 adalah menjamin interoperabilitas meter terhadap sistem pembacaan jarak jauh (**Head-End System / HES PLN**) dengan data model COSEM yang deterministik, performa streaming zero-heap, dan keamanan kriptografis *fail-closed*.
+The E2 protocol and data-model layer is designed for deterministic interoperability with utility Head-End Systems (HES / MDMS) without dynamic heap allocation in the data-link and APDU paths:
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                   HEAD-END SYSTEM (HES) / DLMS CLIENT                  │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │ Optical Probe / RS485 (HDLC Stream)
-┌───────────────────────────────────▼────────────────────────────────────┐
-│                       NON-SECURE WORLD (Cortex-M33)                    │
-│  ┌───────────────────────┐  ┌─────────────────┐  ┌──────────────────┐  │
-│  │   HDLC / LLC Parser   │  │   ACSE Engine   │  │ xDLMS APDU Engine│  │
-│  │   Framing Type 3      │  │   AARQ / AARE   │  │ Normal & GBT     │  │
-│  └───────────┬───────────┘  └────────┬────────┘  └────────┬─────────┘  │
-│              │                       │                    │            │
-│  ┌───────────▼───────────────────────▼────────────────────▼─────────┐  │
-│  │                    COSEM Object Model Layer                       │  │
-│  │  - 66 Registered PLN Objects       - Tamper Logbook (9 Modus)    │  │
-│  │  - Load Profile (23 Channels)      - Disconnect Control (Cl. 70) │  │
-│  │  - Instant Profile (11 Channels)   - PQ Voltage Profiles (R/S/T) │  │
-│  │  - Billing Profile (Class 7)       - Multi-Tariff WBP/LWBP (1..4)│  │
-│  │  - Classes 6, 11, 20, 22 Supported - Event Log #1 (2 Columns)    │  │
-│  └───────────────────────────────────┬───────────────────────────────┘  │
-│                                      │ Non-Secure Callable (NSC)       │
-├──────────────────────────────────────┼─────────────────────────────────┤
-│                                      ▼ Secure Gateway Entry            │
-│                         SECURE WORLD (TrustZone)                       │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │  - AES-128-GCM Suite 0 (glo-get / glo-set / glo-action)          │  │
-│  │  - HLS 5 GMAC Mutual Authentication (4-Pass)                     │  │
-│  │  - RFC 3394 AES Key Wrap Unwrapping (Master Key / KEK Isolation) │  │
-│  │  - Hardware TRNG & Strictly Monotonic Anti-Replay Counter        │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────────────┘
-```
-
-### 🎯 Pilar Utama Implementasi
-* **Protokol Komunikasi DLMS/COSEM & ACSE**: State machine asosiasi AARQ/AARE, negosiasi dinamis conformance block (`Get` + `SelectiveAccess`), Max PDU negotiation, serta silent-drop frame anomali sesuai uji CTT.
-* **HDLC Data Link Layer Deterministik**: Parser streaming zero-heap $O(1)$, Framing Type 3 (`0xA0`), dual-stage CRC-16 (HCS & FCS) dengan ketahanan transparent flag `0x7E`, serta auto-wrap/stripping LLC sublayer (`0xE6 0xE6 0x00` / `0xE6 0xE7 0x00`).
-* **Data Model 66 Objek Standar PLN**: 66 objek COSEM aktif siap baca via `GET` dan tersegmentasi otomatis menggunakan **General Block Transfer (GBT)** jika melebihi ukuran PDU.
-* **Histori Profiling Class 7 & Selective Access**: 
-  * **Load Profile 15-Menit (`1.0.99.1.0.255`)**: 23 kanal komprehensif (energi aktif/reaktif impor/ekspor, 4 kuadran Q1..Q4, tegangan & arus per-fasa, arus netral, daya aktif per-fasa, PF total, frekuensi, serta THD tegangan).
-  * **Instant Profile (`1.96.98.128.0.255`)**: 11 kanal pengukuran sesaat (Waktu, Tegangan 3-Fasa, Arus 3-Fasa, Daya Aktif/Reaktif Total, PF Total, Frekuensi).
-  * **Power Quality Voltage Log Profiles (`1.0.99.14.2..4.255`)**: Profil kualitas tegangan fase R, S, dan T (Capture: Clock, Event Code, Phase Voltage).
-  * **Event Log #1 (`0.0.99.98.0.255`)**: Logbook kejadian operasional standar 2 kolom (Clock & Event Code).
-  * **Tamper Event Logbook (`1.97.99.98.x.255`)**: 3 kolom (Clock, Event Code, Status) mendukung 9 modus tamper PLN (Cover Open, Terminal Open, Reverse Phase, Neutral Disturbance, Magnetic Tamper, Loss of Phase, Neutral Bypass, Reverse Power, dan Over Voltage/Current).
-  * **Dukungan Selector**: Selector 1 (Rentang Waktu Clock) dan Selector 2 (Rentang Indeks Baris).
-* **Interface Classes Tambahan**: Register Activation (Class 6), Special Days Table (Class 11), Activity Calendar (Class 20), dan Single Action Schedule (Class 22).
-* **Keamanan Kriptografi Berlapis (SPLN D5.002:2024)**:
-  * DLMS Security Suite 0 (`glo-get`, `glo-set`, `glo-action`) dengan AES-128-GCM dan Nonce 12-byte.
-  * 4-Pass Mutual Authentication **HLS 5 (GMAC)** OID `2.16.756.5.8.2.5` dengan constant-time comparison dan memory zeroization.
-  * Perlindungan Anti-Replay RX Invocation Counter monotonik & alokasi aman TX Counter.
-  * Perlindungan **Anti-Brute-Force & Lockout**: Delay penalti eksponensial progresif (5s, 10s, 20s, 40s) dan hard lockout permanen setelah 5x gagal.
-* **Pemutus Arus Jarak Jauh (Disconnect Control Class 70)**: Kontrol relay beban (`0.0.96.3.10.255`) dengan state machine *Disconnected*, *Connected*, dan *Ready_for_Reconnection*.
-* **Driver Metrologi ADE9000**: Pemetaan register SPI 3-fasa terkalibrasi ke snapshot register DLMS/COSEM secara fail-closed.
+- **Zero-heap streaming HDLC & xDLMS processing**: Fixed-buffer Type 3 HDLC framing (`0xA0`), dual-stage CRC-16 (HCS/FCS), LLC sublayer handling (`0xE6 0xE6 0x00` / `0xE6 0xE7 0x00`), and General Block Transfer (GBT) segmentation.
+- **PLN COSEM Data Model**: 276 cataloged OBIS codes (`NonSecure/AMI/Inc/ami_obis_catalog.h`) and 66 active objects exposed in the Association View (`GET` with Selective Access by clock range or entry index).
+- **Fail-closed TrustZone Security**: Cryptographic primitives, key wrapping, NVM anti-replay counters, and Secure Boot verification execute in the Secure world behind a Non-Secure Callable (NSC) gateway (`Secure/Core/Src/secure_nsc.c`).
 
 ---
 
-## 📊 Matriks Status Kesiapan Sistem
+## Architecture
 
-Implementasi diklasifikasikan secara transparan berdasarkan kesiapan software dan ketergantungan perangkat keras target:
+### TrustZone Partitioning & Protocol Flow
 
-> **Ringkasan Status:**
-> * 🟢 **Software, Protokol, dan Data Model (Host & Docker)**: **100% SELESAI & TERVERIFIKASI** (16/16 CTest PASS, 79.2% LCOV Coverage).
-> * 🟡 **Driver Firmware Target (STM32U585 & ADE9000)**: **KODE SELESAI** (Siap uji flashing pada hardware fisik).
-> * ⚪ **Sertifikasi Formal Laboratorium**: **MENUNGGU UJI LAB** (DLMS UA CTT Tool & Uji Interop HES).
+![TrustZone Partitioning & Protocol Flow](docs/images/trustzone-protocol-flow.png)
 
-| Kategori | Fitur / Komponen | Status | Catatan Verifikasi |
-|---|---|:---:|---|
-| **Data Link** | HDLC Framing Type 3, Multi-octet Address, Stream Parser | 🟢 **SUDAH** | Terverifikasi di `ami_dlms_hdlc.c` & `test_ami_dlms_hdlc.c` |
-| **Data Link** | Dual-stage CRC-16 (HCS/FCS) & Resiliensi Transparent Flag `0x7E` | 🟢 **SUDAH** | Lolos uji frame riil checksum `0x7E 0x0A 0x7E` |
-| **Data Link** | LLC Sublayer Handling (`0xE6 0xE6 0x00` / `0xE6 0xE7 0x00`) | 🟢 **SUDAH** | Sesuai kepatuhan IEC 62056-46 |
-| **Aplikasi** | ACSE Association Engine (AARQ/AARE, Max PDU, Conformance) | 🟢 **SUDAH** | Terverifikasi di `ami_dlms_association.c` |
-| **Data Model** | 276 Kode OBIS Standar PLN (`ami_obis_catalog.h`) | 🟢 **SUDAH** | Terpetakan dalam 22 kategori fungsional |
-| **Data Model** | Association View 66 Objek Aktif Standar PLN via `GET` | 🟢 **SUDAH** | 66 objek terdaftar dan teruji aksesnya |
-| **Data Model** | Load, Instant, & PQ Voltage Log Profiles (Class 7) | 🟢 **SUDAH** | Load (23-ch), Instant (11-ch), PQ Voltage R/S/T, Event Log (2-col) |
-| **Data Model** | Tamper Event Logbook (9 Modus Tamper Resmi PLN) | 🟢 **SUDAH** | Snapshot otomatis via trigger metrologi ADE9000 |
-| **Data Model** | General Block Transfer (GBT) untuk APDU Besar | 🟢 **SUDAH** | Segmentasi & rekonstruksi blok di `ami_dlms_block_transfer.c` |
-| **Beban & Tarif** | Disconnect Control Breaker (Class 70 / `0.0.96.3.10.255`) | 🟢 **SUDAH** | State machine, remote disconnect/reconnect di `ami_disconnect_control.c` |
-| **Beban & Tarif** | Multi-Tarif WBP/LWBP (Tarif 1 s.d. 4) & Demand Limiter (Class 71) | 🟢 **SUDAH** | Terverifikasi di `ami_cosem_model.c` & `ami_dlms_apdu.c` |
-| **Keamanan** | Core NIST AES-128 & GHASH GF($2^{128}$) Standalone | 🟢 **SUDAH** | 100% Lolos NIST SP 800-38D KAT Vector Case 1, 2, 4 |
-| **Keamanan** | 4-Pass Mutual Authentication HLS 5 (GMAC) OID `2.16.756.5.8.2.5` | 🟢 **SUDAH** | Constant-time check & zeroization di `ami_security.c` |
-| **Keamanan** | DLMS Security Suite 0 Ciphered APDU (`0xC8`, `0xC9`, `0xCB`) | 🟢 **SUDAH** | Terverifikasi di `ami_dlms_cipher.c` |
-| **Keamanan** | Anti-Replay Invocation Counter & Wear-Leveling NVM Engine | 🟢 **SUDAH** | Penanganan saturasi `0xFFFFFFFF` fail-closed (`ami_nvm_counter.c`) |
-| **Keamanan** | Anti-Brute-Force Lockout (Backoff Eksponensial Progresif) | 🟢 **SUDAH** | Penalti 5s, 10s, 20s, 40s & lockout 5x (`ami_anti_bruteforce.c`) |
-| **TrustZone** | Partisi SAU, GTZC (TZSC/MPCBB/TZIC), & NonSecure Callable (NSC) | 🟢 **SUDAH** | Range check `cmse_check_address_range` & *copy-then-validate* anti-TOCTOU di `secure_nsc.c` |
-| **Key Management** | Master Key (KEK) per-device, Flash Keystore (`0x0C0FC000`), & RFC 3394 | 🟢 **SUDAH** | Persistensi terenkripsi AES-128-GCM di Page 126 Secure Flash + update atomik |
-| **Secure Boot** | Verifikasi SHA-256 + ECDSA P-256 & Anti-Rollback (`TAMP->BKP0R`) | 🟢 **SUDAH** | Pure C FIPS 180-4 / 186-4 (`ami_boot_crypto.c`, `ami_sign_tool.c`) |
-| **Watchdog & RDP** | IWDG (~6s, *debug-freeze* ST-LINK) & Opt-In RDP Level 1 Litbang | 🟢 **SUDAH** | `MX_IWDG_Init()`, `SECURE_Watchdog_Kick()`, & `AMI_LITBANG_RDP_LEVEL1` |
-| **Testing** | CTest Host Native Unit Testing (16 Test Suites) | 🟢 **SUDAH** | 16/16 tests PASS (100% Lulus, termasuk `AmiBootCryptoTest`) |
-| **Testing** | 4 Kriteria Verifikasi Pengujian Keamanan | 🟢 **SUDAH** | Coverage (79.2%), Negative/1-bit flip, Zeroize Barrier, TrustZone CMSE |
-| **Testing** | Single Unified Docker Test Container & E2E DLMS Simulator | 🟢 **SUDAH** | Otomasi pengujian Linux x86_64 Alpine + Python client |
-| **Target Driver** | Driver UART DMA Circular Buffer & IDLE line interrupt | 🟡 **KODE SELESAI** | Menunggu verifikasi osiloskop / kabel serial board |
-| **Target Driver** | Driver Metrologi ADE9000 SPI Fail-Closed & Scaling 3-Fasa | 🟡 **KODE SELESAI** | Menunggu uji kalibrasi analog IC ADE9000 |
-| **Target Driver** | Generator Acak Fisik Hardware TRNG STM32U5 | 🟡 **KODE SELESAI** | Menunggu running pada register silikon STM32U5 |
-| **Target Driver** | Secure Boot Image Manifest Verification (Magic `PLN!`, SHA-256) | 🟡 **KODE SELESAI** | Menunggu flashing dual-image ke Flash target |
-| **Produksi** | Penguncian Readout Protection (RDP Level 1/2) & Disable SWD | ⚪ **BELUM** | Dilakukan saat fase flashing produksi massal |
-| **Sertifikasi** | Uji Kepatuhan DLMS UA CTT & Uji Lapangan HES PLN | ⚪ **BELUM** | Memerlukan lab sertifikasi resmi PLN |
+### Subsystems
+
+- **Data Link (`ami_dlms_hdlc.c`)**: Zero-heap $O(1)$ streaming HDLC Type 3 parser supporting multi-octet addressing, HCS/FCS CRC-16 verification, back-to-back `0x7E` flag resilience, and LLC header wrapping/stripping.
+- **Application & Association (`ami_dlms_association.c`, `ami_dlms_apdu.c`, `ami_dlms_block_transfer.c`)**:
+  - ACSE `AARQ`/`AARE` state machine, Max PDU negotiation, conformance block negotiation (`Get`, `SelectiveAccess`), and ciphered association (`glo_initiateRequest` `0x21` / `glo_initiateResponse` `0x28`).
+  - General Block Transfer (GBT) for segmented transfer of large profile buffers and Association View payloads.
+- **COSEM Object Model (`ami_cosem_model.c`, `ami_obis_catalog.h`)**:
+  - **Load Profile 15-min (`1.0.99.1.0.255`)**: 23 channels (active/reactive import/export energy, 4 quadrants Q1–Q4, per-phase voltage/current, neutral current, per-phase active power, total PF, frequency, voltage THD).
+  - **Instant Profile (`1.96.98.128.0.255`)**: 11 instantaneous channels (Clock, 3-phase V/I, total P/Q, total PF, frequency).
+  - **Power Quality Voltage Log Profiles (`1.0.99.14.2..4.255`)**: R/S/T phase voltage logs (Clock, Event Code, Phase Voltage).
+  - **Event Log #1 (`0.0.99.98.0.255`)**: 2-column operational log (Clock, Event Code).
+  - **Tamper Event Logbook (`1.97.99.98.x.255`)**: 3-column log (Clock, Event Code, Status) covering 9 PLN tamper modes (Cover Open, Terminal Open, Reverse Phase, Neutral Disturbance, Magnetic Tamper, Loss of Phase, Neutral Bypass, Reverse Power, Over Voltage/Current).
+  - **Selective Access**: Selector 1 (Clock range) and Selector 2 (Entry index range).
+  - **Schedule, Tariff & Load Control**: Register Activation (Class 6), Special Days Table (Class 11), Activity Calendar (Class 20), Single Action Schedule (Class 22), Multi-Tariff WBP/LWBP (Tariffs 1–4), Limiter (Class 71), and Disconnect Control (Class 70, `0.0.96.3.10.255`) with `Disconnected`, `Connected`, and `Ready_for_Reconnection` states.
+- **Security & TrustZone (`ami_security.c`, `ami_dlms_cipher.c`, `ami_nvm_counter.c`, `ami_anti_bruteforce.c`, `secure_nsc.c`, `ami_boot_crypto.c`)**:
+  - NIST SP 800-38D AES-128-GCM (`glo-get`, `glo-set`, `glo-action`) with 12-byte nonce and HLS 5 GMAC 4-pass mutual authentication (`2.16.756.5.8.2.5`) using peer system title verification.
+  - Monotonic RX/TX Invocation Counter with wear-leveling NVM engine and fail-closed `0xFFFFFFFF` saturation handling.
+  - Anti-brute-force progressive exponential backoff (`5s`, `10s`, `20s`, `40s`) and hard lockout after 5 consecutive failures (SPLN D5.002:2024).
+  - Atomic RFC 3394 AES Key Wrap for batch updates (`GUEK`, `GBEK`, `AK`) persisted in AES-128-GCM encrypted Secure Flash (`FLASH_KEYSTORE` at `0x0C0FC000`, Page 126).
+  - Pure C11 FIPS 180-4 / 186-4 Secure Boot (`SHA-256` + `ECDSA P-256`) with `PLN!` (`0x504C4E21`) manifest check and anti-rollback epoch tracking (`TAMP->BKP0R`).
+- **Metrology Driver (`ami_ade9000.c`)**: Fail-closed SPI driver mapping calibrated 3-phase ADE9000 registers into COSEM snapshots.
 
 ---
 
-## 🗺️ Roadmap & Fase Pengembangan (Fase Awal s.d. Tape-Out)
+## Tech Stack
 
-Rencana kerja 26-minggu paket E2 (Protokol & Data Model Smart Meter AMI 3-Fasa) mengadopsi rilis bertahap dari tahap *blind development* hingga penyerahan produksi (*Final Tape-Out & Handoff*):
-
-| Fase & Durasi | Target Hardware | Fokus & Aktivitas Utama | Pintu Gerbang (*Milestone*) | Status Kesiapan |
-| :--- | :--- | :--- | :--- | :---: |
-| **Fase 1: Inisiasi & Fondasi**<br>*(Minggu 1–5)* | Host PC & Dev Board STM32U575VGT6 | Implementasi tumpukan dasar DLMS/COSEM, ACSE (AARQ/AARE), HDLC streaming zero-heap, partisi TrustZone SAU/GTZC, AES-128-GCM Suite 0, HLS 5 GMAC, serta mock register metrologi AFE ADE9000. | **Gate G0 (W1)**<br>**Gate G1 (W5)** | 🟢 **100% SELESAI** |
-| **Fase 2: Bring-Up Spin 1**<br>*(Minggu 6–10)* | Hardware Spin 1 (*Low Voltage*, 8–10 unit) | Porting HAL UART/SPI ke target riil STM32U585, ekspansi 66 objek COSEM aktif, xDLMS General Block Transfer (GBT), proteksi anti-brute-force lockout (SPLN D5.002:2024), Disconnect Control Breaker Class 70, dan verifikasi Docker 15/15 CTest PASS (coverage 79.2%). | **Gate G2 (W10)**<br>*(Spin 1 Alive)* | 🟢 **100% SELESAI** |
-| **Fase 3: Integrasi & Freeze**<br>*(Minggu 11–16)* | Hardware Spin 1 & Modul Sensor | Integrasi Tamper Manager 9-modus (SPLN D3.006:2021 Tabel 6), realisasi engine dinamis Time-of-Use ToU (minimal 8 tarif, 8 jadwal, 4 tipe kalender), Flash NVM wear-leveling, dan pembekuan set pembacaan DLMS (*DLMS Read-Set Freeze*). | **Gate G3 (W16)**<br>*(Release Spin 2)* | 🟡 **SEDANG BERJALAN** *(Transisi W10–W11)* |
-| **Fase 4: Mains & Tape-Out**<br>*(Minggu 17–26)* | Hardware Spin 2 (*Full Mains* 230/400V) | Eksekusi Safety Gate G-S, kalibrasi metrologi akurasi Kelas 0.5S/0.2S (Fluke 6100B), verifikasi End-to-End dengan HES/MDMS PLN, uji resmi DLMS CTT v3.x 100% PASS, Soak Test 24/7 ($-25^\circ\text{C}$ s.d. $+70^\circ\text{C}$), dan serah terima akhir (*Final Tape-Out / Handoff*). | **Safety Gate G-S (W19)**<br>**Gate G4 (W21)**<br>**Gate G5 (W26 - Tape-Out)** | ⚪ **MENUNGGU SPIN 2** |
+| Layer | Technology / Component |
+|---|---|
+| **MCU** | STM32U585VIT6 (ARM Cortex-M33, TrustZone-M, SAU, GTZC, IWDG, Hardware TRNG) |
+| **Metrology AFE** | Analog Devices ADE9000 (3-phase, SPI) |
+| **RTOS / HAL** | FreeRTOS, STM32U5xx HAL Driver, CMSIS |
+| **Language** | C11 (`NonSecure/AMI`, `Secure`, `tests`) |
+| **Build System** | CMake (>= 3.20), Ninja |
+| **Cross-Compilers** | `arm-none-eabi-gcc` (`gcc-arm-none-eabi.cmake`), `starm-clang` (`starm-clang.cmake`) |
+| **Host Testing & Tooling** | CTest (16 suites), LCOV / gcov, Docker (`alpine:latest`), Python 3 (`docker_test/`), GXDLMSDirector |
 
 ---
 
-Repositori ini dirancang *reproducible* dan dapat langsung diverifikasi di lingkungan host Windows maupun Linux/Docker container.
+## Prerequisites & Installation
 
+### Host Testing & Simulator
+- **CMake** >= 3.20
+- **Ninja** build system
+- **C11 compiler** (GCC, Clang, or MSVC)
+- *(Optional)* **Docker** / **Docker Compose** for containerized builds and E2E testing
+- *(Optional)* **lcov** and **gzip** (Linux/WSL or Docker) for code coverage extraction
+- *(Optional)* **GXDLMSDirector** for interactive GUI testing against `STM32U585VIT6_SM.gxc`
+
+### Target Firmware Cross-Compilation
+- **ARM GNU Toolchain** (`arm-none-eabi-gcc`) or **STM32CubeCLT / STARM-Clang** (`starm-clang`)
+
+---
+
+## Configuration & Build Options
+
+### Target Firmware Presets (`CMakePresets.json`)
+The root `CMakePresets.json` configures the ARM Cortex-M33 build using `Ninja` and `gcc-arm-none-eabi.cmake`:
+
+<<<<<<< Updated upstream
 ### 1. Uji Unit Host Native (CTest)
 Menjalankan seluruh 16 test suite secara deterministik:
+=======
+>>>>>>> Stashed changes
 ```powershell
-# Konfigurasi dan kompilasi menggunakan Ninja
+# Configure and build Debug or Release firmware
+cmake --preset Debug
+cmake --build --preset Debug
+```
+
+Available presets: `Debug`, `Release`.
+
+### Host Test & Security Compile Flags
+- `ENABLE_COVERAGE=ON|OFF` (default `OFF`): Enables `--coverage -O0 -g` instrumentation in `tests/CMakeLists.txt` for GCC/Clang.
+- `STM32U585xx`: Enforces target firmware authentication policy (blocks `No-Auth`, `LLS`, `HLS3`, `HLS4`, and non-16-byte challenges).
+- `AMI_LITBANG_RDP_LEVEL1=1`: Opt-in build flag to enable RDP Level 1 provisioning during lab testing (defaults to RDP Level 0).
+
+---
+
+## Usage & Examples
+
+### 1. Run the Host DLMS Simulator with GXDLMSDirector
+Compile and start the HDLC-over-TCP simulator on port `4059`:
+
+```powershell
+cmake -S tests -B tests/build -G Ninja
+cmake --build tests/build --target gurux_simulator
+.\tests\build\host-tools\gurux_simulator.exe
+```
+
+1. Open **GXDLMSDirector**.
+2. Load [`STM32U585VIT6_SM.gxc`](STM32U585VIT6_SM.gxc).
+3. Click **Connect** to read COSEM objects over `127.0.0.1:4059` (HDLC, Logical Name referencing).
+
+### 2. Run the Containerized Simulator via Docker
+The multi-stage [`Dockerfile`](Dockerfile) builds and verifies all 16 CTest suites in Stage 1, then packages a stripped `/app/gurux_simulator` binary listening on port `4059` in Stage 2:
+
+```powershell
+# Using Docker Compose
+docker compose up --build
+
+# Or directly via Docker CLI
+docker build -t stm32u585vit6sm:latest .
+docker run --rm -p 4059:4059 stm32u585vit6sm:latest
+```
+
+### 3. Sign a NonSecure Firmware Binary (`ami_sign_tool`)
+Sign `STM32U585VIT6_SM_NS.bin` with the ECDSA P-256 key and a monotonic version epoch before flashing:
+
+```powershell
+cmake --build tests/build --target ami_sign_tool
+
+# Optional: regenerate the Secure Boot public key header
+.\tests\build\host-tools\ami_sign_tool.exe --gen-header Secure/Core/Inc/ami_boot_pubkey.h
+
+# Sign NonSecure binary with version epoch = 1
+.\tests\build\host-tools\ami_sign_tool.exe --sign NonSecure/build/STM32U585VIT6_SM_NS.bin 1
+```
+
+---
+
+## Project Structure
+
+```text
+├── NonSecure/                        # Cortex-M33 NonSecure application
+│   ├── AMI/
+│   │   ├── Inc/                      # Protocol, COSEM, OBIS catalog, and driver headers
+│   │   └── Src/                      # HDLC, ACSE, APDU, GBT, Cipher, ADE9000, NVM Counter
+│   └── Core/                         # Startup, FreeRTOS tasks, HAL peripheral config
+├── Secure/                           # Cortex-M33 TrustZone Secure World
+│   ├── Core/
+│   │   ├── Inc/                      # Secure Boot pubkey & boot crypto headers
+│   │   └── Src/                      # secure_nsc.c (NSC gateway), ami_boot_crypto.c, main.c
+│   └── STM32U585xx_FLASH_s.ld        # Secure Flash linker script (incl. FLASH_KEYSTORE)
+├── Secure_nsclib/                    # Public NSC interface headers (secure_nsc.h)
+├── Drivers/                          # STM32U5xx HAL & CMSIS
+├── Middlewares/                      # FreeRTOS
+├── tests/                            # 16 Host CTest suites & host tools
+│   ├── CMakeLists.txt                # Host test & tool definitions
+│   ├── ami_sign_tool.c               # ECDSA P-256 image signing CLI
+│   ├── gurux_simulator.c             # HDLC-over-TCP simulator (port 4059)
+│   ├── scripts/lcov_to_markdown.py   # LCOV .info to Markdown report generator
+│   └── test_ami_*.c                  # 16 unit/security/policy test suites
+├── docker_test/                      # E2E Python test client & Docker test scripts
+├── docs/
+│   ├── COVERAGE.md                   # LCOV coverage breakdown
+│   ├── images/                       # Architecture diagrams
+│   └── security-rules/               # Protocol profile, architecture, checklist, threat model
+├── CMakePresets.json                 # ARM Cortex-M33 CMake build presets
+├── Dockerfile                        # Multi-stage Alpine simulator & CTest verification image
+├── compose.yaml                      # Docker Compose service definition (port 4059)
+├── CHANGELOG.md                      # Release history (Spin 1 & Spin 2)
+├── SECURITY.md                       # Vulnerability disclosure policy
+├── SECURITY_REVIEW.md                # Static security audit & remediation status
+└── STM32U585VIT6_SM.gxc              # GXDLMSDirector workspace profile
+```
+
+---
+
+## Testing
+
+### Host Unit & Security Tests (16 CTest Suites)
+```powershell
 cmake -S tests -B tests/build -G Ninja
 cmake --build tests/build --parallel
-
-# Jalankan seluruh test suite
 ctest --test-dir tests/build --output-on-failure
 ```
+<<<<<<< Updated upstream
 *Hasil: Seluruh 16 test suite lulus 100% (Passed).*
+=======
+>>>>>>> Stashed changes
 
-Untuk menjalankan analisis **Code Coverage LCOV**:
-```powershell
+Suite details (including `AmiCosemTest`, `AmiSecurityTest`, `AmiDlmsAssociationTest`, `AmiFirmwareAuthPolicyTest`, `AmiDlmsApduTest`, `AmiDlmsHdlcTest`, `AmiDlmsPortTest`, `AmiAde9000Test`, `AmiDlmsCipherTest`, `AmiNvmCounterTest`, `AmiKeyTransferTest`, `AmiAntiBruteforceTest`, `AmiBlockTransferTest`, `AmiDisconnectControlTest`, `AmiTrustZoneBoundaryTest`, and `AmiBootCryptoTest`) are documented in [`tests/test_note.md`](tests/test_note.md).
+
+### Code Coverage (LCOV)
+On Linux/WSL (or inside an Alpine Docker container with `lcov` and `gzip`):
+
+```bash
 cmake -S tests -B tests/build_cov -G Ninja -DENABLE_COVERAGE=ON
 cmake --build tests/build_cov
-ctest --test-dir tests/build_cov
+ctest --test-dir tests/build_cov --output-on-failure
 lcov --capture --directory tests/build_cov --output-file tests/build_cov/coverage_raw.info --ignore-errors inconsistent,gcov
 lcov --extract tests/build_cov/coverage_raw.info '*/NonSecure/AMI/*' '*/Secure/*' --output-file tests/build_cov/coverage_filtered.info --ignore-errors unused,inconsistent
 lcov --list tests/build_cov/coverage_filtered.info
-```
-*Hasil: Line Coverage 79.2% (2.600/3.281 baris) & Function Coverage 95.7% (154/161 fungsi).*
-
-### 2. Simulator DLMS Host untuk Gurux DLMSDirector
-Untuk menguji konektivitas visual dengan software industri **GXDLMSDirector**:
-```powershell
-# Kompilasi target simulator
-cmake --build tests/build --target gurux_simulator
-
-# Jalankan simulator pada port TCP 4059
-.\tests\build\host-tools\gurux_simulator.exe
-```
-1. Buka aplikasi **GXDLMSDirector**.
-2. Muat file profil workspace yang sudah disinkronkan: [`STM32U585VIT6_SM.gxc`](STM32U585VIT6_SM.gxc).
-3. Klik tombol **Connect** untuk membaca objek COSEM secara interaktif.
-
-### 3. Uji Otomatis via Docker (Single Unified Test Container)
-Container Docker terpadu menjalankan kompilasi clean, 14 suite CTest, serta simulasi client Python E2E:
-```powershell
-# Build image docker
-docker build -t stm32u585vit6sm:latest .
-
-# Jalankan pengujian terpadu
-docker run --rm stm32u585vit6sm:latest ./run_all_docker_tests.sh
+python3 tests/scripts/lcov_to_markdown.py tests/build_cov/coverage_filtered.info docs/COVERAGE.md
 ```
 
-### 4. Tool Penandatanganan Image Secure Boot (Pure C)
-Untuk menandatangani biner NonSecure (`STM32U585VIT6_SM_NS.bin`) dengan kunci ECDSA P-256 sebelum di-flash ke papan target:
-```powershell
-# Generate ulang header kunci publik (opsional)
-.\tests\build_host\host-tools\ami_sign_tool.exe --gen-header Secure/Core/Inc/ami_boot_pubkey.h
+Latest measured baseline ([`docs/COVERAGE.md`](docs/COVERAGE.md)): **79.2% line coverage** (2,600 / 3,281 lines) and **95.7% function coverage** (154 / 161 functions), with core security modules (`ami_security.c`, `ami_dlms_hdlc.c`, `ami_dlms_cipher.c`) at **89.8%–91.9%** line coverage.
 
-# Tandatangani image NonSecure (epoch = 1)
-.\tests\build_host\host-tools\ami_sign_tool.exe --sign NonSecure/build/STM32U585VIT6_SM_NS.bin 1
-```
+### Docker E2E Test Harness
+Instructions for running the Python E2E client against `gurux_simulator` are documented in [`docker_test/README.md`](docker_test/README.md).
 
 ---
 
-## 📂 Struktur Repositori
+## Security Considerations & Trade-offs
 
+<<<<<<< Updated upstream
 ```text
 ├── NonSecure/                      # Ruang eksekusi NonSecure (Cortex-M33)
 │   ├── AMI/                        # Implementasi Inti DLMS/COSEM & Metrologi
@@ -210,14 +247,55 @@ Untuk menandatangani biner NonSecure (`STM32U585VIT6_SM_NS.bin`) dengan kunci EC
 ├── CODE_OF_CONDUCT.md              # Pedoman perilaku dan etika kontributor
 └── STM32U585VIT6_SM.gxc            # Profil workspace Gurux DLMSDirector
 ```
+=======
+- **Simulator vs. Target Auth Policy**: `gurux_simulator` permits `No-Auth` for local development and GXDLMSDirector browsing. Production firmware built with `STM32U585xx` enforces a fail-closed policy rejecting `No-Auth`, `LLS`, `HLS3` (MD5), `HLS4` (SHA-1), and any challenge length other than 16 bytes.
+- **Anti-TOCTOU on NSC Calls**: `SECURE_DLMS_AES_GCM_Process()` and `SECURE_DLMS_TransferKeys_Atomic()` copy parameter descriptors into local Secure SRAM before performing `cmse_check_address_range` and integer-overflow checks (`uptr + size < uptr`), preventing asynchronous DMA modification between check and use.
+- **Fail-Closed Crypto & NVM**: Hardware TRNG failures return an error and abort operations without falling back to a PRNG. If NVM Invocation Counter persistence fails or saturates at `0xFFFFFFFF`, ciphered sessions fail closed to prevent AES-GCM nonce reuse.
+- **Zeroization vs. Compiler Optimization**: `secure_zeroize()` and `secure_memzero()` include compiler memory barriers (`__asm__ __volatile__("" : : "r"(ptr) : "memory")`) to prevent dead-store elimination under `-O2`/`-O3`.
+- **Static Review Scope**: See [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md) for hardware-dependent verification items remaining before production deployment (physical SRAM3 MPCBB lock verification, IWDG fault-reset validation, and RDP Level 1/2 mass-production lockdown).
+>>>>>>> Stashed changes
 
 ---
 
-## 📚 Dokumen Acuan & Standar
+## Status, Roadmap & Limitations
 
-* 📄 [`docs/security-rules/PROTOCOL_PROFILE.md`](docs/security-rules/PROTOCOL_PROFILE.md) — Spesifikasi baseline protokol dan asosiasi DLMS/COSEM.
-* 🛡️ [`docs/security-rules/SECURITY_ARCHITECTURE.md`](docs/security-rules/SECURITY_ARCHITECTURE.md) — Arsitektur pemisahan TrustZone Secure vs NonSecure.
-* 📋 [`docs/security-rules/SECURITY_CHECKLIST.md`](docs/security-rules/SECURITY_CHECKLIST.md) — Daftar uji kepatuhan keamanan rilis firmware.
-* 🔍 [`docs/security-rules/Threat_MODEL.md`](docs/security-rules/Threat_MODEL.md) — Analisis model mitigasi ancaman (T1 s.d. T12).
-* 📝 [`CHANGELOG.md`](CHANGELOG.md) — Catatan riwayat versi pengembangan proyek.
-* 🤝 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) — Pedoman perilaku dan etika kontributor.
+### Component Readiness
+
+| Category | Component / Feature | Status | Notes |
+|---|---|---|---|
+| **Data Link** | HDLC Type 3, CRC-16 HCS/FCS, `0x7E` resilience, LLC | Complete | Verified in `ami_dlms_hdlc.c` & `AmiDlmsHdlcTest` |
+| **Application** | ACSE (`AARQ`/`AARE`, ciphered `glo_initiate`), GBT | Complete | Verified in `ami_dlms_association.c`, `ami_dlms_block_transfer.c` |
+| **Data Model** | 276 cataloged OBIS, 66 active objects, Class 7/6/11/20/22/70/71 | Complete | Verified in `ami_cosem_model.c` & `AmiCosemTest` |
+| **Security** | AES-128-GCM Suite 0, HLS 5 GMAC, NVM Counter, Anti-Brute-Force | Complete | Verified against NIST SP 800-38D KAT & 1-bit flip tampering |
+| **TrustZone & Boot** | NSC boundary checks, Flash Keystore, ECDSA P-256 Secure Boot, IWDG | Complete | Verified in `AmiTrustZoneBoundaryTest` & `AmiBootCryptoTest` |
+| **Testing** | 16 Host CTest suites, LCOV coverage (79.2%), Docker E2E simulator | Complete | Automated on host & Alpine container |
+| **Target Drivers** | UART DMA + IDLE ISR, ADE9000 SPI, HW TRNG, Dual-Image Flash | Code Complete | Pending physical STM32U585 + ADE9000 board & analog calibration |
+| **Production & Lab** | RDP Level 1/2 lock, SWD disable, DLMS UA CTT, HES field interop | Pending | Requires mass-production flashing & accredited lab testing |
+
+### 26-Week E2 Milestone Roadmap
+
+| Phase | Target Hardware | Key Deliverables | Milestone Gate | Status |
+|---|---|---|---|---|
+| **Phase 1: Foundation** *(W1–W5)* | Host PC & STM32U575VGT6 Dev Board | Core DLMS/COSEM, ACSE, zero-heap HDLC, TrustZone SAU/GTZC, AES-128-GCM, HLS 5 GMAC, ADE9000 register mocks | **Gate G0 (W1)**, **Gate G1 (W5)** | Complete |
+| **Phase 2: Spin 1 Bring-Up** *(W6–W10)* | Hardware Spin 1 *(Low Voltage)* | HAL UART/SPI port, 66 active COSEM objects, GBT, Anti-Brute-Force, Disconnect Control Class 70, Docker & CTest CI | **Gate G2 (W10)** | Complete |
+| **Phase 3: Integration & Freeze** *(W11–W16)* | Hardware Spin 1 & Sensor Module | 9-mode Tamper Manager, ToU engine (8 tariffs, 8 schedules, 4 calendar types), NVM wear-leveling, DLMS Read-Set Freeze | **Gate G3 (W16)** | In Progress *(W10–W11)* |
+| **Phase 4: Mains & Tape-Out** *(W17–W26)* | Hardware Spin 2 *(230/400V Mains)* | Safety Gate G-S, Class 0.5S/0.2S calibration (Fluke 6100B), HES/MDMS E2E, DLMS CTT v3.x, 24/7 Soak (-25°C to +70°C) | **G-S (W19)**, **G4 (W21)**, **G5 (W26)** | Pending Spin 2 |
+
+### Testing Limitations
+- Host tests and the TCP simulator use synthetic snapshots; they do **not** validate physical ADE9000 metrology accuracy, UART DMA/IDLE interrupt timing, FreeRTOS scheduling on silicon, or hardware TrustZone/SAU fault isolation.
+- Passing `No-Auth` simulator tests does not represent production firmware authentication policy.
+
+---
+
+## Reference Documentation
+
+- [`docs/security-rules/PROTOCOL_PROFILE.md`](docs/security-rules/PROTOCOL_PROFILE.md) — DLMS/COSEM protocol and association baseline
+- [`docs/security-rules/SECURITY_ARCHITECTURE.md`](docs/security-rules/SECURITY_ARCHITECTURE.md) — TrustZone Secure/NonSecure isolation architecture
+- [`docs/security-rules/SECURITY_CHECKLIST.md`](docs/security-rules/SECURITY_CHECKLIST.md) — Release security compliance checklist
+- [`docs/security-rules/Threat_MODEL.md`](docs/security-rules/Threat_MODEL.md) — Threat mitigation model (T1–T12)
+- [`docs/COVERAGE.md`](docs/COVERAGE.md) — Per-file LCOV line and function coverage report
+- [`tests/test_note.md`](tests/test_note.md) — Host CTest suite descriptions and Gurux CTT guidance
+- [`docker_test/README.md`](docker_test/README.md) — Docker test harness and Python E2E client
+- [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md) — Static security audit findings and remediation status
+- [`SECURITY.md`](SECURITY.md) — Supported versions and vulnerability reporting policy
+- [`CHANGELOG.md`](CHANGELOG.md) — Detailed release history
